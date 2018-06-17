@@ -25,6 +25,7 @@
 #include <openssl/evp.h>
 #include <openssl/hkdf.h>
 #include <openssl/hmac.h>
+#include <sqlite3.h>
 
 #include "backup.pb-c.h"
 #include "sbk.h"
@@ -533,6 +534,96 @@ sbk_dump(const char *path, const char *passphr)
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ctx->eof ? 0 : -1;
+}
+
+static int
+sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
+{
+	sqlite3_stmt	*sqlstm;
+	size_t		 i;
+	int		 ret;
+
+	if (stm->statement == NULL)
+		return -1;
+
+	if (sqlite3_prepare_v2(db, stm->statement, -1, &sqlstm, NULL) !=
+	    SQLITE_OK)
+		return -1;
+
+	for (i = 0; i < stm->n_parameters; i++) {
+		if (stm->parameters[i]->stringparamter != NULL)
+			ret = sqlite3_bind_text(sqlstm, i + 1,
+			    stm->parameters[i]->stringparamter, -1, NULL);
+		if (stm->parameters[i]->has_integerparameter)
+			ret = sqlite3_bind_int(sqlstm, i + 1,
+			    stm->parameters[i]->integerparameter);
+		if (stm->parameters[i]->has_doubleparameter)
+			ret = sqlite3_bind_double(sqlstm, i + 1,
+			    stm->parameters[i]->doubleparameter);
+		if (stm->parameters[i]->has_blobparameter)
+			ret = sqlite3_bind_blob(sqlstm, i + 1,
+			    stm->parameters[i]->blobparameter.data,
+			    stm->parameters[i]->blobparameter.len, NULL);
+		if (stm->parameters[i]->has_nullparameter)
+			ret = sqlite3_bind_null(sqlstm, i + 1);
+		if (ret != SQLITE_OK)
+			goto error;
+	}
+
+	if (sqlite3_step(sqlstm) != SQLITE_DONE)
+		goto error;
+
+	if (sqlite3_finalize(sqlstm) != SQLITE_OK)
+		return -1;
+
+	return 0;
+
+error:
+	sqlite3_finalize(sqlstm);
+	return -1;
+}
+
+int
+sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
+{
+	struct sbk_ctx		*ctx;
+	Signal__BackupFrame	*frm;
+	sqlite3			*db;
+
+	if ((ctx = sbk_ctx_new()) == NULL)
+		return -1;
+	
+	if (sbk_open(ctx, bakpath, passphr) == -1)
+		goto error1;
+
+	if (sqlite3_open(dbpath, &db) != SQLITE_OK)
+		goto error3;
+
+	while ((frm = sbk_get_frame(ctx)) != NULL)
+		if (frm->statement != NULL) {
+			if (sbk_exec_statement(db, frm->statement) == -1)
+				goto error3;
+		} else if (frm->attachment != NULL || frm->avatar != NULL)
+			if (sbk_skip_data(ctx, frm) == -1)
+				goto error3;
+
+	if (!ctx->eof)
+		goto error3;
+
+	if (sqlite3_close(db) != SQLITE_OK)
+		goto error2;
+
+	sbk_close(ctx);
+	sbk_ctx_free(ctx);
+	return 0;
+
+error3:
+	sqlite3_close(db);
+error2:
+	sbk_close(ctx);
+error1:
+	sbk_ctx_free(ctx);
+	return -1;
 }
 
 int

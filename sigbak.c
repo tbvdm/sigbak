@@ -38,18 +38,25 @@ main(int argc, char **argv)
 	char	passphr[128];
 	int	ret;
 
-	if (argc != 2)
+	if (argc < 3)
 		return 1;
 
 	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
 	    passphr, sizeof passphr, 0) == NULL)
 		errx(1, "Cannot read passphrase");
 
-	if (pledge("stdio rpath", NULL) == -1)
+	if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
 		err(1, "pledge");
 
 	remove_spaces(passphr);
-	ret = sbk_dump(argv[1], passphr);
+
+	if (strcmp(argv[1], "dump") == 0 && argc == 3)
+		ret = sbk_dump(argv[2], passphr);
+	else if (strcmp(argv[1], "sqlite") == 0 && argc == 4)
+		ret = sbk_sqlite(argv[2], passphr, argv[3]);
+	else
+		ret = 1;
+
 	explicit_bzero(passphr, sizeof passphr);
 	return (ret == 0) ? 0 : 1;
 }

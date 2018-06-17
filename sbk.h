@@ -22,3 +22,4 @@ int		 sbk_open(struct sbk_ctx *, const char *, const char *);
 void		 sbk_close(struct sbk_ctx *);
 int		 sbk_eof(struct sbk_ctx *);
 int		 sbk_dump(const char *, const char *);
+int		 sbk_sqlite(const char *, const char *, const char *);
