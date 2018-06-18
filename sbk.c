@@ -589,6 +589,7 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
 	sqlite3			*db;
+	int			 ret;
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		return -1;
@@ -599,13 +600,17 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 	if (sqlite3_open(dbpath, &db) != SQLITE_OK)
 		goto error3;
 
-	while ((frm = sbk_get_frame(ctx)) != NULL)
-		if (frm->statement != NULL) {
-			if (sbk_exec_statement(db, frm->statement) == -1)
-				goto error3;
-		} else if (frm->attachment != NULL || frm->avatar != NULL)
-			if (sbk_skip_data(ctx, frm) == -1)
-				goto error3;
+	while ((frm = sbk_get_frame(ctx)) != NULL) {
+		if (frm->statement != NULL)
+			ret = sbk_exec_statement(db, frm->statement);
+		else if (frm->attachment != NULL || frm->avatar != NULL)
+			ret = sbk_skip_data(ctx, frm);
+
+		signal__backup_frame__free_unpacked(frm, NULL);
+
+		if (ret == -1)
+			goto error3;
+	}
 
 	if (!ctx->eof)
 		goto error3;
