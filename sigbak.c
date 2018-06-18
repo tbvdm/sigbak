@@ -15,6 +15,7 @@
  */
 
 #include <err.h>
+#include <fcntl.h>
 #include <readpassphrase.h>
 #include <string.h>
 #include <unistd.h>
@@ -33,9 +34,18 @@ cmd_dump(int argc, char **argv, const char *passphr)
 int
 cmd_sqlite(int argc, char **argv, const char *passphr)
 {
+	int fd;
+
 	if (argc != 3)
 		return 1;
 
+	/* Prevent SQLite from writing to an existing file */
+	if ((fd = open(argv[2], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
+		warn("%s", argv[2]);
+		return 1;
+	}
+
+	close(fd);
 	return (sbk_sqlite(argv[1], passphr, argv[2]) == 0) ? 0 : 1;
 }
 
