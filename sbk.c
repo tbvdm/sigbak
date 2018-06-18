@@ -521,19 +521,26 @@ sbk_dump(const char *path, const char *passphr)
 		return -1;
 	}
 
+	ret = 0;
+
 	for (nfrm = 1; (frm = sbk_get_frame(ctx)) != NULL; nfrm++) {
 		sbk_print_frame(frm, nfrm);
 
 		if (frm->attachment != NULL || frm->avatar != NULL)
-			if ((ret = sbk_skip_data(ctx, frm)) == -1)
+			if ((ret = sbk_skip_data(ctx, frm)) == -1) {
+				signal__backup_frame__free_unpacked(frm, NULL);
 				break;
+			}
 
 		signal__backup_frame__free_unpacked(frm, NULL);
 	}
 
+	if (!ctx->eof)
+		ret = -1;
+
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return ctx->eof ? 0 : -1;
+	return ret;
 }
 
 static int
