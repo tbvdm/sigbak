@@ -21,6 +21,24 @@
 
 #include "sbk.h"
 
+int
+cmd_dump(int argc, char **argv, const char *passphr)
+{
+	if (argc != 2)
+		return 1;
+
+	return (sbk_dump(argv[1], passphr) == 0) ? 0 : 1;
+}
+
+int
+cmd_sqlite(int argc, char **argv, const char *passphr)
+{
+	if (argc != 3)
+		return 1;
+
+	return (sbk_sqlite(argv[1], passphr, argv[2]) == 0) ? 0 : 1;
+}
+
 void
 remove_spaces(char *s)
 {
@@ -38,9 +56,6 @@ main(int argc, char **argv)
 	char	passphr[128];
 	int	ret;
 
-	if (argc < 3)
-		return 1;
-
 	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
 	    passphr, sizeof passphr, 0) == NULL)
 		errx(1, "Cannot read passphrase");
@@ -50,13 +65,16 @@ main(int argc, char **argv)
 
 	remove_spaces(passphr);
 
-	if (strcmp(argv[1], "dump") == 0 && argc == 3)
-		ret = sbk_dump(argv[2], passphr);
-	else if (strcmp(argv[1], "sqlite") == 0 && argc == 4)
-		ret = sbk_sqlite(argv[2], passphr, argv[3]);
+	argc--;
+	argv++;
+
+	if (strcmp(argv[0], "dump") == 0)
+		ret = cmd_dump(argc, argv, passphr);
+	else if (strcmp(argv[0], "sqlite") == 0)
+		ret = cmd_sqlite(argc, argv, passphr);
 	else
 		ret = 1;
 
 	explicit_bzero(passphr, sizeof passphr);
-	return (ret == 0) ? 0 : 1;
+	return ret;
 }
