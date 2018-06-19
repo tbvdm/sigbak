@@ -66,6 +66,9 @@ main(int argc, char **argv)
 	char	passphr[128];
 	int	ret;
 
+	if (argc <= 2)
+		return 1;
+
 	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
 	    passphr, sizeof passphr, 0) == NULL)
 		errx(1, "Cannot read passphrase");
