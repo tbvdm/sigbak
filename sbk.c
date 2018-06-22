@@ -45,8 +45,10 @@ struct sbk_ctx {
 	unsigned char	 mackey[SBK_MACKEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	int32_t		 counter;
-	unsigned char	*buf;
-	size_t		 bufsize;
+	unsigned char	*ibuf;
+	size_t		 ibufsize;
+	unsigned char	*obuf;
+	size_t		 obufsize;
 	int		 dump;
 	int		 eof;
 };
@@ -225,18 +227,36 @@ sbk_print_frame(Signal__BackupFrame *frm, unsigned int n)
 }
 
 static int
-sbk_read_buf(struct sbk_ctx *ctx, size_t len)
+sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 {
 	char *buf;
 
-	if (ctx->bufsize < len) {
-		if ((buf = realloc(ctx->buf, len)) == NULL)
+	if (ctx->ibufsize < size) {
+		if ((buf = realloc(ctx->ibuf, size)) == NULL)
 			return -1;
-		ctx->buf = buf;
-		ctx->bufsize = len;
+		ctx->ibuf = buf;
+		ctx->ibufsize = size;
 	}
 
-	if (fread(ctx->buf, 1, len, ctx->fp) != len)
+	size += EVP_MAX_BLOCK_LENGTH;
+
+	if (ctx->obufsize < size) {
+		if ((buf = realloc(ctx->obuf, size)) == NULL)
+			return -1;
+		ctx->obuf = buf;
+		ctx->obufsize = size;
+	}
+
+	return 0;
+}
+
+static int
+sbk_read_buf(struct sbk_ctx *ctx, size_t len)
+{
+	if (sbk_enlarge_buffers(ctx, len) == -1)
+		return -1;
+
+	if (fread(ctx->ibuf, 1, len, ctx->fp) != len)
 		return -1;
 
 	return 0;
@@ -250,8 +270,8 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	if (sbk_read_buf(ctx, 4) == -1)
 		return -1;
 
-	len = (ctx->buf[0] << 24) | (ctx->buf[1] << 16) | (ctx->buf[2] << 8) |
-	    ctx->buf[3];
+	len = (ctx->ibuf[0] << 24) | (ctx->ibuf[1] << 16) | (ctx->ibuf[2] << 8)
+	    | ctx->ibuf[3];
 
 	if (len < 0)
 		return -1;
@@ -284,10 +304,10 @@ sbk_verify_mac(struct sbk_ctx *ctx, size_t len)
 {
 	unsigned char *ourmac, *theirmac;
 
-	theirmac = ctx->buf + len;
+	theirmac = ctx->ibuf + len;
 
-	if ((ourmac = HMAC(EVP_sha256(), ctx->mackey, SBK_MACKEY_LEN, ctx->buf,
-	    len, NULL, NULL)) == NULL)
+	if ((ourmac = HMAC(EVP_sha256(), ctx->mackey, SBK_MACKEY_LEN,
+	    ctx->ibuf, len, NULL, NULL)) == NULL)
 		return -1;
 
 	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0)
@@ -296,11 +316,10 @@ sbk_verify_mac(struct sbk_ctx *ctx, size_t len)
 	return 0;
 }
 
-static unsigned char *
+static int
 sbk_decrypt(struct sbk_ctx *ctx, size_t buflen)
 {
-	unsigned char	*plain;
-	int		 len;
+	int len;
 
 	ctx->iv[0] = (ctx->counter >> 24);
 	ctx->iv[1] = (ctx->counter >> 16);
@@ -310,25 +329,19 @@ sbk_decrypt(struct sbk_ctx *ctx, size_t buflen)
 
 	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
 	    ctx->cipherkey, ctx->iv) == 0)
-		return NULL;
+		return -1;
 
-	if ((plain = malloc(buflen)) == NULL)
-		return NULL;
+	if (EVP_DecryptUpdate(ctx->cipher, ctx->obuf, &len, ctx->ibuf, buflen)
+	    == 0)
+		return -1;
 
-	if (EVP_DecryptUpdate(ctx->cipher, plain, &len, ctx->buf, buflen) == 0)
-		goto error;
-
-	if (EVP_DecryptFinal_ex(ctx->cipher, plain + len, &len) == 0)
-		goto error;
+	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + len, &len) == 0)
+		return -1;
 
 	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0)
-		goto error;
+		return -1;
 
-	return plain;
-
-error:
-	free(plain);
-	return NULL;
+	return 0;
 }
 
 static Signal__BackupFrame *
@@ -339,14 +352,13 @@ sbk_get_start_frame(struct sbk_ctx *ctx)
 	if (sbk_read_frame(ctx, &len) == -1)
 		return NULL;
 
-	return signal__backup_frame__unpack(NULL, len, ctx->buf);
+	return signal__backup_frame__unpack(NULL, len, ctx->ibuf);
 }
 
 static Signal__BackupFrame *
 sbk_get_frame(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
-	unsigned char		*plain;
 	size_t			 len;
 
 	if (ctx->eof)
@@ -363,15 +375,15 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	if (sbk_verify_mac(ctx, len) == -1)
 		return NULL;
 
-	if ((plain = sbk_decrypt(ctx, len)) == NULL)
+	if (sbk_decrypt(ctx, len) == -1)
 		return NULL;
 
-	if ((frm = signal__backup_frame__unpack(NULL, len, plain)) != NULL) {
+	if ((frm = signal__backup_frame__unpack(NULL, len, ctx->obuf)) !=
+	    NULL) {
 		if (frm->has_end)
 			ctx->eof = 1;
 	}
 
-	free(plain);
 	return frm;
 }
 
@@ -426,26 +438,28 @@ sbk_ctx_new(void)
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
-	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL) {
-		free(ctx);
-		return NULL;
-	}
+	ctx->ibuf = NULL;
+	ctx->obuf = NULL;
 
-	ctx->bufsize = 256;
-	if ((ctx->buf = malloc(ctx->bufsize)) == NULL) {
-		EVP_CIPHER_CTX_free(ctx->cipher);
-		free(ctx);
-		return NULL;
-	}
+	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
+		goto error;
+
+	if (sbk_enlarge_buffers(ctx, 1024) == -1)
+		goto error;
 
 	return ctx;
+
+error:
+	sbk_ctx_free(ctx);
+	return NULL;
 }
 
 void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	EVP_CIPHER_CTX_free(ctx->cipher);
-	free(ctx->buf);
+	free(ctx->ibuf);
+	free(ctx->obuf);
 	free(ctx);
 }
 
@@ -602,7 +616,7 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		return -1;
-	
+
 	if (sbk_open(ctx, bakpath, passphr) == -1)
 		goto error1;
 
