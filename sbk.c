@@ -499,11 +499,13 @@ error:
 void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
-	EVP_CIPHER_CTX_free(ctx->cipher);
-	HMAC_CTX_free(ctx->hmac);
-	free(ctx->ibuf);
-	free(ctx->obuf);
-	free(ctx);
+	if (ctx != NULL) {
+		EVP_CIPHER_CTX_free(ctx->cipher);
+		HMAC_CTX_free(ctx->hmac);
+		free(ctx->ibuf);
+		free(ctx->obuf);
+		free(ctx);
+	}
 }
 
 int
