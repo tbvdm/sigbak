@@ -351,7 +351,7 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 }
 
 static int
-sbk_skip_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
+sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
 
@@ -588,7 +588,7 @@ sbk_dump(const char *path, const char *passphr)
 		sbk_print_frame(frm, nfrm);
 
 		if (frm->attachment != NULL || frm->avatar != NULL)
-			if ((ret = sbk_skip_data(ctx, frm)) == -1) {
+			if ((ret = sbk_skip_file(ctx, frm)) == -1) {
 				signal__backup_frame__free_unpacked(frm, NULL);
 				break;
 			}
@@ -672,7 +672,7 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(db, frm->statement);
 		else if (frm->attachment != NULL || frm->avatar != NULL)
-			ret = sbk_skip_data(ctx, frm);
+			ret = sbk_skip_file(ctx, frm);
 
 		signal__backup_frame__free_unpacked(frm, NULL);
 
