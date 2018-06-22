@@ -41,6 +41,7 @@
 struct sbk_ctx {
 	FILE		*fp;
 	EVP_CIPHER_CTX	*cipher;
+	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
 	unsigned char	 mackey[SBK_MACKEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
@@ -251,6 +252,75 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 }
 
 static int
+sbk_decrypt_init(struct sbk_ctx *ctx, int32_t counter)
+{
+	ctx->iv[0] = (counter >> 24);
+	ctx->iv[1] = (counter >> 16);
+	ctx->iv[2] = (counter >> 8);
+	ctx->iv[3] = counter;
+
+	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
+	    NULL) == 0)
+		return -1;
+
+	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
+	    ctx->cipherkey, ctx->iv) == 0)
+		return -1;
+
+	return 0;
+}
+
+static int
+sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
+{
+	int len;
+
+	if (HMAC_Update(ctx->hmac, ctx->ibuf, ibuflen) == 0)
+		return -1;
+
+	if (EVP_DecryptUpdate(ctx->cipher, ctx->obuf, &len, ctx->ibuf,
+	    ibuflen) == 0)
+		return -1;
+
+	*obuflen = len;
+	return 0;
+}
+
+
+static int
+sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen, const char *theirmac)
+{
+	char		ourmac[EVP_MAX_MD_SIZE];
+	unsigned int	ourmaclen;
+	int		len;
+
+	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + *obuflen, &len) == 0)
+		return -1;
+	
+	*obuflen += len;
+
+	if (HMAC_Final(ctx->hmac, ourmac, &ourmaclen) == 0)
+		return -1;
+
+	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0)
+		return -1;
+
+	return 0;
+}
+
+static int
+sbk_decrypt_reset(struct sbk_ctx *ctx)
+{
+	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0)
+		return -1;
+
+	if (HMAC_CTX_reset(ctx->hmac) == 0)
+		return -1;
+
+	return 0;
+}
+
+static int
 sbk_read_buf(struct sbk_ctx *ctx, size_t len)
 {
 	if (sbk_enlarge_buffers(ctx, len) == -1)
@@ -299,92 +369,60 @@ sbk_skip_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	return 0;
 }
 
-static int
-sbk_verify_mac(struct sbk_ctx *ctx, size_t len)
-{
-	unsigned char *ourmac, *theirmac;
-
-	theirmac = ctx->ibuf + len;
-
-	if ((ourmac = HMAC(EVP_sha256(), ctx->mackey, SBK_MACKEY_LEN,
-	    ctx->ibuf, len, NULL, NULL)) == NULL)
-		return -1;
-
-	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0)
-		return -1;
-
-	return 0;
-}
-
-static int
-sbk_decrypt(struct sbk_ctx *ctx, size_t buflen)
-{
-	int len;
-
-	ctx->iv[0] = (ctx->counter >> 24);
-	ctx->iv[1] = (ctx->counter >> 16);
-	ctx->iv[2] = (ctx->counter >> 8);
-	ctx->iv[3] = ctx->counter;
-	ctx->counter++;
-
-	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
-	    ctx->cipherkey, ctx->iv) == 0)
-		return -1;
-
-	if (EVP_DecryptUpdate(ctx->cipher, ctx->obuf, &len, ctx->ibuf, buflen)
-	    == 0)
-		return -1;
-
-	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + len, &len) == 0)
-		return -1;
-
-	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0)
-		return -1;
-
-	return 0;
-}
-
 static Signal__BackupFrame *
 sbk_get_start_frame(struct sbk_ctx *ctx)
 {
-	size_t len;
+	size_t ibuflen;
 
-	if (sbk_read_frame(ctx, &len) == -1)
+	if (sbk_read_frame(ctx, &ibuflen) == -1)
 		return NULL;
 
-	return signal__backup_frame__unpack(NULL, len, ctx->ibuf);
+	return signal__backup_frame__unpack(NULL, ibuflen, ctx->ibuf);
 }
 
 static Signal__BackupFrame *
 sbk_get_frame(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
-	size_t			 len;
+	size_t			 ibuflen, obuflen;
+	unsigned char		*mac;
 
 	if (ctx->eof)
 		return NULL;
 
-	if (sbk_read_frame(ctx, &len) == -1)
+	if (sbk_read_frame(ctx, &ibuflen) == -1)
 		return NULL;
 
-	if (len <= SBK_MAC_LEN)
+	if (ibuflen <= SBK_MAC_LEN)
 		return NULL;
 
-	len -= SBK_MAC_LEN;
+	ibuflen -= SBK_MAC_LEN;
+	mac = ctx->ibuf + ibuflen;
 
-	if (sbk_verify_mac(ctx, len) == -1)
-		return NULL;
+	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
+		goto error;
 
-	if (sbk_decrypt(ctx, len) == -1)
-		return NULL;
+	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
+		goto error;
 
-	if ((frm = signal__backup_frame__unpack(NULL, len, ctx->obuf)) !=
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+		goto error;
+
+	if (sbk_decrypt_reset(ctx) == -1)
+		goto error;
+
+	if ((frm = signal__backup_frame__unpack(NULL, ibuflen, ctx->obuf)) !=
 	    NULL) {
 		if (frm->has_end)
 			ctx->eof = 1;
 	}
 
+	ctx->counter++;
 	return frm;
+
+error:
+	sbk_decrypt_reset(ctx);
+	return NULL;
 }
 
 static int
@@ -438,10 +476,14 @@ sbk_ctx_new(void)
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
+	ctx->hmac = NULL;
 	ctx->ibuf = NULL;
 	ctx->obuf = NULL;
 
 	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
+		goto error;
+
+	if ((ctx->hmac = HMAC_CTX_new()) == NULL)
 		goto error;
 
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
@@ -458,6 +500,7 @@ void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	EVP_CIPHER_CTX_free(ctx->cipher);
+	HMAC_CTX_free(ctx->hmac);
 	free(ctx->ibuf);
 	free(ctx->obuf);
 	free(ctx);
