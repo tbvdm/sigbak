@@ -411,7 +411,7 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	if (sbk_decrypt_reset(ctx) == -1)
 		goto error;
 
-	if ((frm = signal__backup_frame__unpack(NULL, ibuflen, ctx->obuf)) !=
+	if ((frm = signal__backup_frame__unpack(NULL, obuflen, ctx->obuf)) !=
 	    NULL) {
 		if (frm->has_end)
 			ctx->eof = 1;
