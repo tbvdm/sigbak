@@ -321,33 +321,28 @@ sbk_decrypt_reset(struct sbk_ctx *ctx)
 }
 
 static int
-sbk_read_buf(struct sbk_ctx *ctx, size_t len)
+sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 {
+	int32_t		len;
+	unsigned char	lenbuf[4];
+
+	if (fread(lenbuf, sizeof lenbuf, 1, ctx->fp) != 1)
+		return -1;
+
+	len = (lenbuf[0] << 24) | (lenbuf[1] << 16) | (lenbuf[2] << 8) |
+	    lenbuf[3];
+
+	if (len <= 0)
+		return -1;
+
 	if (sbk_enlarge_buffers(ctx, len) == -1)
 		return -1;
 
-	if (fread(ctx->ibuf, 1, len, ctx->fp) != len)
-		return -1;
-
-	return 0;
-}
-
-static int
-sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
-{
-	int32_t	len;
-
-	if (sbk_read_buf(ctx, 4) == -1)
-		return -1;
-
-	len = (ctx->ibuf[0] << 24) | (ctx->ibuf[1] << 16) | (ctx->ibuf[2] << 8)
-	    | ctx->ibuf[3];
-
-	if (len < 0)
+	if (fread(ctx->ibuf, len, 1, ctx->fp) != 1)
 		return -1;
 
 	*frmlen = len;
-	return sbk_read_buf(ctx, *frmlen);
+	return 0;
 }
 
 static int
