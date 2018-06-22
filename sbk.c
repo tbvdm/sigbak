@@ -105,9 +105,11 @@ sbk_print_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 	char	*hex;
 	size_t	 i;
 
-	if ((hex = reallocarray(NULL, bin->len + 1, 2)) != NULL)
-		for (i = 0; i < bin->len; i++)
-			snprintf(hex + (i * 2), 3, "%02x", bin->data[i]);
+	if ((hex = reallocarray(NULL, bin->len + 1, 2)) == NULL)
+		return;
+
+	for (i = 0; i < bin->len; i++)
+		snprintf(hex + (i * 2), 3, "%02x", bin->data[i]);
 
 	sbk_print(ind, name, "bytes", "%s", hex);
 	free(hex);
