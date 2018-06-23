@@ -258,9 +258,9 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 static int
 sbk_decrypt_init(struct sbk_ctx *ctx, int32_t counter)
 {
-	ctx->iv[0] = (counter >> 24);
-	ctx->iv[1] = (counter >> 16);
-	ctx->iv[2] = (counter >> 8);
+	ctx->iv[0] = counter >> 24;
+	ctx->iv[1] = counter >> 16;
+	ctx->iv[2] = counter >> 8;
 	ctx->iv[3] = counter;
 
 	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
