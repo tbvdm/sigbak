@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <sha2.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -238,6 +239,9 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 		ctx->ibuf = buf;
 		ctx->ibufsize = size;
 	}
+
+	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH)
+		return -1;
 
 	size += EVP_MAX_BLOCK_LENGTH;
 
