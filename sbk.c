@@ -474,6 +474,8 @@ sbk_ctx_new(void)
 	ctx->hmac = NULL;
 	ctx->ibuf = NULL;
 	ctx->obuf = NULL;
+	ctx->ibufsize = 0;
+	ctx->obufsize = 0;
 
 	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
 		goto error;
@@ -662,6 +664,8 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 
 	if (sqlite3_open(dbpath, &db) != SQLITE_OK)
 		goto error3;
+
+	ret = 0;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
