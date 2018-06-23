@@ -486,6 +486,8 @@ sbk_ctx_new(void)
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
 		goto error;
 
+	ctx->dump = 0;
+	ctx->eof = 0;
 	return ctx;
 
 error:
@@ -543,6 +545,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error2;
 
 	signal__backup_frame__free_unpacked(frm, NULL);
+	ctx->dump = 0;
 	ctx->eof = 0;
 	return 0;
 
