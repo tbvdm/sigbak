@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <sha2.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -53,6 +54,14 @@ struct sbk_ctx {
 	size_t		 obufsize;
 	int		 dump;
 	int		 eof;
+};
+
+struct sbk_file {
+	enum sbk_file_type type;
+	char		*name;
+	uint32_t	 len;
+	long		 off;
+	int32_t		 counter;
 };
 
 static void
@@ -422,6 +431,144 @@ sbk_get_frame(struct sbk_ctx *ctx)
 error:
 	sbk_decrypt_reset(ctx);
 	return NULL;
+}
+
+struct sbk_file *
+sbk_get_file(struct sbk_ctx *ctx)
+{
+	struct sbk_file		*file;
+	Signal__BackupFrame	*frm;
+
+	file = NULL;
+
+	while ((frm = sbk_get_frame(ctx)) != NULL)
+		if (frm->attachment != NULL || frm->avatar != NULL)
+			break;
+
+	if (frm == NULL) {
+		if (!ctx->eof)
+			goto error;
+		return NULL;
+	}
+
+	if ((file = malloc(sizeof *file)) == NULL)
+		goto error;
+
+	if ((file->off = ftell(ctx->fp)) == -1)
+		goto error;
+
+	if (frm->attachment != NULL) {
+		file->type = SBK_ATTACHMENT;
+
+		if (!frm->attachment->has_attachmentid ||
+		    !frm->attachment->has_length)
+			goto error;
+
+		if (asprintf(&file->name, "%" PRIu64,
+		    frm->attachment->attachmentid) == -1)
+			goto error;
+
+		file->len = frm->attachment->length;
+	} else {
+		file->type = SBK_AVATAR;
+
+		if (frm->avatar->name == NULL || !frm->avatar->has_length)
+			goto error;
+
+		if ((file->name = strdup(frm->avatar->name)) == NULL)
+			goto error;
+
+		file->len = frm->avatar->length;
+	}
+
+	file->counter = ctx->counter;
+
+	if (sbk_skip_file(ctx, frm) == -1)
+		goto error;
+
+	signal__backup_frame__free_unpacked(frm, NULL);
+	return file;
+
+error:
+	if (frm != NULL)
+		signal__backup_frame__free_unpacked(frm, NULL);
+
+	free(file);
+	return NULL;
+}
+
+void
+sbk_free_file(struct sbk_file *file)
+{
+	free(file->name);
+	free(file);
+}
+
+enum sbk_file_type
+sbk_get_file_type(struct sbk_file *file)
+{
+	return file->type;
+}
+
+const char *
+sbk_get_file_name(struct sbk_file *file)
+{
+	return file->name;
+}
+
+size_t
+sbk_get_file_size(struct sbk_file *file)
+{
+	return file->len;
+}
+
+int
+sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
+{
+	size_t	ibuflen, len, obuflen;
+	char	mac[SBK_MAC_LEN];
+
+	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+		return -1;
+
+	if (fseek(ctx->fp, file->off, SEEK_SET) == -1)
+		return -1;
+
+	if (sbk_decrypt_init(ctx, file->counter) == -1)
+		goto error;
+
+	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0)
+		goto error;
+
+	for (len = file->len; len > 0; len -= ibuflen) {
+		ibuflen = (len < ctx->ibufsize) ? len : ctx->ibufsize;
+
+		if (fread(ctx->ibuf, ibuflen, 1, ctx->fp) != 1)
+			goto error;
+
+		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
+			goto error;
+
+		if (fwrite(ctx->obuf, obuflen, 1, fp) != 1)
+			goto error;
+	}
+
+	if (fread(mac, sizeof mac, 1, ctx->fp) != 1)
+		goto error;
+
+	obuflen = 0;
+
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+		goto error;
+
+	if (obuflen > 0 && fwrite(ctx->obuf, obuflen, 1, fp) != 1)
+		goto error;
+
+	return sbk_decrypt_reset(ctx);
+
+error:
+	sbk_decrypt_reset(ctx);
+	return -1;
 }
 
 static int

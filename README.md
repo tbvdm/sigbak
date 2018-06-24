@@ -25,6 +25,14 @@ sigbak currently has the following functionality:
 
     	sigbak sqlite backupfile sqlitefile
 
+* Save all message attachments in the current directory:
+
+    	sigbak attachments backupfile
+
+* Save all avatars in the current directory:
+
+    	sigbak avatars backupfile
+
 [1]: https://www.signal.org/
 [2]: https://www.libressl.org/
 [3]: https://github.com/protobuf-c/protobuf-c
