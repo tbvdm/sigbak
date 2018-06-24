@@ -73,8 +73,10 @@ main(int argc, char **argv)
 	    passphr, sizeof passphr, 0) == NULL)
 		errx(1, "Cannot read passphrase");
 
-	if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
+	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
+		explicit_bzero(passphr, sizeof passphr);
 		err(1, "pledge");
+	}
 
 	remove_spaces(passphr);
 
