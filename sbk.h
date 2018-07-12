@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "backup.pb-c.h"
+
 struct sbk_ctx;
 struct sbk_file;
 
@@ -28,6 +30,9 @@ void		 sbk_ctx_free(struct sbk_ctx *);
 int		 sbk_open(struct sbk_ctx *, const char *, const char *);
 void		 sbk_close(struct sbk_ctx *);
 int		 sbk_eof(struct sbk_ctx *);
+
+Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *);
+int		 sbk_skip_file(struct sbk_ctx *, Signal__BackupFrame *);
 
 struct sbk_file	*sbk_get_file(struct sbk_ctx *);
 void		 sbk_free_file(struct sbk_file *);

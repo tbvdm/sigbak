@@ -30,7 +30,6 @@
 #include <openssl/hmac.h>
 #include <sqlite3.h>
 
-#include "backup.pb-c.h"
 #include "sbk.h"
 
 #define SBK_IV_LEN		16
@@ -359,7 +358,7 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	return 0;
 }
 
-static int
+int
 sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
@@ -389,7 +388,7 @@ sbk_get_start_frame(struct sbk_ctx *ctx)
 	return signal__backup_frame__unpack(NULL, ibuflen, ctx->ibuf);
 }
 
-static Signal__BackupFrame *
+Signal__BackupFrame *
 sbk_get_frame(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
