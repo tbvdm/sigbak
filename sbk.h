@@ -32,6 +32,7 @@ void		 sbk_close(struct sbk_ctx *);
 int		 sbk_eof(struct sbk_ctx *);
 
 Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *);
+void		 sbk_free_frame(Signal__BackupFrame *);
 int		 sbk_skip_file(struct sbk_ctx *, Signal__BackupFrame *);
 
 struct sbk_file	*sbk_get_file(struct sbk_ctx *);

@@ -433,6 +433,12 @@ error:
 	return NULL;
 }
 
+void
+sbk_free_frame(Signal__BackupFrame *frm)
+{
+	signal__backup_frame__free_unpacked(frm, NULL);
+}
+
 struct sbk_file *
 sbk_get_file(struct sbk_ctx *ctx)
 {
