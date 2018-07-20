@@ -43,5 +43,4 @@ const char	*sbk_get_file_name(struct sbk_file *);
 size_t		 sbk_get_file_size(struct sbk_file *);
 int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
 
-int		 sbk_dump(const char *, const char *);
 int		 sbk_sqlite(const char *, const char *, const char *);

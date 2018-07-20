@@ -16,12 +16,182 @@
 
 #include <err.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <readpassphrase.h>
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "sbk.h"
+
+static void
+dump_var(unsigned int ind, const char *name, const char *type, const char *fmt,
+    ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	while (ind-- > 0)
+		putchar('\t');
+	printf("%s (%s):", name, type);
+	if (fmt != NULL) {
+		putchar(' ');
+		vprintf(fmt, ap);
+	}
+	putchar('\n');
+	va_end(ap);
+}
+
+static void
+dump_bool(unsigned int ind, const char *name, int val)
+{
+	dump_var(ind, name, "bool", "%d", val);
+}
+
+static void
+dump_uint32(unsigned int ind, const char *name, uint32_t val)
+{
+	dump_var(ind, name, "uint32", "%" PRIu32, val);
+}
+
+static void
+dump_uint64(unsigned int ind, const char *name, uint64_t val)
+{
+	dump_var(ind, name, "uint64", "%" PRIu64, val);
+}
+
+static void
+dump_double(unsigned int ind, const char *name, double val)
+{
+	dump_var(ind, name, "string", "%g", val);
+}
+
+static void
+dump_string(unsigned int ind, const char *name, const char *val)
+{
+	dump_var(ind, name, "string", "%s", val);
+}
+
+static void
+dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
+{
+	char	*hex;
+	size_t	 i;
+
+	if ((hex = reallocarray(NULL, bin->len + 1, 2)) == NULL)
+		return;
+
+	for (i = 0; i < bin->len; i++)
+		snprintf(hex + (i * 2), 3, "%02x", bin->data[i]);
+
+	dump_var(ind, name, "bytes", "%s", hex);
+	free(hex);
+}
+
+static void
+dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
+{
+	dump_var(ind, name, "Attachment", NULL);
+	if (att->has_rowid)
+		dump_uint64(ind + 1, "rowid", att->rowid);
+	if (att->has_attachmentid)
+		dump_uint64(ind + 1, "attachmentid", att->attachmentid);
+	if (att->has_length)
+		dump_uint32(ind + 1, "length", att->length);
+}
+
+static void
+dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
+{
+	dump_var(ind, name, "Avatar", NULL, NULL);
+	if (avt->name)
+		dump_string(ind + 1, "name", avt->name);
+	if (avt->has_length)
+		dump_uint32(ind + 1, "length", avt->length);
+}
+
+static void
+dump_header(unsigned int ind, const char *name, Signal__Header *hdr)
+{
+	dump_var(ind, name, "Header", NULL);
+	if (hdr->has_iv)
+		dump_binary(ind + 1, "iv", &hdr->iv);
+	if (hdr->has_salt)
+		dump_binary(ind + 1, "salt", &hdr->salt);
+}
+
+static void
+dump_preference(unsigned int ind, const char *name,
+    Signal__SharedPreference *prf)
+{
+	dump_var(ind, name, "SharedPreference", NULL, NULL);
+	if (prf->file != NULL)
+		dump_string(ind + 1, "file", prf->file);
+	if (prf->key != NULL)
+		dump_string(ind + 1, "key", prf->key);
+	if (prf->value != NULL)
+		dump_string(ind + 1, "value", prf->value);
+}
+
+static void
+dump_parameter(unsigned int ind, const char *name,
+    Signal__SqlStatement__SqlParameter *par)
+{
+	dump_var(ind, name, "SqlParameter", NULL);
+	if (par->stringparamter != NULL)
+		dump_string(ind + 1, "stringParamter", par->stringparamter);
+	if (par->has_integerparameter)
+		dump_uint64(ind + 1, "integerParameter",
+		    par->integerparameter);
+	if (par->has_doubleparameter)
+		dump_double(ind + 1, "doubleParameter", par->doubleparameter);
+	if (par->has_blobparameter)
+		dump_binary(ind + 1, "blobParameter", &par->blobparameter);
+	if (par->has_nullparameter)
+		dump_bool(ind + 1, "nullparameter", par->nullparameter);
+}
+
+static void
+dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
+{
+	size_t i;
+
+	dump_var(ind, name, "SqlStatement", NULL);
+	if (stm->statement != NULL)
+		dump_string(ind + 1, "string", stm->statement);
+	for (i = 0; i < stm->n_parameters; i++)
+		dump_parameter(ind + 1, "parameters", stm->parameters[i]);
+}
+
+static void
+dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
+{
+	dump_var(ind, name, "DatabaseVersion", NULL);
+	if (ver->has_version)
+		dump_uint32(ind + 1, "version", ver->version);
+}
+
+static void
+dump_frame(Signal__BackupFrame *frm, unsigned int n)
+{
+	printf("frame %u:\n", n);
+	if (frm->header != NULL)
+		dump_header(1, "header", frm->header);
+	if (frm->statement != NULL)
+		dump_statement(1, "statement", frm->statement);
+	if (frm->preference != NULL)
+		dump_preference(1, "preference", frm->preference);
+	if (frm->attachment != NULL)
+		dump_attachment(1, "attachment", frm->attachment);
+	if (frm->version != NULL)
+		dump_version(1, "version", frm->version);
+	if (frm->has_end)
+		dump_bool(1, "end", frm->end);
+	if (frm->avatar != NULL)
+		dump_avatar(1, "avatar", frm->avatar);
+}
 
 int
 write_files(char *path, const char *passphr, enum sbk_file_type type)
@@ -97,10 +267,43 @@ cmd_avatars(int argc, char **argv, const char *passphr)
 int
 cmd_dump(int argc, char **argv, const char *passphr)
 {
+	struct sbk_ctx		*ctx;
+	Signal__BackupFrame	*frm;
+	unsigned int		 n;
+	int			 ret;
+
 	if (argc != 2)
 		return 1;
 
-	return (sbk_dump(argv[1], passphr) == 0) ? 0 : 1;
+	if ((ctx = sbk_ctx_new()) == NULL)
+		return -1;
+
+	if (sbk_open(ctx, argv[1], passphr) == -1) {
+		sbk_ctx_free(ctx);
+		return -1;
+	}
+
+	ret = 0;
+	n = 0;
+
+	while ((frm = sbk_get_frame(ctx)) != NULL) {
+		dump_frame(frm, n++);
+
+		if (frm->attachment != NULL || frm->avatar != NULL)
+			if ((ret = sbk_skip_file(ctx, frm)) == -1) {
+				sbk_free_frame(frm);
+				break;
+			}
+
+		sbk_free_frame(frm);
+	}
+
+	if (!sbk_eof(ctx))
+		ret = -1;
+
+	sbk_close(ctx);
+	sbk_ctx_free(ctx);
+	return (ret == 0) ? 0 : 1;
 }
 
 int
