@@ -52,7 +52,7 @@ struct sbk_ctx {
 	size_t		 ibufsize;
 	unsigned char	*obuf;
 	size_t		 obufsize;
-	int		 dump;
+	int		 firstframe;
 	int		 eof;
 };
 
@@ -377,17 +377,6 @@ sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	return 0;
 }
 
-static Signal__BackupFrame *
-sbk_get_start_frame(struct sbk_ctx *ctx)
-{
-	size_t ibuflen;
-
-	if (sbk_read_frame(ctx, &ibuflen) == -1)
-		return NULL;
-
-	return signal__backup_frame__unpack(NULL, ibuflen, ctx->ibuf);
-}
-
 Signal__BackupFrame *
 sbk_get_frame(struct sbk_ctx *ctx)
 {
@@ -400,6 +389,12 @@ sbk_get_frame(struct sbk_ctx *ctx)
 
 	if (sbk_read_frame(ctx, &ibuflen) == -1)
 		return NULL;
+
+	/* The first frame is not encrypted */
+	if (ctx->firstframe) {
+		ctx->firstframe = 0;
+		return signal__backup_frame__unpack(NULL, ibuflen, ctx->ibuf);
+	}
 
 	if (ibuflen <= SBK_MAC_LEN)
 		return NULL;
@@ -643,7 +638,6 @@ sbk_ctx_new(void)
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
 		goto error;
 
-	ctx->dump = 0;
 	ctx->eof = 0;
 	return ctx;
 
@@ -673,11 +667,10 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	if ((ctx->fp = fopen(path, "rb")) == NULL)
 		return -1;
 
-	if ((frm = sbk_get_start_frame(ctx)) == NULL)
-		goto error1;
+	ctx->firstframe = 1;
 
-	if (ctx->dump)
-		sbk_print_frame(frm, 0);
+	if ((frm = sbk_get_frame(ctx)) == NULL)
+		goto error1;
 
 	if (frm->header == NULL)
 		goto error2;
@@ -702,9 +695,9 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error2;
 
 	signal__backup_frame__free_unpacked(frm, NULL);
-	ctx->dump = 0;
 	ctx->eof = 0;
-	return 0;
+
+	return sbk_rewind(ctx);
 
 error2:
 	signal__backup_frame__free_unpacked(frm, NULL);
@@ -722,6 +715,17 @@ sbk_close(struct sbk_ctx *ctx)
 }
 
 int
+sbk_rewind(struct sbk_ctx *ctx)
+{
+	if (fseek(ctx->fp, 0, SEEK_SET) == -1)
+		return -1;
+
+	clearerr(ctx->fp);
+	ctx->firstframe = 1;
+	return 0;
+}
+
+int
 sbk_dump(const char *path, const char *passphr)
 {
 	struct sbk_ctx		*ctx;
@@ -732,8 +736,6 @@ sbk_dump(const char *path, const char *passphr)
 	if ((ctx = sbk_ctx_new()) == NULL)
 		return -1;
 
-	ctx->dump = 1;
-
 	if (sbk_open(ctx, path, passphr) == -1) {
 		sbk_ctx_free(ctx);
 		return -1;
@@ -741,7 +743,7 @@ sbk_dump(const char *path, const char *passphr)
 
 	ret = 0;
 
-	for (nfrm = 1; (frm = sbk_get_frame(ctx)) != NULL; nfrm++) {
+	for (nfrm = 0; (frm = sbk_get_frame(ctx)) != NULL; nfrm++) {
 		sbk_print_frame(frm, nfrm);
 
 		if (frm->attachment != NULL || frm->avatar != NULL)

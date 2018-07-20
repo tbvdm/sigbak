@@ -30,6 +30,7 @@ void		 sbk_ctx_free(struct sbk_ctx *);
 int		 sbk_open(struct sbk_ctx *, const char *, const char *);
 void		 sbk_close(struct sbk_ctx *);
 int		 sbk_eof(struct sbk_ctx *);
+int		 sbk_rewind(struct sbk_ctx *);
 
 Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *);
 void		 sbk_free_frame(Signal__BackupFrame *);
