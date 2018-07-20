@@ -780,8 +780,8 @@ sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
 			ret = sqlite3_bind_text(sqlstm, i + 1,
 			    stm->parameters[i]->stringparamter, -1, NULL);
 		if (stm->parameters[i]->has_integerparameter)
-			ret = sqlite3_bind_int(sqlstm, i + 1,
-			    stm->parameters[i]->integerparameter);
+			ret = sqlite3_bind_int64(sqlstm, i + 1,
+			    *(int64_t *)&stm->parameters[i]->integerparameter);
 		if (stm->parameters[i]->has_doubleparameter)
 			ret = sqlite3_bind_double(sqlstm, i + 1,
 			    stm->parameters[i]->doubleparameter);
