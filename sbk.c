@@ -80,7 +80,8 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 	size += EVP_MAX_BLOCK_LENGTH;
 
 	if (ctx->obufsize < size) {
-		if ((buf = realloc(ctx->obuf, size)) == NULL)
+		if ((buf = recallocarray(ctx->obuf, ctx->obufsize, size, 1)) ==
+		    NULL)
 			return -1;
 		ctx->obuf = buf;
 		ctx->obufsize = size;
@@ -319,15 +320,15 @@ error:
 	if (frm != NULL)
 		signal__backup_frame__free_unpacked(frm, NULL);
 
-	free(file);
+	freezero(file, sizeof *file);
 	return NULL;
 }
 
 void
 sbk_free_file(struct sbk_file *file)
 {
-	free(file->name);
-	free(file);
+	freezero(file->name, strlen(file->name) + 1);
+	freezero(file, sizeof *file);
 }
 
 enum sbk_file_type
@@ -478,8 +479,8 @@ sbk_ctx_free(struct sbk_ctx *ctx)
 		EVP_CIPHER_CTX_free(ctx->cipher);
 		HMAC_CTX_free(ctx->hmac);
 		free(ctx->ibuf);
-		free(ctx->obuf);
-		free(ctx);
+		freezero(ctx->obuf, ctx->obufsize);
+		freezero(ctx, sizeof *ctx);
 	}
 }
 
