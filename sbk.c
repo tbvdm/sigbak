@@ -125,7 +125,6 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 	return 0;
 }
 
-
 static int
 sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen, const char *theirmac)
 {
@@ -135,7 +134,7 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen, const char *theirmac)
 
 	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + *obuflen, &len) == 0)
 		return -1;
-	
+
 	*obuflen += len;
 
 	if (HMAC_Final(ctx->hmac, ourmac, &ourmaclen) == 0)
