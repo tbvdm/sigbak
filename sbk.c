@@ -310,9 +310,7 @@ sbk_get_file(struct sbk_ctx *ctx)
 	return file;
 
 error:
-	if (frm != NULL)
-		signal__backup_frame__free_unpacked(frm, NULL);
-
+	signal__backup_frame__free_unpacked(frm, NULL);
 	freezero(file, sizeof *file);
 	return NULL;
 }
