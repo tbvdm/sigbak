@@ -266,27 +266,25 @@ sbk_get_file(struct sbk_ctx *ctx)
 	struct sbk_file		*file;
 	Signal__BackupFrame	*frm;
 
-	file = NULL;
-
 	while ((frm = sbk_get_frame(ctx)) != NULL)
 		if (frm->attachment != NULL || frm->avatar != NULL)
 			break;
 
-	if (frm == NULL) {
-		if (!ctx->eof)
-			goto error;
+	if (frm == NULL)
 		return NULL;
-	}
 
 	if ((file = malloc(sizeof *file)) == NULL)
 		goto error;
 
+	file->counter = ctx->counter;
+
 	if ((file->off = ftell(ctx->fp)) == -1)
 		goto error;
 
-	if (frm->attachment != NULL) {
-		file->type = SBK_ATTACHMENT;
+	if (sbk_skip_file(ctx, frm) == -1)
+		goto error;
 
+	if (frm->attachment != NULL) {
 		if (!frm->attachment->has_attachmentid ||
 		    !frm->attachment->has_length)
 			goto error;
@@ -296,9 +294,8 @@ sbk_get_file(struct sbk_ctx *ctx)
 			goto error;
 
 		file->len = frm->attachment->length;
+		file->type = SBK_ATTACHMENT;
 	} else {
-		file->type = SBK_AVATAR;
-
 		if (frm->avatar->name == NULL || !frm->avatar->has_length)
 			goto error;
 
@@ -306,12 +303,8 @@ sbk_get_file(struct sbk_ctx *ctx)
 			goto error;
 
 		file->len = frm->avatar->length;
+		file->type = SBK_AVATAR;
 	}
-
-	file->counter = ctx->counter;
-
-	if (sbk_skip_file(ctx, frm) == -1)
-		goto error;
 
 	signal__backup_frame__free_unpacked(frm, NULL);
 	return file;
