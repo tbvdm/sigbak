@@ -578,9 +578,7 @@ sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
 	if (sqlite3_step(sqlstm) != SQLITE_DONE)
 		goto error;
 
-	if (sqlite3_finalize(sqlstm) != SQLITE_OK)
-		return -1;
-
+	sqlite3_finalize(sqlstm);
 	return 0;
 
 error:
