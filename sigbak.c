@@ -276,11 +276,11 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return -1;
+		return 1;
 
 	if (sbk_open(ctx, argv[1], passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return -1;
+		return 1;
 	}
 
 	ret = 0;
