@@ -389,6 +389,89 @@ error:
 }
 
 static int
+sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
+{
+	sqlite3_stmt	*sqlstm;
+	size_t		 i;
+	int		 ret;
+
+	if (stm->statement == NULL)
+		return -1;
+
+	if (sqlite3_prepare_v2(db, stm->statement, -1, &sqlstm, NULL) !=
+	    SQLITE_OK)
+		return -1;
+
+	for (i = 0; i < stm->n_parameters; i++) {
+		if (stm->parameters[i]->stringparamter != NULL)
+			ret = sqlite3_bind_text(sqlstm, i + 1,
+			    stm->parameters[i]->stringparamter, -1, NULL);
+		if (stm->parameters[i]->has_integerparameter)
+			ret = sqlite3_bind_int64(sqlstm, i + 1,
+			    *(int64_t *)&stm->parameters[i]->integerparameter);
+		if (stm->parameters[i]->has_doubleparameter)
+			ret = sqlite3_bind_double(sqlstm, i + 1,
+			    stm->parameters[i]->doubleparameter);
+		if (stm->parameters[i]->has_blobparameter)
+			ret = sqlite3_bind_blob(sqlstm, i + 1,
+			    stm->parameters[i]->blobparameter.data,
+			    stm->parameters[i]->blobparameter.len, NULL);
+		if (stm->parameters[i]->has_nullparameter)
+			ret = sqlite3_bind_null(sqlstm, i + 1);
+		if (ret != SQLITE_OK)
+			goto error;
+	}
+
+	if (sqlite3_step(sqlstm) != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(sqlstm);
+	return 0;
+
+error:
+	sqlite3_finalize(sqlstm);
+	return -1;
+}
+
+int
+sbk_write_database(struct sbk_ctx *ctx, const char *path)
+{
+	Signal__BackupFrame	*frm;
+	sqlite3			*db;
+	int			 ret;
+
+	if (sbk_rewind(ctx) == -1)
+		return -1;
+
+	if (sqlite3_open(path, &db) != SQLITE_OK)
+		goto error;
+
+	while ((frm = sbk_get_frame(ctx)) != NULL) {
+		if (frm->statement != NULL)
+			ret = sbk_exec_statement(db, frm->statement);
+		else if (frm->attachment != NULL || frm->avatar != NULL)
+			ret = sbk_skip_file(ctx, frm);
+
+		signal__backup_frame__free_unpacked(frm, NULL);
+
+		if (ret == -1)
+			goto error;
+	}
+
+	if (!ctx->eof)
+		goto error;
+
+	if (sqlite3_close(db) != SQLITE_OK)
+		return -1;
+
+	return 0;
+
+error:
+	sqlite3_close(db);
+	return -1;
+}
+
+static int
 sbk_compute_keys(struct sbk_ctx *ctx, const unsigned char *passphr,
     const unsigned char *salt, size_t saltlen)
 {
@@ -539,89 +622,6 @@ sbk_rewind(struct sbk_ctx *ctx)
 	clearerr(ctx->fp);
 	ctx->firstframe = 1;
 	return 0;
-}
-
-static int
-sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
-{
-	sqlite3_stmt	*sqlstm;
-	size_t		 i;
-	int		 ret;
-
-	if (stm->statement == NULL)
-		return -1;
-
-	if (sqlite3_prepare_v2(db, stm->statement, -1, &sqlstm, NULL) !=
-	    SQLITE_OK)
-		return -1;
-
-	for (i = 0; i < stm->n_parameters; i++) {
-		if (stm->parameters[i]->stringparamter != NULL)
-			ret = sqlite3_bind_text(sqlstm, i + 1,
-			    stm->parameters[i]->stringparamter, -1, NULL);
-		if (stm->parameters[i]->has_integerparameter)
-			ret = sqlite3_bind_int64(sqlstm, i + 1,
-			    *(int64_t *)&stm->parameters[i]->integerparameter);
-		if (stm->parameters[i]->has_doubleparameter)
-			ret = sqlite3_bind_double(sqlstm, i + 1,
-			    stm->parameters[i]->doubleparameter);
-		if (stm->parameters[i]->has_blobparameter)
-			ret = sqlite3_bind_blob(sqlstm, i + 1,
-			    stm->parameters[i]->blobparameter.data,
-			    stm->parameters[i]->blobparameter.len, NULL);
-		if (stm->parameters[i]->has_nullparameter)
-			ret = sqlite3_bind_null(sqlstm, i + 1);
-		if (ret != SQLITE_OK)
-			goto error;
-	}
-
-	if (sqlite3_step(sqlstm) != SQLITE_DONE)
-		goto error;
-
-	sqlite3_finalize(sqlstm);
-	return 0;
-
-error:
-	sqlite3_finalize(sqlstm);
-	return -1;
-}
-
-int
-sbk_write_database(struct sbk_ctx *ctx, const char *path)
-{
-	Signal__BackupFrame	*frm;
-	sqlite3			*db;
-	int			 ret;
-
-	if (sbk_rewind(ctx) == -1)
-		return -1;
-
-	if (sqlite3_open(path, &db) != SQLITE_OK)
-		goto error;
-
-	while ((frm = sbk_get_frame(ctx)) != NULL) {
-		if (frm->statement != NULL)
-			ret = sbk_exec_statement(db, frm->statement);
-		else if (frm->attachment != NULL || frm->avatar != NULL)
-			ret = sbk_skip_file(ctx, frm);
-
-		signal__backup_frame__free_unpacked(frm, NULL);
-
-		if (ret == -1)
-			goto error;
-	}
-
-	if (!ctx->eof)
-		goto error;
-
-	if (sqlite3_close(db) != SQLITE_OK)
-		return -1;
-
-	return 0;
-
-error:
-	sqlite3_close(db);
-	return -1;
 }
 
 int
