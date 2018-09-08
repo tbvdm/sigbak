@@ -309,7 +309,8 @@ cmd_dump(int argc, char **argv, const char *passphr)
 int
 cmd_sqlite(int argc, char **argv, const char *passphr)
 {
-	int fd;
+	struct sbk_ctx	*ctx;
+	int		 fd, ret;
 
 	if (argc != 3)
 		return 1;
@@ -321,7 +322,19 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 	}
 
 	close(fd);
-	return (sbk_sqlite(argv[1], passphr, argv[2]) == 0) ? 0 : 1;
+
+	if ((ctx = sbk_ctx_new()) == NULL)
+		return 1;
+
+	if (sbk_open(ctx, argv[1], passphr) == -1) {
+		sbk_ctx_free(ctx);
+		return 1;
+	}
+
+	ret = sbk_write_database(ctx, argv[2]);
+	sbk_close(ctx);
+	sbk_ctx_free(ctx);
+	return (ret == 0) ? 0 : 1;
 }
 
 void

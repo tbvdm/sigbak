@@ -587,23 +587,17 @@ error:
 }
 
 int
-sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
+sbk_write_database(struct sbk_ctx *ctx, const char *path)
 {
-	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
 	sqlite3			*db;
 	int			 ret;
 
-	if ((ctx = sbk_ctx_new()) == NULL)
+	if (sbk_rewind(ctx) == -1)
 		return -1;
 
-	if (sbk_open(ctx, bakpath, passphr) == -1)
-		goto error1;
-
-	if (sqlite3_open(dbpath, &db) != SQLITE_OK)
-		goto error3;
-
-	ret = 0;
+	if (sqlite3_open(path, &db) != SQLITE_OK)
+		goto error;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
@@ -614,25 +608,19 @@ sbk_sqlite(const char *bakpath, const char *passphr, const char *dbpath)
 		signal__backup_frame__free_unpacked(frm, NULL);
 
 		if (ret == -1)
-			goto error3;
+			goto error;
 	}
 
 	if (!ctx->eof)
-		goto error3;
+		goto error;
 
 	if (sqlite3_close(db) != SQLITE_OK)
-		goto error2;
+		return -1;
 
-	sbk_close(ctx);
-	sbk_ctx_free(ctx);
 	return 0;
 
-error3:
+error:
 	sqlite3_close(db);
-error2:
-	sbk_close(ctx);
-error1:
-	sbk_ctx_free(ctx);
 	return -1;
 }
 
