@@ -87,7 +87,7 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 		snprintf(hex + (i * 2), 3, "%02x", bin->data[i]);
 
 	dump_var(ind, name, "bytes", "%s", hex);
-	freezero(hex, bin->len + 1);
+	freezero(hex, (bin->len + 1) * 2);
 }
 
 static void
