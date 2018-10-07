@@ -40,6 +40,7 @@
 
 struct sbk_ctx {
 	FILE		*fp;
+	sqlite3		*db;
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
@@ -441,24 +442,26 @@ error:
 	return -1;
 }
 
-int
-sbk_write_database(struct sbk_ctx *ctx, const char *path)
+static int
+sbk_create_database(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
-	sqlite3			*db;
 	int			 ret;
 
-	if (sbk_rewind(ctx) == -1)
-		return -1;
+	if (ctx->db != NULL)
+		return 0;
 
-	if (sqlite3_open(path, &db) != SQLITE_OK)
+	if (sqlite3_open(":memory:", &ctx->db) != SQLITE_OK)
+		goto error;
+
+	if (sbk_rewind(ctx) == -1)
 		goto error;
 
 	ret = 0;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
-			ret = sbk_exec_statement(db, frm->statement);
+			ret = sbk_exec_statement(ctx->db, frm->statement);
 		else if (frm->attachment != NULL || frm->avatar != NULL)
 			ret = sbk_skip_file(ctx, frm);
 
@@ -469,6 +472,35 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	}
 
 	if (!ctx->eof)
+		goto error;
+
+	return 0;
+
+error:
+	sqlite3_close(ctx->db);
+	ctx->db = NULL;
+	return -1;
+}
+
+int
+sbk_write_database(struct sbk_ctx *ctx, const char *path)
+{
+	sqlite3		*db;
+	sqlite3_backup	*bak;
+
+	if (sqlite3_open(path, &db) != SQLITE_OK)
+		goto error;
+
+	if (sbk_create_database(ctx) == -1)
+		goto error;
+
+	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL)
+		goto error;
+
+	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE)
+		goto error;
+
+	if (sqlite3_backup_finish(bak) != SQLITE_OK)
 		goto error;
 
 	if (sqlite3_close(db) != SQLITE_OK)
@@ -604,6 +636,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error2;
 
 	signal__backup_frame__free_unpacked(frm, NULL);
+	ctx->db = NULL;
 	ctx->eof = 0;
 
 	return sbk_rewind(ctx);
@@ -620,6 +653,7 @@ sbk_close(struct sbk_ctx *ctx)
 {
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
+	sqlite3_close(ctx->db);
 	fclose(ctx->fp);
 }
 
