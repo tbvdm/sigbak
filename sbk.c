@@ -446,6 +446,8 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	if (sqlite3_open(path, &db) != SQLITE_OK)
 		goto error;
 
+	ret = 0;
+
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(db, frm->statement);
