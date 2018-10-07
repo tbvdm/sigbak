@@ -406,18 +406,26 @@ sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
 		if (stm->parameters[i]->stringparamter != NULL)
 			ret = sqlite3_bind_text(sqlstm, i + 1,
 			    stm->parameters[i]->stringparamter, -1, NULL);
-		if (stm->parameters[i]->has_integerparameter)
+	
+		else if (stm->parameters[i]->has_integerparameter)
 			ret = sqlite3_bind_int64(sqlstm, i + 1,
 			    *(int64_t *)&stm->parameters[i]->integerparameter);
-		if (stm->parameters[i]->has_doubleparameter)
+
+		else if (stm->parameters[i]->has_doubleparameter)
 			ret = sqlite3_bind_double(sqlstm, i + 1,
 			    stm->parameters[i]->doubleparameter);
-		if (stm->parameters[i]->has_blobparameter)
+
+		else if (stm->parameters[i]->has_blobparameter)
 			ret = sqlite3_bind_blob(sqlstm, i + 1,
 			    stm->parameters[i]->blobparameter.data,
 			    stm->parameters[i]->blobparameter.len, NULL);
-		if (stm->parameters[i]->has_nullparameter)
+
+		else if (stm->parameters[i]->has_nullparameter)
 			ret = sqlite3_bind_null(sqlstm, i + 1);
+
+		else
+			goto error;
+
 		if (ret != SQLITE_OK)
 			goto error;
 	}
