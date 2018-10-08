@@ -28,6 +28,7 @@
 #include <openssl/hmac.h>
 #include <sqlite3.h>
 
+#include "mem.h"
 #include "sbk.h"
 
 #define SBK_IV_LEN		16
@@ -62,6 +63,37 @@ struct sbk_file {
 	long		 off;
 	int32_t		 counter;
 };
+
+static ProtobufCAllocator sbk_protobuf_alloc = {
+	mem_protobuf_malloc,
+	mem_protobuf_free,
+	NULL
+};
+
+static int
+sbk_init(void)
+{
+	static int		done;
+	sqlite3_mem_methods	methods;
+
+	if (done)
+		return 0;
+
+	methods.xMalloc = mem_sqlite_malloc;
+	methods.xFree = mem_sqlite_free;
+	methods.xRealloc = mem_sqlite_realloc;
+	methods.xSize = mem_sqlite_size;
+	methods.xRoundup = mem_sqlite_roundup;
+	methods.xInit = mem_sqlite_init;
+	methods.xShutdown = mem_sqlite_shutdown;
+	methods.pAppData = NULL;
+
+	if (sqlite3_config(SQLITE_CONFIG_MALLOC, &methods) != SQLITE_OK)
+		return -1;
+
+	done = 1;
+	return 0;
+}
 
 static int
 sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
@@ -203,6 +235,12 @@ sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	return 0;
 }
 
+static Signal__BackupFrame *
+sbk_unpack_frame(unsigned char *buf, size_t len)
+{
+	return signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf);
+}
+
 Signal__BackupFrame *
 sbk_get_frame(struct sbk_ctx *ctx)
 {
@@ -219,7 +257,7 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	/* The first frame is not encrypted */
 	if (ctx->firstframe) {
 		ctx->firstframe = 0;
-		return signal__backup_frame__unpack(NULL, ibuflen, ctx->ibuf);
+		return sbk_unpack_frame(ctx->ibuf, ibuflen);
 	}
 
 	if (ibuflen <= SBK_MAC_LEN)
@@ -240,8 +278,7 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	if (sbk_decrypt_reset(ctx) == -1)
 		goto error;
 
-	if ((frm = signal__backup_frame__unpack(NULL, obuflen, ctx->obuf)) !=
-	    NULL) {
+	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) != NULL) {
 		if (frm->has_end)
 			ctx->eof = 1;
 	}
@@ -257,7 +294,7 @@ error:
 void
 sbk_free_frame(Signal__BackupFrame *frm)
 {
-	signal__backup_frame__free_unpacked(frm, NULL);
+	signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
 }
 
 struct sbk_file *
@@ -306,11 +343,11 @@ sbk_get_file(struct sbk_ctx *ctx)
 		file->type = SBK_AVATAR;
 	}
 
-	signal__backup_frame__free_unpacked(frm, NULL);
+	sbk_free_frame(frm);
 	return file;
 
 error:
-	signal__backup_frame__free_unpacked(frm, NULL);
+	sbk_free_frame(frm);
 	freezero(file, sizeof *file);
 	return NULL;
 }
@@ -465,7 +502,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 		else if (frm->attachment != NULL || frm->avatar != NULL)
 			ret = sbk_skip_file(ctx, frm);
 
-		signal__backup_frame__free_unpacked(frm, NULL);
+		sbk_free_frame(frm);
 
 		if (ret == -1)
 			goto error;
@@ -561,6 +598,9 @@ sbk_ctx_new(void)
 {
 	struct sbk_ctx *ctx;
 
+	if (sbk_init() == -1)
+		return NULL;
+
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
@@ -635,14 +675,14 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	if (ret != 0)
 		goto error2;
 
-	signal__backup_frame__free_unpacked(frm, NULL);
+	sbk_free_frame(frm);
 	ctx->db = NULL;
 	ctx->eof = 0;
 
 	return sbk_rewind(ctx);
 
 error2:
-	signal__backup_frame__free_unpacked(frm, NULL);
+	sbk_free_frame(frm);
 error1:
 	fclose(ctx->fp);
 	return -1;
