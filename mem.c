@@ -117,25 +117,25 @@ mem_free(void *ptr)
 }
 
 void *
-mem_protobuf_malloc(void *data, size_t size)
+mem_protobuf_malloc(__unused void *data, size_t size)
 {
 	return mem_malloc(size);
 }
 
 void
-mem_protobuf_free(void *data, void *ptr)
+mem_protobuf_free(__unused void *data, void *ptr)
 {
 	mem_free(ptr);
 }
 
 int
-mem_sqlite_init(void *data)
+mem_sqlite_init(__unused void *data)
 {
 	return 0;
 }
 
 void
-mem_sqlite_shutdown(void *data)
+mem_sqlite_shutdown(__unused void *data)
 {
 }
 
