@@ -276,7 +276,7 @@ sbk_get_frame(struct sbk_ctx *ctx)
 		goto error;
 
 	if (sbk_decrypt_reset(ctx) == -1)
-		goto error;
+		return NULL;
 
 	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) != NULL) {
 		if (frm->has_end)
