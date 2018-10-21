@@ -534,8 +534,10 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL)
 		goto error;
 
-	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE)
+	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE) {
+		sqlite3_backup_finish(bak);
 		goto error;
+	}
 
 	sqlite3_backup_finish(bak);
 
