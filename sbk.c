@@ -98,7 +98,7 @@ sbk_init(void)
 static int
 sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 {
-	char *buf;
+	unsigned char *buf;
 
 	if (ctx->ibufsize < size) {
 		if ((buf = realloc(ctx->ibuf, size)) == NULL)
@@ -159,9 +159,10 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 }
 
 static int
-sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen, const char *theirmac)
+sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
+    const unsigned char *theirmac)
 {
-	char		ourmac[EVP_MAX_MD_SIZE];
+	unsigned char	ourmac[EVP_MAX_MD_SIZE];
 	unsigned int	ourmaclen;
 	int		len;
 
@@ -380,8 +381,8 @@ sbk_get_file_size(struct sbk_file *file)
 int
 sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 {
-	size_t	ibuflen, len, obuflen;
-	char	mac[SBK_MAC_LEN];
+	size_t		ibuflen, len, obuflen;
+	unsigned char	mac[SBK_MAC_LEN];
 
 	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
 		return -1;
