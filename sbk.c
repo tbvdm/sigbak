@@ -293,7 +293,8 @@ error:
 void
 sbk_free_frame(Signal__BackupFrame *frm)
 {
-	signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
+	if (frm != NULL)
+		signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
 }
 
 struct sbk_file *
