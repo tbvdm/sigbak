@@ -14,10 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/types.h>
-
 #include <inttypes.h>
-#include <sha2.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +23,7 @@
 #include <openssl/evp.h>
 #include <openssl/hkdf.h>
 #include <openssl/hmac.h>
+#include <openssl/sha.h>
 #include <sqlite3.h>
 
 #include "mem.h"
@@ -558,25 +556,25 @@ sbk_compute_keys(struct sbk_ctx *ctx, const unsigned char *passphr,
 {
 	unsigned char	key[SHA512_DIGEST_LENGTH];
 	unsigned char	derivkey[SBK_DERIVKEY_LEN];
-	SHA2_CTX	sha;
+	SHA512_CTX	sha;
 	size_t		passphrlen;
 	int		i, ret;
 
 	passphrlen = strlen(passphr);
-	SHA512Init(&sha);
+	SHA512_Init(&sha);
 
 	if (salt != NULL)
-		SHA512Update(&sha, salt, saltlen);
+		SHA512_Update(&sha, salt, saltlen);
 
-	SHA512Update(&sha, passphr, passphrlen);
-	SHA512Update(&sha, passphr, passphrlen);
-	SHA512Final(key, &sha);
+	SHA512_Update(&sha, passphr, passphrlen);
+	SHA512_Update(&sha, passphr, passphrlen);
+	SHA512_Final(key, &sha);
 
 	for (i = 0; i < 250000 - 1; i++) {
-		SHA512Init(&sha);
-		SHA512Update(&sha, key, sizeof key);
-		SHA512Update(&sha, passphr, passphrlen);
-		SHA512Final(key, &sha);
+		SHA512_Init(&sha);
+		SHA512_Update(&sha, key, sizeof key);
+		SHA512_Update(&sha, passphr, passphrlen);
+		SHA512_Final(key, &sha);
 	}
 
 	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN, "",
