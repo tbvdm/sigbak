@@ -355,8 +355,10 @@ error:
 void
 sbk_free_file(struct sbk_file *file)
 {
-	freezero(file->name, strlen(file->name));
-	freezero(file, sizeof *file);
+	if (file != NULL) {
+		freezero(file->name, strlen(file->name));
+		freezero(file, sizeof *file);
+	}
 }
 
 enum sbk_file_type
