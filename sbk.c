@@ -652,16 +652,16 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	ctx->firstframe = 1;
 
 	if ((frm = sbk_get_frame(ctx)) == NULL)
-		goto error1;
+		goto error;
 
 	if (frm->header == NULL)
-		goto error2;
+		goto error;
 
 	if (!frm->header->has_iv)
-		goto error2;
+		goto error;
 
 	if (frm->header->iv.len != SBK_IV_LEN)
-		goto error2;
+		goto error;
 
 	memcpy(ctx->iv, frm->header->iv.data, SBK_IV_LEN);
 	ctx->counter = (ctx->iv[0] << 24) | (ctx->iv[1] << 16) |
@@ -674,7 +674,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		    frm->header->salt.len);
 
 	if (ret != 0)
-		goto error2;
+		goto error;
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
@@ -682,9 +682,8 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	return sbk_rewind(ctx);
 
-error2:
+error:
 	sbk_free_frame(frm);
-error1:
 	fclose(ctx->fp);
 	return -1;
 }
