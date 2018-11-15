@@ -552,7 +552,7 @@ error:
 }
 
 static int
-sbk_compute_keys(struct sbk_ctx *ctx, const unsigned char *passphr,
+sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
     const unsigned char *salt, size_t saltlen)
 {
 	unsigned char	key[SHA512_DIGEST_LENGTH];
