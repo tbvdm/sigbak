@@ -225,7 +225,7 @@ sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	else if (frm->avatar != NULL && frm->avatar->has_length)
 		len = frm->avatar->length;
 	else
-		return 0;
+		return -1;
 
 	if (fseek(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1)
 		return -1;
