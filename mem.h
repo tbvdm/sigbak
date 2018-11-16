@@ -14,6 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#ifndef MEM_H
+#define MEM_H
+
 void	*mem_protobuf_malloc(void *, size_t);
 void	 mem_protobuf_free(void *, void  *);
 
@@ -24,3 +27,5 @@ void	*mem_sqlite_realloc(void *, int);
 void	 mem_sqlite_free(void *);
 int	 mem_sqlite_size(void *);
 int	 mem_sqlite_roundup(int);
+
+#endif

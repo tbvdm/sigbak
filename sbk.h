@@ -14,6 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#ifndef SBK_H
+#define SBK_H
+
 #include "backup.pb-c.h"
 
 struct sbk_ctx;
@@ -44,3 +47,5 @@ size_t		 sbk_get_file_size(struct sbk_file *);
 int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
+
+#endif
