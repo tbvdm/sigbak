@@ -19,13 +19,13 @@
 
 #include "backup.pb-c.h"
 
-struct sbk_ctx;
-struct sbk_file;
-
 enum sbk_file_type {
 	SBK_ATTACHMENT,
 	SBK_AVATAR
 };
+
+struct sbk_ctx;
+struct sbk_file;
 
 struct sbk_ctx	*sbk_ctx_new(void);
 void		 sbk_ctx_free(struct sbk_ctx *);
