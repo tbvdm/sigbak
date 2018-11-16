@@ -216,7 +216,7 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 }
 
 int
-sbk_skip_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
+sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
 
@@ -499,7 +499,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx->db, frm->statement);
 		else if (frm->attachment != NULL || frm->avatar != NULL)
-			ret = sbk_skip_file(ctx, frm);
+			ret = sbk_skip_file_data(ctx, frm);
 
 		sbk_free_frame(frm);
 

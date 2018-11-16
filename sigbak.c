@@ -290,7 +290,7 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		dump_frame(frm, n++);
 
 		if (frm->attachment != NULL || frm->avatar != NULL)
-			if ((ret = sbk_skip_file(ctx, frm)) == -1) {
+			if ((ret = sbk_skip_file_data(ctx, frm)) == -1) {
 				sbk_free_frame(frm);
 				break;
 			}
