@@ -318,6 +318,9 @@ sbk_get_file(struct sbk_ctx *ctx)
 	if ((file->off = ftell(ctx->fp)) == -1)
 		goto error;
 
+	if (sbk_skip_file_data(ctx, frm) == -1)
+		goto error;
+
 	if (frm->attachment != NULL) {
 		if (!frm->attachment->has_attachmentid ||
 		    !frm->attachment->has_length)
