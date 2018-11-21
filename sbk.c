@@ -646,7 +646,8 @@ int
 sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 {
 	Signal__BackupFrame	*frm;
-	int			 ret;
+	uint8_t			*salt;
+	size_t			 saltlen;
 
 	if ((ctx->fp = fopen(path, "rb")) == NULL)
 		return -1;
@@ -669,13 +670,15 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	ctx->counter = (ctx->iv[0] << 24) | (ctx->iv[1] << 16) |
 	    (ctx->iv[2] << 8) | ctx->iv[3];
 
-	if (!frm->header->has_salt)
-		ret = sbk_compute_keys(ctx, passphr, NULL, 0);
-	else
-		ret = sbk_compute_keys(ctx, passphr, frm->header->salt.data,
-		    frm->header->salt.len);
+	if (frm->header->has_salt) {
+		salt = frm->header->salt.data;
+		saltlen = frm->header->salt.len;
+	} else {
+		salt = NULL;
+		saltlen = 0;
+	}
 
-	if (ret != 0)
+	if (sbk_compute_keys(ctx, passphr, salt, saltlen) == -1)
 		goto error;
 
 	if (sbk_rewind(ctx) == -1)
