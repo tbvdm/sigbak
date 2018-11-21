@@ -612,6 +612,7 @@ sbk_ctx_new(void)
 	ctx->obuf = NULL;
 	ctx->ibufsize = 0;
 	ctx->obufsize = 0;
+	ctx->eof = 0;
 
 	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
 		goto error;
@@ -622,7 +623,6 @@ sbk_ctx_new(void)
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
 		goto error;
 
-	ctx->eof = 0;
 	return ctx;
 
 error:
