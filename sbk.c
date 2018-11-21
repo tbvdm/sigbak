@@ -678,11 +678,13 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	if (ret != 0)
 		goto error;
 
+	if (sbk_rewind(ctx) == -1)
+		goto error;
+
 	sbk_free_frame(frm);
 	ctx->db = NULL;
 	ctx->eof = 0;
-
-	return sbk_rewind(ctx);
+	return 0;
 
 error:
 	sbk_free_frame(frm);
