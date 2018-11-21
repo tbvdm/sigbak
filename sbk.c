@@ -683,7 +683,6 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
-	ctx->eof = 0;
 	return 0;
 
 error:
@@ -708,6 +707,7 @@ sbk_rewind(struct sbk_ctx *ctx)
 		return -1;
 
 	clearerr(ctx->fp);
+	ctx->eof = 0;
 	ctx->firstframe = 1;
 	return 0;
 }
