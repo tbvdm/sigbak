@@ -89,6 +89,9 @@ sbk_init(void)
 	if (sqlite3_config(SQLITE_CONFIG_MALLOC, &methods) != SQLITE_OK)
 		return -1;
 
+	if (sqlite3_initialize() != SQLITE_OK)
+		return -1;
+
 	done = 1;
 	return 0;
 }
