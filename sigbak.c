@@ -209,6 +209,8 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 		return 1;
 	}
 
+	ret = 1;
+
 	while ((file = sbk_get_file(ctx)) != NULL) {
 		if (sbk_get_file_type(file) != type)
 			continue;
@@ -216,34 +218,34 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 		if ((fd = open(sbk_get_file_name(file), O_WRONLY | O_CREAT |
 		    O_EXCL, 0666)) == -1) {
 			warn("%s", sbk_get_file_name(file));
-			goto error;
+			goto out;
 		}
 
 		if ((fp = fdopen(fd, "wb")) == NULL) {
 			warn("%s", sbk_get_file_name(file));
 			close(fd);
-			goto error;
+			goto out;
 		}
 
 		if (sbk_write_file(ctx, file, fp) == -1) {
 			fclose(fp);
-			goto error;
+			goto out;
 		}
 
 		fclose(fp);
 		sbk_free_file(file);
 	}
 
-	ret = sbk_eof(ctx) ? 0 : 1;
-	sbk_close(ctx);
-	sbk_ctx_free(ctx);
-	return ret;
+	if (!sbk_eof(ctx))
+		goto out;
 
-error:
+	ret = 0;
+
+out:
 	sbk_free_file(file);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return 1;
+	return ret;
 }
 
 int
@@ -283,27 +285,29 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	ret = 0;
+	ret = 1;
 	n = 0;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		dump_frame(frm, n++);
 
-		if (frm->attachment != NULL || frm->avatar != NULL)
-			if ((ret = sbk_skip_file_data(ctx, frm)) == -1) {
-				sbk_free_frame(frm);
-				break;
-			}
+		if ((frm->attachment != NULL || frm->avatar != NULL) &&
+		    sbk_skip_file_data(ctx, frm) == -1)
+			goto out;
 
 		sbk_free_frame(frm);
 	}
 
 	if (!sbk_eof(ctx))
-		ret = -1;
+		goto out;
 
+	ret = 0;
+
+out:
+	sbk_free_frame(frm);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == 0) ? 0 : 1;
+	return ret;
 }
 
 int
