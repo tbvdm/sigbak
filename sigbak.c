@@ -26,7 +26,7 @@
 
 #include "sbk.h"
 
-static void
+void
 dump_var(unsigned int ind, const char *name, const char *type, const char *fmt,
     ...)
 {
@@ -44,37 +44,37 @@ dump_var(unsigned int ind, const char *name, const char *type, const char *fmt,
 	va_end(ap);
 }
 
-static void
+void
 dump_bool(unsigned int ind, const char *name, int val)
 {
 	dump_var(ind, name, "bool", "%d", val);
 }
 
-static void
+void
 dump_uint32(unsigned int ind, const char *name, uint32_t val)
 {
 	dump_var(ind, name, "uint32", "%" PRIu32, val);
 }
 
-static void
+void
 dump_uint64(unsigned int ind, const char *name, uint64_t val)
 {
 	dump_var(ind, name, "uint64", "%" PRIu64, val);
 }
 
-static void
+void
 dump_double(unsigned int ind, const char *name, double val)
 {
 	dump_var(ind, name, "string", "%g", val);
 }
 
-static void
+void
 dump_string(unsigned int ind, const char *name, const char *val)
 {
 	dump_var(ind, name, "string", "%s", val);
 }
 
-static void
+void
 dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 {
 	char	*hex;
@@ -90,7 +90,7 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 	freezero(hex, (bin->len + 1) * 2);
 }
 
-static void
+void
 dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
 {
 	dump_var(ind, name, "Attachment", NULL);
@@ -102,7 +102,7 @@ dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
 		dump_uint32(ind + 1, "length", att->length);
 }
 
-static void
+void
 dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 {
 	dump_var(ind, name, "Avatar", NULL, NULL);
@@ -112,7 +112,7 @@ dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 		dump_uint32(ind + 1, "length", avt->length);
 }
 
-static void
+void
 dump_header(unsigned int ind, const char *name, Signal__Header *hdr)
 {
 	dump_var(ind, name, "Header", NULL);
@@ -122,7 +122,7 @@ dump_header(unsigned int ind, const char *name, Signal__Header *hdr)
 		dump_binary(ind + 1, "salt", &hdr->salt);
 }
 
-static void
+void
 dump_preference(unsigned int ind, const char *name,
     Signal__SharedPreference *prf)
 {
@@ -135,7 +135,7 @@ dump_preference(unsigned int ind, const char *name,
 		dump_string(ind + 1, "value", prf->value);
 }
 
-static void
+void
 dump_parameter(unsigned int ind, const char *name,
     Signal__SqlStatement__SqlParameter *par)
 {
@@ -153,7 +153,7 @@ dump_parameter(unsigned int ind, const char *name,
 		dump_bool(ind + 1, "nullparameter", par->nullparameter);
 }
 
-static void
+void
 dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
 {
 	size_t i;
@@ -165,7 +165,7 @@ dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
 		dump_parameter(ind + 1, "parameters", stm->parameters[i]);
 }
 
-static void
+void
 dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 {
 	dump_var(ind, name, "DatabaseVersion", NULL);
@@ -173,7 +173,7 @@ dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 		dump_uint32(ind + 1, "version", ver->version);
 }
 
-static void
+void
 dump_frame(Signal__BackupFrame *frm)
 {
 	puts("frame:");
