@@ -174,9 +174,9 @@ dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 }
 
 static void
-dump_frame(Signal__BackupFrame *frm, unsigned int n)
+dump_frame(Signal__BackupFrame *frm)
 {
-	printf("frame %u:\n", n);
+	puts("frame:");
 	if (frm->header != NULL)
 		dump_header(1, "header", frm->header);
 	if (frm->statement != NULL)
@@ -271,7 +271,6 @@ cmd_dump(int argc, char **argv, const char *passphr)
 {
 	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
-	unsigned int		 n;
 	int			 ret;
 
 	if (argc != 2)
@@ -286,10 +285,9 @@ cmd_dump(int argc, char **argv, const char *passphr)
 	}
 
 	ret = 1;
-	n = 0;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
-		dump_frame(frm, n++);
+		dump_frame(frm);
 
 		if ((frm->attachment != NULL || frm->avatar != NULL) &&
 		    sbk_skip_file_data(ctx, frm) == -1)
