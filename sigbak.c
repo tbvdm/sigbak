@@ -27,6 +27,12 @@
 #include "sbk.h"
 
 void
+usage(const char *args)
+{
+	fprintf(stderr, "usage: %s %s\n", getprogname(), args);
+}
+
+void
 dump_var(unsigned int ind, const char *name, const char *type, const char *fmt,
     ...)
 {
@@ -251,8 +257,10 @@ out:
 int
 cmd_attachments(int argc, char **argv, const char *passphr)
 {
-	if (argc != 2)
+	if (argc != 2) {
+		usage("attachments backup-file");
 		return 1;
+	}
 
 	return write_files(argv[1], passphr, SBK_ATTACHMENT);
 }
@@ -260,8 +268,10 @@ cmd_attachments(int argc, char **argv, const char *passphr)
 int
 cmd_avatars(int argc, char **argv, const char *passphr)
 {
-	if (argc != 2)
+	if (argc != 2) {
+		usage("avatars backup-file");
 		return 1;
+	}
 
 	return write_files(argv[1], passphr, SBK_AVATAR);
 }
@@ -273,8 +283,10 @@ cmd_dump(int argc, char **argv, const char *passphr)
 	Signal__BackupFrame	*frm;
 	int			 ret;
 
-	if (argc != 2)
+	if (argc != 2) {
+		usage("dump backup-file");
 		return 1;
+	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		return 1;
@@ -314,8 +326,10 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 	struct sbk_ctx	*ctx;
 	int		 fd, ret;
 
-	if (argc != 3)
+	if (argc != 3) {
+		usage("sqlite backup-file database-file");
 		return 1;
+	}
 
 	/* Prevent SQLite from writing to an existing file */
 	if ((fd = open(argv[2], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
@@ -356,8 +370,10 @@ main(int argc, char **argv)
 	char	passphr[128];
 	int	ret;
 
-	if (argc <= 2)
+	if (argc < 2) {
+		usage("command [argument ...]");
 		return 1;
+	}
 
 	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
 	    passphr, sizeof passphr, 0) == NULL)
