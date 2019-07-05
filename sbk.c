@@ -398,7 +398,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		goto error;
 
 	for (len = file->len; len > 0; len -= ibuflen) {
-		ibuflen = (len < ctx->ibufsize) ? len : ctx->ibufsize;
+		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
 
 		if (fread(ctx->ibuf, ibuflen, 1, ctx->fp) != 1)
 			goto error;
