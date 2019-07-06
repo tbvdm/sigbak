@@ -115,7 +115,7 @@ void
 dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 {
 	dump_var(ind, name, "Avatar", NULL, NULL);
-	if (avt->name)
+	if (avt->name != NULL)
 		dump_string(ind + 1, "name", avt->name);
 	if (avt->has_length)
 		dump_uint32(ind + 1, "length", avt->length);
