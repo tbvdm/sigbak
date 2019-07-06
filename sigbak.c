@@ -86,6 +86,9 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 	char	*hex;
 	size_t	 i;
 
+	if (bin->len == SIZE_MAX)
+		return;
+
 	if ((hex = reallocarray(NULL, bin->len + 1, 2)) == NULL)
 		return;
 
