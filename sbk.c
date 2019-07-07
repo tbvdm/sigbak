@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <openssl/evp.h>
 #include <openssl/hkdf.h>
@@ -440,6 +441,10 @@ sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
 
 	if (stm->statement == NULL)
 		return -1;
+
+	/* Don't try to create tables with reserved names */
+	if (strncasecmp(stm->statement, "create table sqlite_", 20) == 0)
+		return 0;
 
 	if (sqlite3_prepare_v2(db, stm->statement, -1, &sqlstm, NULL) !=
 	    SQLITE_OK)
