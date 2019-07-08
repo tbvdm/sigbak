@@ -36,6 +36,7 @@
 #define SBK_MACKEY_LEN		32
 #define SBK_DERIVKEY_LEN	(SBK_CIPHERKEY_LEN + SBK_MACKEY_LEN)
 #define SBK_MAC_LEN		10
+#define SBK_ROUNDS		250000
 #define SBK_HKDF_INFO		"Backup Export"
 
 struct sbk_ctx {
@@ -581,7 +582,7 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 	SHA512_Update(&sha, passphr, passphrlen);
 	SHA512_Final(key, &sha);
 
-	for (i = 0; i < 250000 - 1; i++) {
+	for (i = 0; i < SBK_ROUNDS - 1; i++) {
 		SHA512_Init(&sha);
 		SHA512_Update(&sha, key, sizeof key);
 		SHA512_Update(&sha, passphr, passphrlen);
