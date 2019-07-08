@@ -14,7 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <errno.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,6 +56,7 @@ struct sbk_ctx {
 	size_t		 obufsize;
 	int		 firstframe;
 	int		 eof;
+	char		*error;
 };
 
 struct sbk_file {
@@ -69,6 +72,50 @@ static ProtobufCAllocator sbk_protobuf_alloc = {
 	mem_protobuf_free,
 	NULL
 };
+
+static void
+sbk_error_clear(struct sbk_ctx *ctx)
+{
+	free(ctx->error);
+	ctx->error = NULL;
+}
+
+static void
+sbk_error_set(struct sbk_ctx *ctx, const char *fmt, ...)
+{
+	va_list	 ap;
+	char	*errmsg, *msg;
+	int	 saved_errno;
+
+	va_start(ap, fmt);
+	saved_errno = errno;
+	sbk_error_clear(ctx);
+	errmsg = strerror(saved_errno);
+
+	if (fmt == NULL || vasprintf(&msg, fmt, ap) == -1)
+		ctx->error = strdup(errmsg);
+	else if (asprintf(&ctx->error, "%s: %s", msg, errmsg) == -1)
+		ctx->error = msg;
+	else
+		free(msg);
+
+	errno = saved_errno;
+	va_end(ap);
+}
+
+static void
+sbk_error_setx(struct sbk_ctx *ctx, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	sbk_error_clear(ctx);
+
+	if (fmt == NULL || vasprintf(&ctx->error, fmt, ap) == -1)
+		ctx->error = NULL;
+
+	va_end(ap);
+}
 
 static int
 sbk_init(void)
@@ -104,21 +151,27 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 	unsigned char *buf;
 
 	if (ctx->ibufsize < size) {
-		if ((buf = realloc(ctx->ibuf, size)) == NULL)
+		if ((buf = realloc(ctx->ibuf, size)) == NULL) {
+			sbk_error_set(ctx, NULL);
 			return -1;
+		}
 		ctx->ibuf = buf;
 		ctx->ibufsize = size;
 	}
 
-	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH)
+	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
+		sbk_error_setx(ctx, "Buffer size too large");
 		return -1;
+	}
 
 	size += EVP_MAX_BLOCK_LENGTH;
 
 	if (ctx->obufsize < size) {
 		if ((buf = recallocarray(ctx->obuf, ctx->obufsize, size, 1)) ==
-		    NULL)
+		    NULL) {
+			sbk_error_set(ctx, NULL);
 			return -1;
+		}
 		ctx->obuf = buf;
 		ctx->obufsize = size;
 	}
@@ -135,12 +188,16 @@ sbk_decrypt_init(struct sbk_ctx *ctx, int32_t counter)
 	ctx->iv[3] = counter;
 
 	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
-	    NULL) == 0)
+	    NULL) == 0) {
+		sbk_error_setx(ctx, "Cannot initialise HMAC");
 		return -1;
+	}
 
 	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
-	    ctx->cipherkey, ctx->iv) == 0)
+	    ctx->cipherkey, ctx->iv) == 0) {
+		sbk_error_setx(ctx, "Cannot initialise cipher");
 		return -1;
+	}
 
 	return 0;
 }
@@ -150,12 +207,16 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 {
 	int len;
 
-	if (HMAC_Update(ctx->hmac, ctx->ibuf, ibuflen) == 0)
+	if (HMAC_Update(ctx->hmac, ctx->ibuf, ibuflen) == 0) {
+		sbk_error_setx(ctx, "Cannot compute HMAC");
 		return -1;
+	}
 
 	if (EVP_DecryptUpdate(ctx->cipher, ctx->obuf, &len, ctx->ibuf,
-	    ibuflen) == 0)
+	    ibuflen) == 0) {
+		sbk_error_setx(ctx, "Cannot decrypt data");
 		return -1;
+	}
 
 	*obuflen = len;
 	return 0;
@@ -169,16 +230,23 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 	unsigned int	ourmaclen;
 	int		len;
 
-	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + *obuflen, &len) == 0)
+	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + *obuflen, &len) ==
+	    0) {
+		sbk_error_setx(ctx, "Cannot decrypt data");
 		return -1;
+	}
 
 	*obuflen += len;
 
-	if (HMAC_Final(ctx->hmac, ourmac, &ourmaclen) == 0)
+	if (HMAC_Final(ctx->hmac, ourmac, &ourmaclen) == 0) {
+		sbk_error_setx(ctx, "Cannot compute HMAC");
 		return -1;
+	}
 
-	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0)
+	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
+		sbk_error_setx(ctx, "HMAC mismatch");
 		return -1;
+	}
 
 	return 0;
 }
@@ -186,11 +254,15 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 static int
 sbk_decrypt_reset(struct sbk_ctx *ctx)
 {
-	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0)
+	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0) {
+		sbk_error_setx(ctx, "Cannot reset cipher");
 		return -1;
+	}
 
-	if (HMAC_CTX_reset(ctx->hmac) == 0)
+	if (HMAC_CTX_reset(ctx->hmac) == 0) {
+		sbk_error_setx(ctx, "Cannot reset HMAC");
 		return -1;
+	}
 
 	return 0;
 }
@@ -201,20 +273,26 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	int32_t		len;
 	unsigned char	lenbuf[4];
 
-	if (fread(lenbuf, sizeof lenbuf, 1, ctx->fp) != 1)
+	if (fread(lenbuf, sizeof lenbuf, 1, ctx->fp) != 1) {
+		sbk_error_set(ctx, "Cannot read backup");
 		return -1;
+	}
 
 	len = (lenbuf[0] << 24) | (lenbuf[1] << 16) | (lenbuf[2] << 8) |
 	    lenbuf[3];
 
-	if (len <= 0)
+	if (len <= 0) {
+		sbk_error_setx(ctx, "Invalid frame size");
 		return -1;
+	}
 
 	if (sbk_enlarge_buffers(ctx, len) == -1)
 		return -1;
 
-	if (fread(ctx->ibuf, len, 1, ctx->fp) != 1)
+	if (fread(ctx->ibuf, len, 1, ctx->fp) != 1) {
+		sbk_error_set(ctx, "Cannot read backup");
 		return -1;
+	}
 
 	*frmlen = len;
 	return 0;
@@ -229,11 +307,15 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 		len = frm->attachment->length;
 	else if (frm->avatar != NULL && frm->avatar->has_length)
 		len = frm->avatar->length;
-	else
+	else {
+		sbk_error_setx(ctx, "Invalid frame");
 		return -1;
+	}
 
-	if (fseek(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1)
+	if (fseek(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1) {
+		sbk_error_set(ctx, "Cannot seek");
 		return -1;
+	}
 
 	ctx->counter++;
 	return 0;
@@ -261,11 +343,15 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	/* The first frame is not encrypted */
 	if (ctx->firstframe) {
 		ctx->firstframe = 0;
-		return sbk_unpack_frame(ctx->ibuf, ibuflen);
+		if ((frm = sbk_unpack_frame(ctx->ibuf, ibuflen)) == NULL)
+			sbk_error_setx(ctx, "Cannot unpack frame");
+		return frm;
 	}
 
-	if (ibuflen <= SBK_MAC_LEN)
+	if (ibuflen <= SBK_MAC_LEN) {
+		sbk_error_setx(ctx, "Invalid frame size");
 		return NULL;
+	}
 
 	ibuflen -= SBK_MAC_LEN;
 	mac = ctx->ibuf + ibuflen;
@@ -282,10 +368,13 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	if (sbk_decrypt_reset(ctx) == -1)
 		return NULL;
 
-	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) != NULL) {
-		if (frm->has_end)
-			ctx->eof = 1;
+	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL) {
+		sbk_error_setx(ctx, "Cannot unpack frame");
+		return NULL;
 	}
+
+	if (frm->has_end)
+		ctx->eof = 1;
 
 	ctx->counter++;
 	return frm;
@@ -315,34 +404,46 @@ sbk_get_file(struct sbk_ctx *ctx)
 	if (frm == NULL)
 		return NULL;
 
-	if ((file = malloc(sizeof *file)) == NULL)
+	if ((file = malloc(sizeof *file)) == NULL) {
+		sbk_error_set(ctx, NULL);
 		goto error;
+	}
 
 	file->counter = ctx->counter;
 
-	if ((file->off = ftell(ctx->fp)) == -1)
+	if ((file->off = ftell(ctx->fp)) == -1) {
+		sbk_error_set(ctx, "Cannot get file offset");
 		goto error;
+	}
 
 	if (sbk_skip_file_data(ctx, frm) == -1)
 		goto error;
 
 	if (frm->attachment != NULL) {
 		if (!frm->attachment->has_attachmentid ||
-		    !frm->attachment->has_length)
+		    !frm->attachment->has_length) {
+			sbk_error_setx(ctx, "Invalid attachment frame");
 			goto error;
+		}
 
 		if (asprintf(&file->name, "%" PRIu64,
-		    frm->attachment->attachmentid) == -1)
+		    frm->attachment->attachmentid) == -1) {
+			sbk_error_setx(ctx, "Cannot get attachment name");
 			goto error;
+		}
 
 		file->len = frm->attachment->length;
 		file->type = SBK_ATTACHMENT;
 	} else {
-		if (frm->avatar->name == NULL || !frm->avatar->has_length)
+		if (frm->avatar->name == NULL || !frm->avatar->has_length) {
+			sbk_error_setx(ctx, "Invalid avatar frame");
 			goto error;
+		}
 
-		if ((file->name = strdup(frm->avatar->name)) == NULL)
+		if ((file->name = strdup(frm->avatar->name)) == NULL) {
+			sbk_error_set(ctx, NULL);
 			goto error;
+		}
 
 		file->len = frm->avatar->length;
 		file->type = SBK_AVATAR;
@@ -393,38 +494,50 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
-	if (fseek(ctx->fp, file->off, SEEK_SET) == -1)
+	if (fseek(ctx->fp, file->off, SEEK_SET) == -1) {
+		sbk_error_set(ctx, "Cannot seek");
 		return -1;
+	}
 
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
 		goto error;
 
-	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0)
+	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
+		sbk_error_setx(ctx, "Cannot compute HMAC");
 		goto error;
+	}
 
 	for (len = file->len; len > 0; len -= ibuflen) {
 		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
 
-		if (fread(ctx->ibuf, ibuflen, 1, ctx->fp) != 1)
+		if (fread(ctx->ibuf, ibuflen, 1, ctx->fp) != 1) {
+			sbk_error_set(ctx, "Cannot read backup");
 			goto error;
+		}
 
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 			goto error;
 
-		if (fwrite(ctx->obuf, obuflen, 1, fp) != 1)
+		if (fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+			sbk_error_set(ctx, "Cannot write file");
 			goto error;
+		}
 	}
 
-	if (fread(mac, sizeof mac, 1, ctx->fp) != 1)
+	if (fread(mac, sizeof mac, 1, ctx->fp) != 1) {
+		sbk_error_set(ctx, "Cannot read backup");
 		goto error;
+	}
 
 	obuflen = 0;
 
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		goto error;
 
-	if (obuflen > 0 && fwrite(ctx->obuf, obuflen, 1, fp) != 1)
+	if (obuflen > 0 && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+		sbk_error_set(ctx, "Cannot write file");
 		goto error;
+	}
 
 	return sbk_decrypt_reset(ctx);
 
@@ -434,22 +547,26 @@ error:
 }
 
 static int
-sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
+sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 {
 	sqlite3_stmt	*sqlstm;
 	size_t		 i;
 	int		 ret;
 
-	if (stm->statement == NULL)
+	if (stm->statement == NULL) {
+		sbk_error_setx(ctx, "Invalid SQL frame");
 		return -1;
+	}
 
 	/* Don't try to create tables with reserved names */
 	if (strncasecmp(stm->statement, "create table sqlite_", 20) == 0)
 		return 0;
 
-	if (sqlite3_prepare_v2(db, stm->statement, -1, &sqlstm, NULL) !=
-	    SQLITE_OK)
+	if (sqlite3_prepare_v2(ctx->db, stm->statement, -1, &sqlstm, NULL) !=
+	    SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot prepare SQL statement");
 		return -1;
+	}
 
 	for (i = 0; i < stm->n_parameters; i++) {
 		if (stm->parameters[i]->stringparamter != NULL)
@@ -472,15 +589,21 @@ sbk_exec_statement(sqlite3 *db, Signal__SqlStatement *stm)
 		else if (stm->parameters[i]->has_nullparameter)
 			ret = sqlite3_bind_null(sqlstm, i + 1);
 
-		else
+		else {
+			sbk_error_setx(ctx, "Unknown SQL parameter type");
 			goto error;
+		}
 
-		if (ret != SQLITE_OK)
+		if (ret != SQLITE_OK) {
+			sbk_error_setx(ctx, "Cannot bind SQL parameter");
 			goto error;
+		}
 	}
 
-	if (sqlite3_step(sqlstm) != SQLITE_DONE)
+	if (sqlite3_step(sqlstm) != SQLITE_DONE) {
+		sbk_error_setx(ctx, "Cannot execute SQL statement");
 		goto error;
+	}
 
 	sqlite3_finalize(sqlstm);
 	return 0;
@@ -499,8 +622,10 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (ctx->db != NULL)
 		return 0;
 
-	if (sqlite3_open(":memory:", &ctx->db) != SQLITE_OK)
+	if (sqlite3_open(":memory:", &ctx->db) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot open database");
 		goto error;
+	}
 
 	if (sbk_rewind(ctx) == -1)
 		goto error;
@@ -509,7 +634,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
-			ret = sbk_exec_statement(ctx->db, frm->statement);
+			ret = sbk_exec_statement(ctx, frm->statement);
 		else if (frm->attachment != NULL || frm->avatar != NULL)
 			ret = sbk_skip_file_data(ctx, frm);
 
@@ -536,24 +661,31 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	sqlite3		*db;
 	sqlite3_backup	*bak;
 
-	if (sqlite3_open(path, &db) != SQLITE_OK)
+	if (sqlite3_open(path, &db) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot open database");
 		goto error;
+	}
 
 	if (sbk_create_database(ctx) == -1)
 		goto error;
 
-	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL)
+	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL) {
+		sbk_error_setx(ctx, "Cannot write database");
 		goto error;
+	}
 
 	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE) {
+		sbk_error_setx(ctx, "Cannot write database");
 		sqlite3_backup_finish(bak);
 		goto error;
 	}
 
 	sqlite3_backup_finish(bak);
 
-	if (sqlite3_close(db) != SQLITE_OK)
+	if (sqlite3_close(db) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot close database");
 		return -1;
+	}
 
 	return 0;
 
@@ -590,9 +722,10 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 	}
 
 	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN, "",
-	    0, SBK_HKDF_INFO, strlen(SBK_HKDF_INFO)) == 0)
+	    0, SBK_HKDF_INFO, strlen(SBK_HKDF_INFO)) == 0) {
+		sbk_error_setx(ctx, "Cannot compute keys");
 		ret = -1;
-	else {
+	} else {
 		memcpy(ctx->cipherkey, derivkey, SBK_CIPHERKEY_LEN);
 		memcpy(ctx->mackey, derivkey + SBK_CIPHERKEY_LEN,
 		    SBK_MACKEY_LEN);
@@ -622,6 +755,7 @@ sbk_ctx_new(void)
 	ctx->ibufsize = 0;
 	ctx->obufsize = 0;
 	ctx->eof = 0;
+	ctx->error = NULL;
 
 	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
 		goto error;
@@ -658,22 +792,30 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	uint8_t			*salt;
 	size_t			 saltlen;
 
-	if ((ctx->fp = fopen(path, "rb")) == NULL)
+	if ((ctx->fp = fopen(path, "rb")) == NULL) {
+		sbk_error_set(ctx, NULL);
 		return -1;
+	}
 
 	ctx->firstframe = 1;
 
 	if ((frm = sbk_get_frame(ctx)) == NULL)
 		goto error;
 
-	if (frm->header == NULL)
+	if (frm->header == NULL) {
+		sbk_error_setx(ctx, "Missing header frame");
 		goto error;
+	}
 
-	if (!frm->header->has_iv)
+	if (!frm->header->has_iv) {
+		sbk_error_setx(ctx, "Missing IV");
 		goto error;
+	}
 
-	if (frm->header->iv.len != SBK_IV_LEN)
+	if (frm->header->iv.len != SBK_IV_LEN) {
+		sbk_error_setx(ctx, "Invalid IV size");
 		goto error;
+	}
 
 	memcpy(ctx->iv, frm->header->iv.data, SBK_IV_LEN);
 	ctx->counter = (ctx->iv[0] << 24) | (ctx->iv[1] << 16) |
@@ -706,6 +848,7 @@ error:
 void
 sbk_close(struct sbk_ctx *ctx)
 {
+	sbk_error_clear(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
 	sqlite3_close(ctx->db);
@@ -715,8 +858,10 @@ sbk_close(struct sbk_ctx *ctx)
 int
 sbk_rewind(struct sbk_ctx *ctx)
 {
-	if (fseek(ctx->fp, 0, SEEK_SET) == -1)
+	if (fseek(ctx->fp, 0, SEEK_SET) == -1) {
+		sbk_error_set(ctx, "Cannot seek");
 		return -1;
+	}
 
 	clearerr(ctx->fp);
 	ctx->eof = 0;
@@ -728,4 +873,10 @@ int
 sbk_eof(struct sbk_ctx *ctx)
 {
 	return ctx->eof;
+}
+
+const char *
+sbk_error(struct sbk_ctx *ctx)
+{
+	return (ctx->error != NULL) ? ctx->error : "Unknown error";
 }

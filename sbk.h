@@ -48,4 +48,6 @@ int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
+const char	*sbk_error(struct sbk_ctx *);
+
 #endif

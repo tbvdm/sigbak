@@ -86,11 +86,15 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 	char	*hex;
 	size_t	 i;
 
-	if (bin->len == SIZE_MAX)
+	if (bin->len == SIZE_MAX) {
+		warnx("Binary data too large");
 		return;
+	}
 
-	if ((hex = reallocarray(NULL, bin->len + 1, 2)) == NULL)
+	if ((hex = reallocarray(NULL, bin->len + 1, 2)) == NULL) {
+		warn(NULL);
 		return;
+	}
 
 	for (i = 0; i < bin->len; i++)
 		snprintf(hex + (i * 2), 3, "%02x", bin->data[i]);
@@ -210,10 +214,13 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 	FILE		*fp;
 	int		 fd, ret;
 
-	if ((ctx = sbk_ctx_new()) == NULL)
+	if ((ctx = sbk_ctx_new()) == NULL) {
+		warnx("Cannot create backup context");
 		return 1;
+	}
 
 	if (sbk_open(ctx, path, passphr) == -1) {
+		warnx("%s: %s", path, sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -237,6 +244,8 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 		}
 
 		if (sbk_write_file(ctx, file, fp) == -1) {
+			warnx("%s: %s", sbk_get_file_name(file),
+			    sbk_error(ctx));
 			fclose(fp);
 			goto out;
 		}
@@ -245,8 +254,10 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 		sbk_free_file(file);
 	}
 
-	if (!sbk_eof(ctx))
+	if (!sbk_eof(ctx)) {
+		warnx("%s: %s", path, sbk_error(ctx));
 		goto out;
+	}
 
 	ret = 0;
 
@@ -291,10 +302,13 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	if ((ctx = sbk_ctx_new()) == NULL)
+	if ((ctx = sbk_ctx_new()) == NULL) {
+		warnx("Cannot create backup context");
 		return 1;
+	}
 
 	if (sbk_open(ctx, argv[1], passphr) == -1) {
+		warnx("%s: %s", argv[1], sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -305,14 +319,18 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		dump_frame(frm);
 
 		if ((frm->attachment != NULL || frm->avatar != NULL) &&
-		    sbk_skip_file_data(ctx, frm) == -1)
+		    sbk_skip_file_data(ctx, frm) == -1) {
+			warnx("%s: %s", argv[1], sbk_error(ctx));
 			goto out;
+		}
 
 		sbk_free_frame(frm);
 	}
 
-	if (!sbk_eof(ctx))
+	if (!sbk_eof(ctx)) {
+		warnx("%s: %s", argv[1], sbk_error(ctx));
 		goto out;
+	}
 
 	ret = 0;
 
@@ -342,15 +360,20 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 
 	close(fd);
 
-	if ((ctx = sbk_ctx_new()) == NULL)
+	if ((ctx = sbk_ctx_new()) == NULL) {
+		warnx("Cannot create backup context");
 		return 1;
+	}
 
 	if (sbk_open(ctx, argv[1], passphr) == -1) {
+		warnx("%s: %s", argv[1], sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
 
-	ret = sbk_write_database(ctx, argv[2]);
+	if ((ret = sbk_write_database(ctx, argv[2])) == -1)
+		warnx("%s", sbk_error(ctx));
+
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == 0) ? 0 : 1;
@@ -400,8 +423,10 @@ main(int argc, char **argv)
 		ret = cmd_dump(argc, argv, passphr);
 	else if (strcmp(argv[0], "sqlite") == 0)
 		ret = cmd_sqlite(argc, argv, passphr);
-	else
+	else {
+		warnx("%s: Invalid command", argv[0]);
 		ret = 1;
+	}
 
 	explicit_bzero(passphr, sizeof passphr);
 	return ret;
