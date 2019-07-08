@@ -29,11 +29,9 @@ RB_HEAD(mem_tree, mem_entry);
 
 static int mem_cmp(struct mem_entry *, struct mem_entry *);
 
-RB_PROTOTYPE(mem_tree, mem_entry, entries, mem_cmp)
-
 static struct mem_tree mem_tree = RB_INITIALIZER(mem_tree);
 
-RB_GENERATE(mem_tree, mem_entry, entries, mem_cmp)
+RB_GENERATE_STATIC(mem_tree, mem_entry, entries, mem_cmp)
 
 static int
 mem_cmp(struct mem_entry *e, struct mem_entry *f)
