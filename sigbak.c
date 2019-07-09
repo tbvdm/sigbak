@@ -17,6 +17,7 @@
 #include <err.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <readpassphrase.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -214,6 +215,11 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 	FILE		*fp;
 	int		 fd, ret;
 
+	if (unveil(path, "r") == -1 || unveil(".", "wc") == -1) {
+		warn("unveil");
+		return 1;
+	}
+
 	if (pledge("stdio rpath wpath cpath", NULL) == -1) {
 		warn("pledge");
 		return 1;
@@ -307,6 +313,11 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
+	if (unveil(argv[1], "r") == -1) {
+		warn("unveil");
+		return 1;
+	}
+
 	if (pledge("stdio rpath", NULL) == -1) {
 		warn("pledge");
 		return 1;
@@ -355,12 +366,49 @@ int
 cmd_sqlite(int argc, char **argv, const char *passphr)
 {
 	struct sbk_ctx	*ctx;
+	char		*dbdir, *dbpath;
 	int		 fd, ret;
 
 	if (argc != 3) {
 		usage("sqlite backup-file database-file");
 		return 1;
 	}
+
+	if (unveil(argv[1], "r") == -1) {
+		warn("unveil");
+		return 1;
+	}
+
+	if (unveil(argv[2], "rwc") == -1) {
+		warn("unveil");
+		return 1;
+	}
+
+	/* For SQLite */
+	if (unveil("/dev/urandom", "r") == -1) {
+		warn("unveil");
+		return 1;
+	}
+
+	if ((dbpath = strdup(argv[2])) == NULL) {
+		warn(NULL);
+		return 1;
+	}
+
+	if ((dbdir = dirname(dbpath)) == NULL) {
+		warn("dirname");
+		free(dbpath);
+		return 1;
+	}
+
+	/* SQlite creates temporary files in the same dir as the database */
+	if (unveil(dbdir, "rwc") == -1) {
+		warn("unveil");
+		free(dbpath);
+		return 1;
+	}
+
+	free(dbpath);
 
 	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
 		warn("pledge");
