@@ -109,9 +109,9 @@ dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
 {
 	dump_var(ind, name, "Attachment", NULL);
 	if (att->has_rowid)
-		dump_uint64(ind + 1, "rowid", att->rowid);
+		dump_uint64(ind + 1, "rowId", att->rowid);
 	if (att->has_attachmentid)
-		dump_uint64(ind + 1, "attachmentid", att->attachmentid);
+		dump_uint64(ind + 1, "attachmentId", att->attachmentid);
 	if (att->has_length)
 		dump_uint32(ind + 1, "length", att->length);
 }
@@ -184,7 +184,7 @@ dump_sticker(unsigned int ind, const char *name, Signal__Sticker *stk)
 {
 	dump_var(ind, name, "Sticker", NULL);
 	if (stk->has_rowid)
-		dump_uint64(ind + 1, "rowid", stk->rowid);
+		dump_uint64(ind + 1, "rowId", stk->rowid);
 	if (stk->has_length)
 		dump_uint32(ind + 1, "length", stk->length);
 }
@@ -200,7 +200,7 @@ dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 void
 dump_frame(Signal__BackupFrame *frm)
 {
-	puts("frame:");
+	dump_var(0, "frame", "BackupFrame", NULL);
 	if (frm->header != NULL)
 		dump_header(1, "header", frm->header);
 	if (frm->statement != NULL)
