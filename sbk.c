@@ -572,7 +572,7 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 		if (stm->parameters[i]->stringparamter != NULL)
 			ret = sqlite3_bind_text(sqlstm, i + 1,
 			    stm->parameters[i]->stringparamter, -1, NULL);
-	
+
 		else if (stm->parameters[i]->has_integerparameter)
 			ret = sqlite3_bind_int64(sqlstm, i + 1,
 			    *(int64_t *)&stm->parameters[i]->integerparameter);
