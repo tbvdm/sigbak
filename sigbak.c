@@ -214,6 +214,11 @@ write_files(char *path, const char *passphr, enum sbk_file_type type)
 	FILE		*fp;
 	int		 fd, ret;
 
+	if (pledge("stdio rpath wpath cpath", NULL) == -1) {
+		warn("pledge");
+		return 1;
+	}
+
 	if ((ctx = sbk_ctx_new()) == NULL) {
 		warnx("Cannot create backup context");
 		return 1;
@@ -302,6 +307,11 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
+	if (pledge("stdio rpath", NULL) == -1) {
+		warn("pledge");
+		return 1;
+	}
+
 	if ((ctx = sbk_ctx_new()) == NULL) {
 		warnx("Cannot create backup context");
 		return 1;
@@ -349,6 +359,11 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 
 	if (argc != 3) {
 		usage("sqlite backup-file database-file");
+		return 1;
+	}
+
+	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
+		warn("pledge");
 		return 1;
 	}
 
@@ -404,11 +419,6 @@ main(int argc, char **argv)
 	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
 	    passphr, sizeof passphr, 0) == NULL)
 		errx(1, "Cannot read passphrase");
-
-	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
-		explicit_bzero(passphr, sizeof passphr);
-		err(1, "pledge");
-	}
 
 	remove_spaces(passphr);
 
