@@ -180,6 +180,16 @@ dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
 }
 
 void
+dump_sticker(unsigned int ind, const char *name, Signal__Sticker *stk)
+{
+	dump_var(ind, name, "Sticker", NULL);
+	if (stk->has_rowid)
+		dump_uint64(ind + 1, "rowid", stk->rowid);
+	if (stk->has_length)
+		dump_uint32(ind + 1, "length", stk->length);
+}
+
+void
 dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 {
 	dump_var(ind, name, "DatabaseVersion", NULL);
@@ -205,6 +215,8 @@ dump_frame(Signal__BackupFrame *frm)
 		dump_bool(1, "end", frm->end);
 	if (frm->avatar != NULL)
 		dump_avatar(1, "avatar", frm->avatar);
+	if (frm->sticker != NULL)
+		dump_sticker(1, "sticker", frm->sticker);
 }
 
 int
@@ -339,7 +351,7 @@ cmd_dump(int argc, char **argv, const char *passphr)
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		dump_frame(frm);
 
-		if ((frm->attachment != NULL || frm->avatar != NULL) &&
+		if (sbk_has_file_data(frm) &&
 		    sbk_skip_file_data(ctx, frm) == -1) {
 			warnx("%s: %s", argv[1], sbk_error(ctx));
 			goto out;

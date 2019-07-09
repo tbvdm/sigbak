@@ -299,6 +299,13 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 }
 
 int
+sbk_has_file_data(Signal__BackupFrame *frm)
+{
+	return frm->attachment != NULL || frm->avatar != NULL ||
+	    frm->sticker != NULL;
+}
+
+int
 sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
@@ -307,6 +314,8 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 		len = frm->attachment->length;
 	else if (frm->avatar != NULL && frm->avatar->has_length)
 		len = frm->avatar->length;
+	else if (frm->sticker != NULL && frm->sticker->has_length)
+		len = frm->sticker->length;
 	else {
 		sbk_error_setx(ctx, "Invalid frame");
 		return -1;
@@ -398,7 +407,7 @@ sbk_get_file(struct sbk_ctx *ctx)
 	Signal__BackupFrame	*frm;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL)
-		if (frm->attachment != NULL || frm->avatar != NULL)
+		if (sbk_has_file_data(frm))
 			break;
 
 	if (frm == NULL)
@@ -434,7 +443,7 @@ sbk_get_file(struct sbk_ctx *ctx)
 
 		file->len = frm->attachment->length;
 		file->type = SBK_ATTACHMENT;
-	} else {
+	} else if (frm->avatar != NULL) {
 		if (frm->avatar->name == NULL || !frm->avatar->has_length) {
 			sbk_error_setx(ctx, "Invalid avatar frame");
 			goto error;
@@ -447,6 +456,9 @@ sbk_get_file(struct sbk_ctx *ctx)
 
 		file->len = frm->avatar->length;
 		file->type = SBK_AVATAR;
+	} else if (frm->sticker != NULL) {
+		/* TODO */
+		goto error;
 	}
 
 	sbk_free_frame(frm);
@@ -635,7 +647,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx, frm->statement);
-		else if (frm->attachment != NULL || frm->avatar != NULL)
+		else if (sbk_has_file_data(frm))
 			ret = sbk_skip_file_data(ctx, frm);
 
 		sbk_free_frame(frm);

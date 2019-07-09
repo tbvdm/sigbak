@@ -37,6 +37,7 @@ int		 sbk_rewind(struct sbk_ctx *);
 
 Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *);
 void		 sbk_free_frame(Signal__BackupFrame *);
+int		 sbk_has_file_data(Signal__BackupFrame *);
 int		 sbk_skip_file_data(struct sbk_ctx *, Signal__BackupFrame *);
 
 struct sbk_file	*sbk_get_file(struct sbk_ctx *);
