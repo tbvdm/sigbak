@@ -413,7 +413,7 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	/* SQlite creates temporary files in the same dir as the database */
+	/* SQLite creates temporary files in the same dir as the database */
 	if (unveil(dbdir, "rwc") == -1) {
 		warn("unveil");
 		free(dbpath);
