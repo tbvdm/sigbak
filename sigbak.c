@@ -27,10 +27,53 @@
 
 #include "sbk.h"
 
+static char passphr[128];
+
 void
 usage(const char *args)
 {
 	fprintf(stderr, "usage: %s %s\n", getprogname(), args);
+}
+
+int
+get_passphrase(const char *passfile)
+{
+	FILE	*fp;
+	char	*c, *d;
+
+	if (passfile == NULL) {
+		if (readpassphrase("Enter 30-digit passphrase (spaces are "
+		    "ignored): ", passphr, sizeof passphr, 0) == NULL) {
+			warnx("Cannot read passphrase");
+			return -1;
+		}
+	} else {
+		if ((fp = fopen(passfile, "r")) == NULL) {
+			warn("%s", passfile);
+			return -1;
+		}
+
+		if (fgets(passphr, sizeof passphr, fp) == NULL) {
+			if (ferror(fp))
+				warn("%s", passfile);
+			else
+				warnx("%s: Empty file", passfile);
+
+			fclose(fp);
+			return -1;
+		}
+
+		fclose(fp);
+		passphr[strcspn(passphr, "\n")] = '\0';
+	}
+
+	/* Remove spaces */
+	for (c = d = passphr; *c != '\0'; c++)
+		if (*c != ' ')
+			*d++ = *c;
+	*d = '\0';
+
+	return 0;
 }
 
 void
@@ -220,7 +263,7 @@ dump_frame(Signal__BackupFrame *frm)
 }
 
 int
-write_files(char *path, const char *passphr, enum sbk_file_type type)
+write_files(char *path, enum sbk_file_type type)
 {
 	struct sbk_ctx	*ctx;
 	struct sbk_file	*file;
@@ -292,40 +335,100 @@ out:
 }
 
 int
-cmd_attachments(int argc, char **argv, const char *passphr)
+cmd_attachments(int argc, char **argv)
 {
-	if (argc != 2) {
-		usage("attachments backup-file");
-		return 1;
-	}
+	char	*passfile;
+	int	 c;
 
-	return write_files(argv[1], passphr, SBK_ATTACHMENT);
+	passfile = NULL;
+
+	while ((c = getopt(argc, argv, "p:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1)
+		goto usage;
+
+	if (get_passphrase(passfile) == -1)
+		return 1;
+
+	return write_files(argv[0], SBK_ATTACHMENT);
+
+usage:
+	usage("attachments [-p passfile] backup");
+	return 1;
 }
 
 int
-cmd_avatars(int argc, char **argv, const char *passphr)
+cmd_avatars(int argc, char **argv)
 {
-	if (argc != 2) {
-		usage("avatars backup-file");
-		return 1;
-	}
+	char	*passfile;
+	int	 c;
 
-	return write_files(argv[1], passphr, SBK_AVATAR);
+	passfile = NULL;
+
+	while ((c = getopt(argc, argv, "p:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1)
+		goto usage;
+
+	if (get_passphrase(passfile) == -1)
+		return 1;
+
+	return write_files(argv[0], SBK_AVATAR);
+
+usage:
+	usage("avatars [-p passfile] backup");
+	return 1;
 }
 
 int
-cmd_dump(int argc, char **argv, const char *passphr)
+cmd_dump(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
-	int			 ret;
+	char			*passfile;
+	int			 c, ret;
 
-	if (argc != 2) {
-		usage("dump backup-file");
+	passfile = NULL;
+
+	while ((c = getopt(argc, argv, "p:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1)
+		goto usage;
+
+	if (get_passphrase(passfile) == -1)
 		return 1;
-	}
 
-	if (unveil(argv[1], "r") == -1) {
+	if (unveil(argv[0], "r") == -1) {
 		warn("unveil");
 		return 1;
 	}
@@ -340,8 +443,8 @@ cmd_dump(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	if (sbk_open(ctx, argv[1], passphr) == -1) {
-		warnx("%s: %s", argv[1], sbk_error(ctx));
+	if (sbk_open(ctx, argv[0], passphr) == -1) {
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -353,7 +456,7 @@ cmd_dump(int argc, char **argv, const char *passphr)
 
 		if (sbk_has_file_data(frm) &&
 		    sbk_skip_file_data(ctx, frm) == -1) {
-			warnx("%s: %s", argv[1], sbk_error(ctx));
+			warnx("%s: %s", argv[0], sbk_error(ctx));
 			goto out;
 		}
 
@@ -361,7 +464,7 @@ cmd_dump(int argc, char **argv, const char *passphr)
 	}
 
 	if (!sbk_eof(ctx)) {
-		warnx("%s: %s", argv[1], sbk_error(ctx));
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		goto out;
 	}
 
@@ -372,26 +475,47 @@ out:
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
+
+usage:
+	usage("dump [-p passfile] backup");
+	return 1;
 }
 
 int
-cmd_sqlite(int argc, char **argv, const char *passphr)
+cmd_sqlite(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*dbdir, *dbpath;
-	int		 fd, ret;
+	char		*dbdir, *dbpath, *passfile;
+	int		 c, fd, ret;
 
-	if (argc != 3) {
-		usage("sqlite backup-file database-file");
+	passfile = NULL;
+
+	while ((c = getopt(argc, argv, "p:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 2) {
+		goto usage;
 		return 1;
 	}
 
-	if (unveil(argv[1], "r") == -1) {
+	if (get_passphrase(passfile) == -1)
+		return -1;
+
+	if (unveil(argv[0], "r") == -1) {
 		warn("unveil");
 		return 1;
 	}
 
-	if (unveil(argv[2], "rwc") == -1) {
+	if (unveil(argv[1], "rwc") == -1) {
 		warn("unveil");
 		return 1;
 	}
@@ -402,7 +526,7 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	if ((dbpath = strdup(argv[2])) == NULL) {
+	if ((dbpath = strdup(argv[1])) == NULL) {
 		warn(NULL);
 		return 1;
 	}
@@ -428,8 +552,8 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 	}
 
 	/* Prevent SQLite from writing to an existing file */
-	if ((fd = open(argv[2], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
-		warn("%s", argv[2]);
+	if ((fd = open(argv[1], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
+		warn("%s", argv[1]);
 		return 1;
 	}
 
@@ -440,59 +564,45 @@ cmd_sqlite(int argc, char **argv, const char *passphr)
 		return 1;
 	}
 
-	if (sbk_open(ctx, argv[1], passphr) == -1) {
-		warnx("%s: %s", argv[1], sbk_error(ctx));
+	if (sbk_open(ctx, argv[0], passphr) == -1) {
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
 
-	if ((ret = sbk_write_database(ctx, argv[2])) == -1)
+	if ((ret = sbk_write_database(ctx, argv[1])) == -1)
 		warnx("%s", sbk_error(ctx));
 
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == 0) ? 0 : 1;
-}
 
-void
-remove_spaces(char *s)
-{
-	char *t;
-
-	for (t = s; *s != '\0'; s++)
-		if (*s != ' ')
-			*t++ = *s;
-	*t = '\0';
+usage:
+	usage("sqlite [-p passfile] backup database");
+	return 1;
 }
 
 int
 main(int argc, char **argv)
 {
-	char	passphr[128];
-	int	ret;
+	int ret;
 
 	if (argc < 2) {
 		usage("command [argument ...]");
 		return 1;
 	}
 
-	if (readpassphrase("Enter 30-digit passphrase (spaces are ignored): ",
-	    passphr, sizeof passphr, 0) == NULL)
-		errx(1, "Cannot read passphrase");
-
-	remove_spaces(passphr);
-
 	argc--;
 	argv++;
 
 	if (strcmp(argv[0], "attachments") == 0)
-		ret = cmd_attachments(argc, argv, passphr);
+		ret = cmd_attachments(argc, argv);
 	else if (strcmp(argv[0], "avatars") == 0)
-		ret = cmd_avatars(argc, argv, passphr);
+		ret = cmd_avatars(argc, argv);
 	else if (strcmp(argv[0], "dump") == 0)
-		ret = cmd_dump(argc, argv, passphr);
+		ret = cmd_dump(argc, argv);
 	else if (strcmp(argv[0], "sqlite") == 0)
-		ret = cmd_sqlite(argc, argv, passphr);
+		ret = cmd_sqlite(argc, argv);
 	else {
 		warnx("%s: Invalid command", argv[0]);
 		ret = 1;
