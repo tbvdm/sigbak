@@ -291,6 +291,7 @@ write_files(char *path, enum sbk_file_type type)
 		return 1;
 	}
 
+	explicit_bzero(passphr, sizeof passphr);
 	ret = 1;
 
 	while ((file = sbk_get_file(ctx)) != NULL) {
@@ -449,6 +450,7 @@ cmd_dump(int argc, char **argv)
 		return 1;
 	}
 
+	explicit_bzero(passphr, sizeof passphr);
 	ret = 1;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {
@@ -569,6 +571,8 @@ cmd_sqlite(int argc, char **argv)
 		sbk_ctx_free(ctx);
 		return 1;
 	}
+
+	explicit_bzero(passphr, sizeof passphr);
 
 	if ((ret = sbk_write_database(ctx, argv[1])) == -1)
 		warnx("%s", sbk_error(ctx));
