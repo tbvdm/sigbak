@@ -30,9 +30,15 @@
 static char passphr[128];
 
 void
-usage(const char *args)
+usage(const char *fmt, ...)
 {
-	fprintf(stderr, "usage: %s %s\n", getprogname(), args);
+	va_list ap;
+
+	va_start(ap, fmt);
+	fprintf(stderr, "usage: %s ", getprogname());
+	vfprintf(stderr, fmt, ap);
+	fputc('\n', stderr);
+	va_end(ap);
 }
 
 int
@@ -263,14 +269,36 @@ dump_frame(Signal__BackupFrame *frm)
 }
 
 int
-write_files(char *path, enum sbk_file_type type)
+write_files(int argc, char **argv, enum sbk_file_type type)
 {
 	struct sbk_ctx	*ctx;
 	struct sbk_file	*file;
 	FILE		*fp;
-	int		 fd, ret;
+	char		*cmd, *passfile;
+	int		 c, fd, ret;
 
-	if (unveil(path, "r") == -1 || unveil(".", "wc") == -1) {
+	cmd = argv[0];
+	passfile = NULL;
+
+	while ((c = getopt(argc, argv, "p:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1)
+		goto usage;
+
+	if (get_passphrase(passfile) == -1)
+		return 1;
+
+	if (unveil(argv[0], "r") == -1 || unveil(".", "wc") == -1) {
 		warn("unveil");
 		return 1;
 	}
@@ -285,8 +313,8 @@ write_files(char *path, enum sbk_file_type type)
 		return 1;
 	}
 
-	if (sbk_open(ctx, path, passphr) == -1) {
-		warnx("%s: %s", path, sbk_error(ctx));
+	if (sbk_open(ctx, argv[0], passphr) == -1) {
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -322,7 +350,7 @@ write_files(char *path, enum sbk_file_type type)
 	}
 
 	if (!sbk_eof(ctx)) {
-		warnx("%s: %s", path, sbk_error(ctx));
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		goto out;
 	}
 
@@ -333,72 +361,22 @@ out:
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
+
+usage:
+	usage("%s [-p passfile] backup", cmd);
+	return 1;
 }
 
 int
 cmd_attachments(int argc, char **argv)
 {
-	char	*passfile;
-	int	 c;
-
-	passfile = NULL;
-
-	while ((c = getopt(argc, argv, "p:")) != -1)
-		switch (c) {
-		case 'p':
-			passfile = optarg;
-			break;
-		default:
-			goto usage;
-		}
-
-	argc -= optind;
-	argv += optind;
-
-	if (argc != 1)
-		goto usage;
-
-	if (get_passphrase(passfile) == -1)
-		return 1;
-
-	return write_files(argv[0], SBK_ATTACHMENT);
-
-usage:
-	usage("attachments [-p passfile] backup");
-	return 1;
+	return write_files(argc, argv, SBK_ATTACHMENT);
 }
 
 int
 cmd_avatars(int argc, char **argv)
 {
-	char	*passfile;
-	int	 c;
-
-	passfile = NULL;
-
-	while ((c = getopt(argc, argv, "p:")) != -1)
-		switch (c) {
-		case 'p':
-			passfile = optarg;
-			break;
-		default:
-			goto usage;
-		}
-
-	argc -= optind;
-	argv += optind;
-
-	if (argc != 1)
-		goto usage;
-
-	if (get_passphrase(passfile) == -1)
-		return 1;
-
-	return write_files(argv[0], SBK_AVATAR);
-
-usage:
-	usage("avatars [-p passfile] backup");
-	return 1;
+	return write_files(argc, argv, SBK_AVATAR);
 }
 
 int
