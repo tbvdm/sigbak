@@ -15,23 +15,7 @@ and [readpassphrase(3)][6]. A portability layer will be added later.
 
 The repository is [here][7]. A mirror is available at [Bitbucket][8].
 
-sigbak currently has the following functionality:
-
-* Print all frames of a backup in a readable format:
-
-    	sigbak dump backupfile
-
-* Export a backup to an SQLite database:
-
-    	sigbak sqlite backupfile sqlitefile
-
-* Save all message attachments in the current directory:
-
-    	sigbak attachments backupfile
-
-* Save all avatars in the current directory:
-
-    	sigbak avatars backupfile
+Documentation is available in the [manual page][9].
 
 [1]: https://www.signal.org/
 [2]: https://www.libressl.org/
@@ -41,3 +25,4 @@ sigbak currently has the following functionality:
 [6]: https://man.openbsd.org/readpassphrase
 [7]: https://www.kariliq.nl/hg/sigbak
 [8]: https://bitbucket.org/tbvdm/sigbak
+[9]: https://www.kariliq.nl/sigbak/manual.html
