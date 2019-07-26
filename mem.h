@@ -18,7 +18,7 @@
 #define MEM_H
 
 void	*mem_protobuf_malloc(void *, size_t);
-void	 mem_protobuf_free(void *, void  *);
+void	 mem_protobuf_free(void *, void *);
 
 int	 mem_sqlite_init(void *);
 void	 mem_sqlite_shutdown(void *);
