@@ -14,7 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/stat.h>
+
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
@@ -274,7 +277,7 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	struct sbk_ctx	*ctx;
 	struct sbk_file	*file;
 	FILE		*fp;
-	char		*cmd, *passfile;
+	char		*cmd, *outdir, *passfile;
 	int		 c, fd, ret;
 
 	cmd = argv[0];
@@ -292,13 +295,25 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 1)
+	switch (argc) {
+	case 1:
+		outdir = ".";
+		break;
+	case 2:
+		outdir = argv[1];
+		if (mkdir(outdir, 0777) == -1 && errno != EEXIST) {
+			warn("mkdir: %s", outdir);
+			return 1;
+		}
+		break;
+	default:
 		goto usage;
+	}
 
 	if (get_passphrase(passfile) == -1)
 		return 1;
 
-	if (unveil(argv[0], "r") == -1 || unveil(".", "wc") == -1) {
+	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1) {
 		warn("unveil");
 		return 1;
 	}
@@ -320,6 +335,14 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
+
+	if (chdir(outdir) == -1) {
+		warn("chdir: %s", outdir);
+		sbk_close(ctx);
+		sbk_ctx_free(ctx);
+		return 1;
+	}
+
 	ret = 1;
 
 	while ((file = sbk_get_file(ctx)) != NULL) {
@@ -363,7 +386,7 @@ out:
 	return ret;
 
 usage:
-	usage("%s [-p passfile] backup", cmd);
+	usage("%s [-p passfile] backup [directory]", cmd);
 	return 1;
 }
 
