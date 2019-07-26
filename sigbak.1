@@ -1,0 +1,96 @@
+.\" Copyright (c) 2019 Tim van der Molen <tim@kariliq.nl>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd July 25, 2019
+.Dt SIGBAK 1
+.Os
+.Sh NAME
+.Nm sigbak
+.Nd read encrypted Signal backups
+.Sh SYNOPSIS
+.Nm sigbak
+.Ar command
+.Op Ar argument ...
+.Sh DESCRIPTION
+.Nm
+is a utility to read the encrypted backups made by the Signal messaging app.
+.Pp
+A Signal backup consists primarily of an SQLite database.
+This database contains the backed-up messages, amongst other things.
+Attachments and avatars, however, are stored as separate files in the backup.
+.Pp
+Every Signal backup is encrypted with a 30-digit passphrase.
+By default,
+.Nm
+prompts for the passphrase.
+Alternatively, the
+.Fl p
+option may be used to specify a file that contains the passphrase.
+Spaces in the passphrase are ignored.
+.Pp
+The commands are as follows.
+.Bl -tag -width Ds
+.It Ic attachments Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+Export all attachments in the file
+.Ar backup
+to
+.Ar directory ,
+or to the current directory if
+.Ar directory
+is not specified.
+.It Ic avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+Export all avatars in the file
+.Ar backup
+to
+.Ar directory ,
+or to the current directory if
+.Ar directory
+is not specified.
+.It Ic dump Oo Fl p Ar passfile Oc Ar backup
+Print the raw contents of the file
+.Ar backup
+in a readable format on standard output.
+.It Ic sqlite Oo Fl p Ar passfile Oc Ar backup Ar database
+Export the SQLite database in the file
+.Ar backup
+to the file
+.Ar database .
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh EXAMPLES
+Dump the raw contents of
+.Pa signal.backup
+to
+.Pa signal.dump :
+.Pp
+.Dl $ sigbak dump signal.backup > signal.dump
+.Pp
+Export the SQLite database and use
+.Xr sqlite3 1
+to view the contents of the
+.Sq sms
+table:
+.Bd -literal -offset indent
+$ sigbak sqlite signal.backup signal.db
+$ sqlite3 signal.db 'select * from sms' | less
+.Ed
+.Sh SEE ALSO
+.Lk https://www.kariliq.nl/sigbak/ ,
+.Lk https://www.signal.org/
+.Sh AUTHORS
+The
+.Nm
+utility was written by
+.An Tim van der Molen Aq Mt tim@kariliq.nl .
