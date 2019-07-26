@@ -272,6 +272,32 @@ dump_frame(Signal__BackupFrame *frm)
 }
 
 int
+unveil_dirname(const char *path, const char *perms)
+{
+	char *dir, *tmp;
+
+	if ((tmp = strdup(path)) == NULL) {
+		warn(NULL);
+		return -1;
+	}
+
+	if ((dir = dirname(tmp)) == NULL) {
+		warn("dirname");
+		free(tmp);
+		return -1;
+	}
+
+	if (unveil(dir, perms) == -1) {
+		warn("unveil");
+		free(tmp);
+		return -1;
+	}
+
+	free(tmp);
+	return 0;
+}
+
+int
 write_files(int argc, char **argv, enum sbk_file_type type)
 {
 	struct sbk_ctx	*ctx;
@@ -488,7 +514,7 @@ int
 cmd_sqlite(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*dbdir, *dbpath, *passfile;
+	char		*passfile;
 	int		 c, fd, ret;
 
 	passfile = NULL;
@@ -523,31 +549,15 @@ cmd_sqlite(int argc, char **argv)
 		return 1;
 	}
 
+	/* SQLite creates temporary files in the same dir as the database */
+	if (unveil_dirname(argv[1], "rwc") == -1)
+		return 1;
+
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1) {
 		warn("unveil");
 		return 1;
 	}
-
-	if ((dbpath = strdup(argv[1])) == NULL) {
-		warn(NULL);
-		return 1;
-	}
-
-	if ((dbdir = dirname(dbpath)) == NULL) {
-		warn("dirname");
-		free(dbpath);
-		return 1;
-	}
-
-	/* SQLite creates temporary files in the same dir as the database */
-	if (unveil(dbdir, "rwc") == -1) {
-		warn("unveil");
-		free(dbpath);
-		return 1;
-	}
-
-	free(dbpath);
 
 	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
 		warn("pledge");
