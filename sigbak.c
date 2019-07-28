@@ -33,15 +33,9 @@
 static char passphr[128];
 
 void
-usage(const char *fmt, ...)
+usage(const char *cmd, const char *args)
 {
-	va_list ap;
-
-	va_start(ap, fmt);
-	fprintf(stderr, "usage: %s ", getprogname());
-	vfprintf(stderr, fmt, ap);
-	fputc('\n', stderr);
-	va_end(ap);
+	fprintf(stderr, "usage: %s %s %s\n", getprogname(), cmd, args);
 }
 
 int
@@ -412,7 +406,7 @@ out:
 	return ret;
 
 usage:
-	usage("%s [-p passfile] backup [directory]", cmd);
+	usage(cmd, "[-p passfile] backup [directory]");
 	return 1;
 }
 
@@ -506,7 +500,7 @@ out:
 	return ret;
 
 usage:
-	usage("dump [-p passfile] backup");
+	usage("dump", "[-p passfile] backup");
 	return 1;
 }
 
@@ -593,7 +587,7 @@ cmd_sqlite(int argc, char **argv)
 	return (ret == 0) ? 0 : 1;
 
 usage:
-	usage("sqlite [-p passfile] backup database");
+	usage("sqlite", "[-p passfile] backup database");
 	return 1;
 }
 
@@ -603,7 +597,7 @@ main(int argc, char **argv)
 	int ret;
 
 	if (argc < 2) {
-		usage("command [argument ...]");
+		usage("command", "[argument ...]");
 		return 1;
 	}
 
