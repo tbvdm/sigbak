@@ -587,7 +587,7 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 
 		else if (stm->parameters[i]->has_integerparameter)
 			ret = sqlite3_bind_int64(sqlstm, i + 1,
-			    *(int64_t *)&stm->parameters[i]->integerparameter);
+			    stm->parameters[i]->integerparameter);
 
 		else if (stm->parameters[i]->has_doubleparameter)
 			ret = sqlite3_bind_double(sqlstm, i + 1,
