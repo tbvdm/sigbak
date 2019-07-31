@@ -525,10 +525,8 @@ cmd_sqlite(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 2) {
+	if (argc != 2)
 		goto usage;
-		return 1;
-	}
 
 	if (get_passphrase(passfile) == -1)
 		return 1;
