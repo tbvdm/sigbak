@@ -531,7 +531,7 @@ cmd_sqlite(int argc, char **argv)
 	}
 
 	if (get_passphrase(passfile) == -1)
-		return -1;
+		return 1;
 
 	if (unveil(argv[0], "r") == -1) {
 		warn("unveil");
