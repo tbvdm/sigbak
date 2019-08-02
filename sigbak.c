@@ -332,8 +332,10 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 		goto usage;
 	}
 
-	if (get_passphrase(passfile) == -1)
+	if (passfile != NULL && unveil(passfile, "r") == -1) {
+		warn("unveil");
 		return 1;
+	}
 
 	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1) {
 		warn("unveil");
@@ -347,6 +349,11 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 
 	if ((ctx = sbk_ctx_new()) == NULL) {
 		warnx("Cannot create backup context");
+		return 1;
+	}
+
+	if (get_passphrase(passfile) == -1) {
+		sbk_ctx_free(ctx);
 		return 1;
 	}
 
@@ -442,8 +449,10 @@ cmd_dump(int argc, char **argv)
 	if (argc != 1)
 		goto usage;
 
-	if (get_passphrase(passfile) == -1)
+	if (passfile != NULL && unveil(passfile, "r") == -1) {
+		warn("unveil");
 		return 1;
+	}
 
 	if (unveil(argv[0], "r") == -1) {
 		warn("unveil");
@@ -457,6 +466,11 @@ cmd_dump(int argc, char **argv)
 
 	if ((ctx = sbk_ctx_new()) == NULL) {
 		warnx("Cannot create backup context");
+		return 1;
+	}
+
+	if (get_passphrase(passfile) == -1) {
+		sbk_ctx_free(ctx);
 		return 1;
 	}
 
@@ -523,8 +537,10 @@ cmd_sqlite(int argc, char **argv)
 	if (argc != 2)
 		goto usage;
 
-	if (get_passphrase(passfile) == -1)
+	if (passfile != NULL && unveil(passfile, "r") == -1) {
+		warn("unveil");
 		return 1;
+	}
 
 	if (unveil(argv[0], "r") == -1) {
 		warn("unveil");
@@ -561,6 +577,11 @@ cmd_sqlite(int argc, char **argv)
 
 	if ((ctx = sbk_ctx_new()) == NULL) {
 		warnx("Cannot create backup context");
+		return 1;
+	}
+
+	if (get_passphrase(passfile) == -1) {
+		sbk_ctx_free(ctx);
 		return 1;
 	}
 
