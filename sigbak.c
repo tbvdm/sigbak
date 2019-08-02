@@ -48,6 +48,7 @@ get_passphrase(const char *passfile)
 		if (readpassphrase("Enter 30-digit passphrase (spaces are "
 		    "ignored): ", passphr, sizeof passphr, 0) == NULL) {
 			warnx("Cannot read passphrase");
+			explicit_bzero(passphr, sizeof passphr);
 			return -1;
 		}
 	} else {
@@ -62,6 +63,7 @@ get_passphrase(const char *passfile)
 			else
 				warnx("%s: Empty file", passfile);
 
+			explicit_bzero(passphr, sizeof passphr);
 			fclose(fp);
 			return -1;
 		}
