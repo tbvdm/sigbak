@@ -298,7 +298,7 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	struct sbk_file	*file;
 	FILE		*fp;
 	char		*cmd, *outdir, *passfile;
-	int		 c, fd, ret;
+	int		 c, ret;
 
 	cmd = argv[0];
 	passfile = NULL;
@@ -369,15 +369,8 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 		if (sbk_get_file_type(file) != type)
 			continue;
 
-		if ((fd = open(sbk_get_file_name(file), O_WRONLY | O_CREAT |
-		    O_EXCL, 0666)) == -1) {
+		if ((fp = fopen(sbk_get_file_name(file), "wbx")) == NULL) {
 			warn("%s", sbk_get_file_name(file));
-			goto out;
-		}
-
-		if ((fp = fdopen(fd, "wb")) == NULL) {
-			warn("%s", sbk_get_file_name(file));
-			close(fd);
 			goto out;
 		}
 
