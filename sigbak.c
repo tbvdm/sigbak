@@ -30,8 +30,6 @@
 
 #include "sbk.h"
 
-static char passphr[128];
-
 __dead void
 usage(const char *cmd, const char *args)
 {
@@ -40,16 +38,16 @@ usage(const char *cmd, const char *args)
 }
 
 int
-get_passphrase(const char *passfile)
+get_passphrase(const char *passfile, char *buf, size_t bufsize)
 {
 	FILE	*fp;
 	char	*c, *d;
 
 	if (passfile == NULL) {
 		if (readpassphrase("Enter 30-digit passphrase (spaces are "
-		    "ignored): ", passphr, sizeof passphr, 0) == NULL) {
+		    "ignored): ", buf, bufsize, 0) == NULL) {
 			warnx("Cannot read passphrase");
-			explicit_bzero(passphr, sizeof passphr);
+			explicit_bzero(buf, bufsize);
 			return -1;
 		}
 	} else {
@@ -58,23 +56,23 @@ get_passphrase(const char *passfile)
 			return -1;
 		}
 
-		if (fgets(passphr, sizeof passphr, fp) == NULL) {
+		if (fgets(buf, bufsize, fp) == NULL) {
 			if (ferror(fp))
 				warn("%s", passfile);
 			else
 				warnx("%s: Empty file", passfile);
 
-			explicit_bzero(passphr, sizeof passphr);
+			explicit_bzero(buf, bufsize);
 			fclose(fp);
 			return -1;
 		}
 
 		fclose(fp);
-		passphr[strcspn(passphr, "\n")] = '\0';
+		buf[strcspn(buf, "\n")] = '\0';
 	}
 
 	/* Remove spaces */
-	for (c = d = passphr; *c != '\0'; c++)
+	for (c = d = buf; *c != '\0'; c++)
 		if (*c != ' ')
 			*d++ = *c;
 	*d = '\0';
@@ -300,7 +298,7 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	struct sbk_ctx	*ctx;
 	struct sbk_file	*file;
 	FILE		*fp;
-	char		*cmd, *outdir, *passfile;
+	char		*cmd, *outdir, *passfile, passphr[128];
 	int		 c, ret;
 
 	cmd = argv[0];
@@ -343,7 +341,7 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
 
-	if (get_passphrase(passfile) == -1) {
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -420,7 +418,7 @@ cmd_dump(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
-	char			*passfile;
+	char			*passfile, passphr[128];
 	int			 c, ret;
 
 	passfile = NULL;
@@ -452,7 +450,7 @@ cmd_dump(int argc, char **argv)
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
 
-	if (get_passphrase(passfile) == -1) {
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -500,7 +498,7 @@ int
 cmd_sqlite(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*passfile;
+	char		*passfile, passphr[128];
 	int		 c, fd, ret;
 
 	passfile = NULL;
@@ -549,7 +547,7 @@ cmd_sqlite(int argc, char **argv)
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
 
-	if (get_passphrase(passfile) == -1) {
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
 		return 1;
 	}
