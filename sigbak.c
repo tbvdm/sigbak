@@ -32,10 +32,11 @@
 
 static char passphr[128];
 
-void
+__dead void
 usage(const char *cmd, const char *args)
 {
 	fprintf(stderr, "usage: %s %s %s\n", getprogname(), cmd, args);
+	exit(1);
 }
 
 int
@@ -323,34 +324,24 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 		break;
 	case 2:
 		outdir = argv[1];
-		if (mkdir(outdir, 0777) == -1 && errno != EEXIST) {
-			warn("mkdir: %s", outdir);
-			return 1;
-		}
+		if (mkdir(outdir, 0777) == -1 && errno != EEXIST)
+			err(1, "mkdir: %s", outdir);
 		break;
 	default:
 		goto usage;
 	}
 
-	if (passfile != NULL && unveil(passfile, "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (passfile != NULL && unveil(passfile, "r") == -1)
+		err(1, "unveil");
 
-	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1)
+		err(1, "unveil");
 
-	if (pledge("stdio rpath wpath cpath", NULL) == -1) {
-		warn("pledge");
-		return 1;
-	}
+	if (pledge("stdio rpath wpath cpath", NULL) == -1)
+		err(1, "pledge");
 
-	if ((ctx = sbk_ctx_new()) == NULL) {
-		warnx("Cannot create backup context");
-		return 1;
-	}
+	if ((ctx = sbk_ctx_new()) == NULL)
+		errx(1, "Cannot create backup context");
 
 	if (get_passphrase(passfile) == -1) {
 		sbk_ctx_free(ctx);
@@ -359,6 +350,7 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
+		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -409,7 +401,6 @@ out:
 
 usage:
 	usage(cmd, "[-p passfile] backup [directory]");
-	return 1;
 }
 
 int
@@ -449,25 +440,17 @@ cmd_dump(int argc, char **argv)
 	if (argc != 1)
 		goto usage;
 
-	if (passfile != NULL && unveil(passfile, "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (passfile != NULL && unveil(passfile, "r") == -1)
+		err(1, "unveil");
 
-	if (unveil(argv[0], "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (unveil(argv[0], "r") == -1)
+		err(1, "unveil");
 
-	if (pledge("stdio rpath", NULL) == -1) {
-		warn("pledge");
-		return 1;
-	}
+	if (pledge("stdio rpath", NULL) == -1)
+		err(1, "pledge");
 
-	if ((ctx = sbk_ctx_new()) == NULL) {
-		warnx("Cannot create backup context");
-		return 1;
-	}
+	if ((ctx = sbk_ctx_new()) == NULL)
+		errx(1, "Cannot create backup context");
 
 	if (get_passphrase(passfile) == -1) {
 		sbk_ctx_free(ctx);
@@ -476,6 +459,7 @@ cmd_dump(int argc, char **argv)
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
+		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -510,7 +494,6 @@ out:
 
 usage:
 	usage("dump", "[-p passfile] backup");
-	return 1;
 }
 
 int
@@ -537,48 +520,34 @@ cmd_sqlite(int argc, char **argv)
 	if (argc != 2)
 		goto usage;
 
-	if (passfile != NULL && unveil(passfile, "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (passfile != NULL && unveil(passfile, "r") == -1)
+		err(1, "unveil");
 
-	if (unveil(argv[0], "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (unveil(argv[0], "r") == -1)
+		err(1, "unveil");
 
-	if (unveil(argv[1], "rwc") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (unveil(argv[1], "rwc") == -1)
+		err(1, "unveil");
 
 	/* SQLite creates temporary files in the same dir as the database */
 	if (unveil_dirname(argv[1], "rwc") == -1)
 		return 1;
 
 	/* For SQLite */
-	if (unveil("/dev/urandom", "r") == -1) {
-		warn("unveil");
-		return 1;
-	}
+	if (unveil("/dev/urandom", "r") == -1)
+		err(1, "unveil");
 
-	if (pledge("stdio rpath wpath cpath flock", NULL) == -1) {
-		warn("pledge");
-		return 1;
-	}
+	if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
+		err(1, "pledge");
 
 	/* Prevent SQLite from writing to an existing file */
-	if ((fd = open(argv[1], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
-		warn("%s", argv[1]);
-		return 1;
-	}
+	if ((fd = open(argv[1], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1)
+		err(1, "%s", argv[1]);
 
 	close(fd);
 
-	if ((ctx = sbk_ctx_new()) == NULL) {
-		warnx("Cannot create backup context");
-		return 1;
-	}
+	if ((ctx = sbk_ctx_new()) == NULL)
+		errx(1, "Cannot create backup context");
 
 	if (get_passphrase(passfile) == -1) {
 		sbk_ctx_free(ctx);
@@ -587,6 +556,7 @@ cmd_sqlite(int argc, char **argv)
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
+		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
 	}
@@ -602,14 +572,11 @@ cmd_sqlite(int argc, char **argv)
 
 usage:
 	usage("sqlite", "[-p passfile] backup database");
-	return 1;
 }
 
 int
 main(int argc, char **argv)
 {
-	int ret;
-
 	if (argc < 2) {
 		usage("command", "[argument ...]");
 		return 1;
@@ -619,18 +586,13 @@ main(int argc, char **argv)
 	argv++;
 
 	if (strcmp(argv[0], "attachments") == 0)
-		ret = cmd_attachments(argc, argv);
-	else if (strcmp(argv[0], "avatars") == 0)
-		ret = cmd_avatars(argc, argv);
-	else if (strcmp(argv[0], "dump") == 0)
-		ret = cmd_dump(argc, argv);
-	else if (strcmp(argv[0], "sqlite") == 0)
-		ret = cmd_sqlite(argc, argv);
-	else {
-		warnx("%s: Invalid command", argv[0]);
-		ret = 1;
-	}
+		return cmd_attachments(argc, argv);
+	if (strcmp(argv[0], "avatars") == 0)
+		return cmd_avatars(argc, argv);
+	if (strcmp(argv[0], "dump") == 0)
+		return cmd_dump(argc, argv);
+	if (strcmp(argv[0], "sqlite") == 0)
+		return cmd_sqlite(argc, argv);
 
-	explicit_bzero(passphr, sizeof passphr);
-	return ret;
+	errx(1, "%s: Invalid command", argv[0]);
 }
