@@ -17,6 +17,8 @@
 #ifndef SBK_H
 #define SBK_H
 
+#include <stdio.h>
+
 #include "backup.pb-c.h"
 
 enum sbk_file_type {
