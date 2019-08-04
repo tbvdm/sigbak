@@ -119,7 +119,7 @@ dump_uint64(unsigned int ind, const char *name, uint64_t val)
 void
 dump_double(unsigned int ind, const char *name, double val)
 {
-	dump_var(ind, name, "string", "%g", val);
+	dump_var(ind, name, "double", "%g", val);
 }
 
 void
