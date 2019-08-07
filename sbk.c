@@ -766,7 +766,6 @@ sbk_ctx_new(void)
 	ctx->obuf = NULL;
 	ctx->ibufsize = 0;
 	ctx->obufsize = 0;
-	ctx->eof = 0;
 	ctx->error = NULL;
 
 	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
@@ -810,6 +809,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	}
 
 	ctx->firstframe = 1;
+	ctx->eof = 0;
 
 	if ((frm = sbk_get_frame(ctx)) == NULL)
 		goto error;
