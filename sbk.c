@@ -559,6 +559,89 @@ error:
 }
 
 static int
+sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
+    const char *val, size_t len)
+{
+	if (sqlite3_bind_blob(stm, idx, val, len, SQLITE_STATIC) !=
+	    SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_bind_double(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
+    double val)
+{
+	if (sqlite3_bind_double(stm, idx, val) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_bind_int64(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
+    sqlite3_int64 val)
+{
+	if (sqlite3_bind_int64(stm, idx, val) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_bind_null(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx)
+{
+	if (sqlite3_bind_null(stm, idx) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_bind_text(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
+    const char *val)
+{
+	if (sqlite3_bind_text(stm, idx, val, -1, SQLITE_STATIC) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_prepare(struct sbk_ctx *ctx, sqlite3_stmt **stm, const char *query)
+{
+	if (sqlite3_prepare_v2(ctx->db, query, -1, stm, NULL) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot prepare SQL statement");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	int ret;
+
+	ret = sqlite3_step(stm);
+	if (ret != SQLITE_ROW && ret != SQLITE_DONE)
+		sbk_error_setx(ctx, "Cannot execute SQL statement");
+
+	return ret;
+}
+
+static int
 sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 {
 	sqlite3_stmt	*sqlstm;
@@ -574,48 +657,41 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 	if (strncasecmp(stm->statement, "create table sqlite_", 20) == 0)
 		return 0;
 
-	if (sqlite3_prepare_v2(ctx->db, stm->statement, -1, &sqlstm, NULL) !=
-	    SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot prepare SQL statement");
+	if (sbk_sqlite_prepare(ctx, &sqlstm, stm->statement) == -1)
 		return -1;
-	}
 
 	for (i = 0; i < stm->n_parameters; i++) {
 		if (stm->parameters[i]->stringparamter != NULL)
-			ret = sqlite3_bind_text(sqlstm, i + 1,
-			    stm->parameters[i]->stringparamter, -1, NULL);
+			ret = sbk_sqlite_bind_text(ctx, sqlstm, i + 1,
+			    stm->parameters[i]->stringparamter);
 
 		else if (stm->parameters[i]->has_integerparameter)
-			ret = sqlite3_bind_int64(sqlstm, i + 1,
+			ret = sbk_sqlite_bind_int64(ctx, sqlstm, i + 1,
 			    stm->parameters[i]->integerparameter);
 
 		else if (stm->parameters[i]->has_doubleparameter)
-			ret = sqlite3_bind_double(sqlstm, i + 1,
+			ret = sbk_sqlite_bind_double(ctx, sqlstm, i + 1,
 			    stm->parameters[i]->doubleparameter);
 
 		else if (stm->parameters[i]->has_blobparameter)
-			ret = sqlite3_bind_blob(sqlstm, i + 1,
+			ret = sbk_sqlite_bind_blob(ctx, sqlstm, i + 1,
 			    stm->parameters[i]->blobparameter.data,
-			    stm->parameters[i]->blobparameter.len, NULL);
+			    stm->parameters[i]->blobparameter.len);
 
 		else if (stm->parameters[i]->has_nullparameter)
-			ret = sqlite3_bind_null(sqlstm, i + 1);
+			ret = sbk_sqlite_bind_null(ctx, sqlstm, i + 1);
 
 		else {
 			sbk_error_setx(ctx, "Unknown SQL parameter type");
 			goto error;
 		}
 
-		if (ret != SQLITE_OK) {
-			sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		if (ret == -1)
 			goto error;
-		}
 	}
 
-	if (sqlite3_step(sqlstm) != SQLITE_DONE) {
-		sbk_error_setx(ctx, "Cannot execute SQL statement");
+	if (sbk_sqlite_step(ctx, sqlstm) != SQLITE_DONE)
 		goto error;
-	}
 
 	sqlite3_finalize(sqlstm);
 	return 0;
