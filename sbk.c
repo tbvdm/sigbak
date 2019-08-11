@@ -41,6 +41,8 @@
 #define SBK_ROUNDS		250000
 #define SBK_HKDF_INFO		"Backup Export"
 
+#define SBK_GROUP_PREFIX	"__textsecure_group__!"
+
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
@@ -558,6 +560,13 @@ error:
 	return -1;
 }
 
+static void
+sbk_freezero_string(char *s)
+{
+	if (s != NULL)
+		freezero(s, strlen(s));
+}
+
 static int
 sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     const char *val, size_t len)
@@ -576,6 +585,17 @@ sbk_sqlite_bind_double(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     double val)
 {
 	if (sqlite3_bind_double(stm, idx, val) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_sqlite_bind_int(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx, int val)
+{
+	if (sqlite3_bind_int(stm, idx, val) != SQLITE_OK) {
 		sbk_error_setx(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
@@ -616,6 +636,58 @@ sbk_sqlite_bind_text(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
 	}
 
 	return 0;
+}
+
+static int
+sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
+    int idx)
+{
+#if notyet
+	const unsigned char	*txt;
+	int			 len;
+
+	*buf = NULL;
+
+	if (sqlite3_column_type(stm, idx) == SQLITE_NULL)
+		return 0;
+
+	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
+		sbk_error_setx(ctx, "Cannot get text column");
+		return -1;
+	}
+
+	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
+		sbk_error_setx(ctx, "Cannot get column size");
+		return -1;
+	}
+
+	if ((*buf = malloc((size_t)len + 1)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return -1;
+	}
+
+	memcpy(*buf, txt, (size_t)len + 1);
+	return len;
+#else
+	const unsigned char *txt;
+
+	*buf = NULL;
+
+	if (sqlite3_column_type(stm, idx) == SQLITE_NULL)
+		return 0;
+
+	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
+		sbk_error_setx(ctx, "Cannot get text column");
+		return -1;
+	}
+
+	if ((*buf = strdup(txt)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return -1;
+	}
+
+	return 0;
+#endif
 }
 
 static int
@@ -780,6 +852,385 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 error:
 	sqlite3_close(db);
 	return -1;
+}
+
+static void
+sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
+{
+	char		*contact, *name;
+	const char	*fmt;
+
+	fmt = NULL;
+
+	if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(sms->type))
+			fmt = "You marked your safety number with %s verified";
+		else
+			fmt = "You marked your safety number with %s verified "
+			    "from another device";
+	} else if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(sms->type))
+			fmt = "You marked your safety number with %s "
+			    "unverified";
+		else
+			fmt = "You marked your safety number with %s "
+			    "unverified from another device";
+	} else if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
+		fmt = "Your safety number with %s has changed";
+	else
+		switch (sms->type & SBK_BASE_TYPE_MASK) {
+		case SBK_INCOMING_CALL_TYPE:
+			fmt = "%s called you";
+			break;
+		case SBK_OUTGOING_CALL_TYPE:
+			fmt = "Called %s";
+			break;
+		case SBK_MISSED_CALL_TYPE:
+			fmt = "Missed call from %s";
+			break;
+		case SBK_JOINED_TYPE:
+			fmt = "%s is on Signal";
+			break;
+		}
+
+	if (fmt == NULL)
+		return;
+
+	if ((name = sbk_get_contact_name(ctx, sms->address)) != NULL)
+		contact = name;
+	else
+		contact = sms->address;
+
+	sbk_freezero_string(sms->body);
+
+	if (asprintf(&sms->body, fmt, contact) == -1)
+		sms->body = NULL;
+
+	free(name);
+}
+
+static void
+sbk_free_sms(struct sbk_sms *sms)
+{
+	sbk_freezero_string(sms->address);
+	sbk_freezero_string(sms->body);
+	freezero(sms, sizeof *sms);
+}
+
+void
+sbk_free_sms_list(struct sbk_sms_list *lst)
+{
+	struct sbk_sms *sms;
+
+	if (lst != NULL) {
+		while ((sms = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_sms(sms);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_sms_list *
+sbk_get_smses(struct sbk_ctx *ctx)
+{
+	struct sbk_sms_list	*lst;
+	struct sbk_sms		*sms;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, date, "
+	    "date_sent, thread_id, type FROM sms ORDER BY date") == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((sms = malloc(sizeof *sms)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		sms->address = NULL;
+		sms->body = NULL;
+
+		if (sbk_sqlite_column_text_copy(ctx, &sms->address, stm, 0) ==
+		    -1) {
+			sbk_free_sms(sms);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &sms->body, stm, 1) ==
+		    -1) {
+			sbk_free_sms(sms);
+			goto error;
+		}
+
+		sms->id = sqlite3_column_int(stm, 2);
+		sms->date_recv = sqlite3_column_int64(stm, 3);
+		sms->date_sent = sqlite3_column_int64(stm, 4);
+		sms->thread = sqlite3_column_int(stm, 5);
+		sms->type = sqlite3_column_int(stm, 6);
+
+		if (sms->body == NULL || sms->body[0] == '\0')
+			sbk_get_sms_body(ctx, sms);
+
+		SIMPLEQ_INSERT_TAIL(lst, sms, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_sms_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+static void
+sbk_free_mms(struct sbk_mms *mms)
+{
+	sbk_freezero_string(mms->address);
+	sbk_freezero_string(mms->body);
+	freezero(mms, sizeof *mms);
+}
+
+void
+sbk_free_mms_list(struct sbk_mms_list *lst)
+{
+	struct sbk_mms *mms;
+
+	if (lst != NULL) {
+		while ((mms = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_mms(mms);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_mms_list *
+sbk_get_mmses(struct sbk_ctx *ctx)
+{
+	struct sbk_mms_list	*lst;
+	struct sbk_mms		*mms;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+	    "date_received, date, thread_id, msg_box, part_count FROM mms "
+	    "ORDER BY date_received") == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((mms = malloc(sizeof *mms)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		mms->address = NULL;
+		mms->body = NULL;
+
+		if (sbk_sqlite_column_text_copy(ctx, &mms->address, stm, 0) ==
+		    -1) {
+			sbk_free_mms(mms);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &mms->body, stm, 1) ==
+		    -1) {
+			sbk_free_mms(mms);
+			goto error;
+		}
+
+		mms->id = sqlite3_column_int(stm, 2);
+		mms->date_recv = sqlite3_column_int64(stm, 3);
+		mms->date_sent = sqlite3_column_int64(stm, 4);
+		mms->thread = sqlite3_column_int(stm, 5);
+		mms->type = sqlite3_column_int(stm, 6);
+		mms->nattachments = sqlite3_column_int(stm, 7);
+		SIMPLEQ_INSERT_TAIL(lst, mms, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_mms_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+static void
+sbk_free_attachment(struct sbk_attachment *att)
+{
+	sbk_freezero_string(att->filename);
+	sbk_freezero_string(att->content_type);
+	freezero(att, sizeof *att);
+}
+
+void
+sbk_free_attachment_list(struct sbk_attachment_list *lst)
+{
+	struct sbk_attachment *att;
+
+	if (lst != NULL) {
+		while ((att = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_attachment(att);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_attachment_list *
+sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
+{
+	struct sbk_attachment_list	*lst;
+	struct sbk_attachment		*att;
+	sqlite3_stmt			*stm;
+	int				 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
+	    "data_size FROM part WHERE mid = ?") == -1)
+		goto error;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((att = malloc(sizeof *att)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		att->filename = NULL;
+		att->content_type = NULL;
+
+		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
+		    == -1) {
+			sbk_free_attachment(att);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
+		    1) == -1) {
+			sbk_free_attachment(att);
+			goto error;
+		}
+
+		att->id = sqlite3_column_int64(stm, 2);
+		att->size = sqlite3_column_int64(stm, 3);
+		SIMPLEQ_INSERT_TAIL(lst, att, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_attachment_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+char *
+sbk_get_contact_name(struct sbk_ctx *ctx, const char *addr)
+{
+	sqlite3_stmt	*stm;
+	char		*name;
+
+	if (addr == NULL)
+		return NULL;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name FROM "
+	    "recipient_preferences WHERE recipient_ids = ?") == -1)
+		return NULL;
+
+	name = NULL;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, addr) == -1)
+		goto out;
+
+	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
+		goto out;
+
+	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+
+out:
+	sqlite3_finalize(stm);
+	return name;
+}
+
+char *
+sbk_get_group_name(struct sbk_ctx *ctx, const char *id)
+{
+	sqlite3_stmt	*stm;
+	char		*name;
+
+	if (id == NULL)
+		return NULL;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
+	    "group_id = ?") == -1)
+		return NULL;
+
+	name = NULL;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
+		goto out;
+
+	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+
+out:
+	sqlite3_finalize(stm);
+	return name;
+}
+
+int
+sbk_is_group_address(const char *addr)
+{
+	return strncmp(addr, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1)
+	    == 0;
 }
 
 static int

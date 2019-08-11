@@ -120,6 +120,8 @@ main(int argc, char **argv)
 		return cmd_avatars(argc, argv);
 	if (strcmp(argv[0], "dump") == 0)
 		return cmd_dump(argc, argv);
+	if (strcmp(argv[0], "messages") == 0)
+		return cmd_messages(argc, argv);
 	if (strcmp(argv[0], "sqlite") == 0)
 		return cmd_sqlite(argc, argv);
 
