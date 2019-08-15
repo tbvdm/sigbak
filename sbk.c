@@ -1379,6 +1379,8 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	return 0;
 
 error:
+	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
+	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
 	sbk_free_frame(frm);
 	fclose(ctx->fp);
 	return -1;
