@@ -19,7 +19,6 @@
 #include <sys/stat.h>
 
 #include <err.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -39,19 +38,19 @@ maildir_create(const char *path)
 {
 	int fd;
 
-	if (mkdir(path, 0777) == -1 && errno != EEXIST)
+	if (mkdir(path, 0777) == -1)
 		err(1, "mkdir: %s", path);
 
 	if ((fd = open(path, O_RDONLY | O_DIRECTORY)) == -1)
 		err(1, "open: %s", path);
 
-	if (mkdirat(fd, "cur", 0777) == -1 && errno != EEXIST)
+	if (mkdirat(fd, "cur", 0777) == -1)
 		err(1, "mkdirat: %s/%s", path, "cur");
 
-	if (mkdirat(fd, "new", 0777) == -1 && errno != EEXIST)
+	if (mkdirat(fd, "new", 0777) == -1)
 		err(1, "mkdirat: %s/%s", path, "new");
 
-	if (mkdirat(fd, "tmp", 0777) == -1 && errno != EEXIST)
+	if (mkdirat(fd, "tmp", 0777) == -1)
 		err(1, "mkdirat: %s/%s", path, "tmp");
 
 	close(fd);
