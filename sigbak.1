@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd August 8, 2019
+.Dd August 14, 2019
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -61,11 +61,34 @@ is not specified.
 Print the raw contents of the file
 .Ar backup
 in a readable format on standard output.
-.It Ic messages Oo Fl p Ar passfile Oc Ar backup Ar file
+.It Ic messages Oo Fl f Ar format Oc Oo Fl p Ar passfile Oc Ar backup Ar dest
 Export all messages in the file
 .Ar backup
-as plain text to
-.Ar file .
+to
+.Ar dest .
+.Pp
+The
+.Fl f
+option may be used to specify the output format.
+Supported values are
+.Cm maildir
+and
+.Cm text
+(the default).
+.Pp
+With the
+.Cm maildir
+format, messages are written as emails in maildir format to
+.Ar dest .
+Message attachments are not included (yet).
+.Pp
+With the
+.Cm text
+format, messages are written as plain text to the file
+.Ar dest .
+If
+.Ar dest
+is omitted, messages are written to standard output instead.
 .It Ic sqlite Oo Fl p Ar passfile Oc Ar backup Ar database
 Export the SQLite database in the file
 .Ar backup
