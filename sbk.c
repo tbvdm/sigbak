@@ -725,44 +725,44 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 static int
-sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
+sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *sql)
 {
-	sqlite3_stmt	*sqlstm;
+	sqlite3_stmt	*stm;
 	size_t		 i;
 	int		 ret;
 
-	if (stm->statement == NULL) {
+	if (sql->statement == NULL) {
 		sbk_error_setx(ctx, "Invalid SQL frame");
 		return -1;
 	}
 
 	/* Don't try to create tables with reserved names */
-	if (strncasecmp(stm->statement, "create table sqlite_", 20) == 0)
+	if (strncasecmp(sql->statement, "create table sqlite_", 20) == 0)
 		return 0;
 
-	if (sbk_sqlite_prepare(ctx, &sqlstm, stm->statement) == -1)
+	if (sbk_sqlite_prepare(ctx, &stm, sql->statement) == -1)
 		return -1;
 
-	for (i = 0; i < stm->n_parameters; i++) {
-		if (stm->parameters[i]->stringparamter != NULL)
-			ret = sbk_sqlite_bind_text(ctx, sqlstm, i + 1,
-			    stm->parameters[i]->stringparamter);
+	for (i = 0; i < sql->n_parameters; i++) {
+		if (sql->parameters[i]->stringparamter != NULL)
+			ret = sbk_sqlite_bind_text(ctx, stm, i + 1,
+			    sql->parameters[i]->stringparamter);
 
-		else if (stm->parameters[i]->has_integerparameter)
-			ret = sbk_sqlite_bind_int64(ctx, sqlstm, i + 1,
-			    stm->parameters[i]->integerparameter);
+		else if (sql->parameters[i]->has_integerparameter)
+			ret = sbk_sqlite_bind_int64(ctx, stm, i + 1,
+			    sql->parameters[i]->integerparameter);
 
-		else if (stm->parameters[i]->has_doubleparameter)
-			ret = sbk_sqlite_bind_double(ctx, sqlstm, i + 1,
-			    stm->parameters[i]->doubleparameter);
+		else if (sql->parameters[i]->has_doubleparameter)
+			ret = sbk_sqlite_bind_double(ctx, stm, i + 1,
+			    sql->parameters[i]->doubleparameter);
 
-		else if (stm->parameters[i]->has_blobparameter)
-			ret = sbk_sqlite_bind_blob(ctx, sqlstm, i + 1,
-			    stm->parameters[i]->blobparameter.data,
-			    stm->parameters[i]->blobparameter.len);
+		else if (sql->parameters[i]->has_blobparameter)
+			ret = sbk_sqlite_bind_blob(ctx, stm, i + 1,
+			    sql->parameters[i]->blobparameter.data,
+			    sql->parameters[i]->blobparameter.len);
 
-		else if (stm->parameters[i]->has_nullparameter)
-			ret = sbk_sqlite_bind_null(ctx, sqlstm, i + 1);
+		else if (sql->parameters[i]->has_nullparameter)
+			ret = sbk_sqlite_bind_null(ctx, stm, i + 1);
 
 		else {
 			sbk_error_setx(ctx, "Unknown SQL parameter type");
@@ -773,14 +773,14 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *stm)
 			goto error;
 	}
 
-	if (sbk_sqlite_step(ctx, sqlstm) != SQLITE_DONE)
+	if (sbk_sqlite_step(ctx, stm) != SQLITE_DONE)
 		goto error;
 
-	sqlite3_finalize(sqlstm);
+	sqlite3_finalize(stm);
 	return 0;
 
 error:
-	sqlite3_finalize(sqlstm);
+	sqlite3_finalize(stm);
 	return -1;
 }
 
