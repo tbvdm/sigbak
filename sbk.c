@@ -691,6 +691,17 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 }
 
 static int
+sbk_sqlite_open(struct sbk_ctx *ctx, sqlite3 **db, const char *path)
+{
+	if (sqlite3_open(path, db) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot open database");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 sbk_sqlite_prepare(struct sbk_ctx *ctx, sqlite3_stmt **stm, const char *query)
 {
 	if (sqlite3_prepare_v2(ctx->db, query, -1, stm, NULL) != SQLITE_OK) {
@@ -782,10 +793,8 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (ctx->db != NULL)
 		return 0;
 
-	if (sqlite3_open(":memory:", &ctx->db) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot open database");
+	if (sbk_sqlite_open(ctx, &ctx->db, ":memory:") == -1)
 		goto error;
-	}
 
 	if (sbk_rewind(ctx) == -1)
 		goto error;
@@ -821,10 +830,8 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	sqlite3		*db;
 	sqlite3_backup	*bak;
 
-	if (sqlite3_open(path, &db) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot open database");
+	if (sbk_sqlite_open(ctx, &db, path) == -1)
 		goto error;
-	}
 
 	if (sbk_create_database(ctx) == -1)
 		goto error;
