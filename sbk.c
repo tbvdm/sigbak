@@ -119,6 +119,44 @@ sbk_error_setx(struct sbk_ctx *ctx, const char *fmt, ...)
 	va_end(ap);
 }
 
+static void
+sbk_error_sqlite_vsetd(struct sbk_ctx *ctx, sqlite3 *db, const char *fmt,
+    va_list ap)
+{
+	const char	*errmsg;
+	char		*msg;
+
+	sbk_error_clear(ctx);
+	errmsg = sqlite3_errmsg(db);
+
+	if (fmt == NULL || vasprintf(&msg, fmt, ap) == -1)
+		ctx->error = strdup(errmsg);
+	else if (asprintf(&ctx->error, "%s: %s", msg, errmsg) == -1)
+		ctx->error = msg;
+	else
+		free(msg);
+}
+
+static void
+sbk_error_sqlite_setd(struct sbk_ctx *ctx, sqlite3 *db, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	sbk_error_sqlite_vsetd(ctx, db, fmt, ap);
+	va_end(ap);
+}
+
+static void
+sbk_error_sqlite_set(struct sbk_ctx *ctx, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	sbk_error_sqlite_vsetd(ctx, ctx->db, fmt, ap);
+	va_end(ap);
+}
+
 static int
 sbk_init(void)
 {
@@ -573,7 +611,7 @@ sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
 {
 	if (sqlite3_bind_blob(stm, idx, val, len, SQLITE_STATIC) !=
 	    SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -585,7 +623,7 @@ sbk_sqlite_bind_double(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     double val)
 {
 	if (sqlite3_bind_double(stm, idx, val) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -596,7 +634,7 @@ static int
 sbk_sqlite_bind_int(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx, int val)
 {
 	if (sqlite3_bind_int(stm, idx, val) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -608,7 +646,7 @@ sbk_sqlite_bind_int64(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     sqlite3_int64 val)
 {
 	if (sqlite3_bind_int64(stm, idx, val) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -619,7 +657,7 @@ static int
 sbk_sqlite_bind_null(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx)
 {
 	if (sqlite3_bind_null(stm, idx) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -631,7 +669,7 @@ sbk_sqlite_bind_text(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     const char *val)
 {
 	if (sqlite3_bind_text(stm, idx, val, -1, SQLITE_STATIC) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot bind SQL parameter");
+		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -652,12 +690,12 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 		return 0;
 
 	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
-		sbk_error_setx(ctx, "Cannot get text column");
+		sbk_error_sqlite_set(ctx, "Cannot get column text");
 		return -1;
 	}
 
 	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
-		sbk_error_setx(ctx, "Cannot get column size");
+		sbk_error_sqlite_set(ctx, "Cannot get column size");
 		return -1;
 	}
 
@@ -677,7 +715,7 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 		return 0;
 
 	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
-		sbk_error_setx(ctx, "Cannot get text column");
+		sbk_error_sqlite_set(ctx, "Cannot get column text");
 		return -1;
 	}
 
@@ -694,7 +732,7 @@ static int
 sbk_sqlite_open(struct sbk_ctx *ctx, sqlite3 **db, const char *path)
 {
 	if (sqlite3_open(path, db) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot open database");
+		sbk_error_sqlite_setd(ctx, *db, "Cannot open database");
 		return -1;
 	}
 
@@ -705,7 +743,7 @@ static int
 sbk_sqlite_prepare(struct sbk_ctx *ctx, sqlite3_stmt **stm, const char *query)
 {
 	if (sqlite3_prepare_v2(ctx->db, query, -1, stm, NULL) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot prepare SQL statement");
+		sbk_error_sqlite_set(ctx, "Cannot prepare SQL statement");
 		return -1;
 	}
 
@@ -719,7 +757,7 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 
 	ret = sqlite3_step(stm);
 	if (ret != SQLITE_ROW && ret != SQLITE_DONE)
-		sbk_error_setx(ctx, "Cannot execute SQL statement");
+		sbk_error_sqlite_set(ctx, "Cannot execute SQL statement");
 
 	return ret;
 }
@@ -837,12 +875,12 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 		goto error;
 
 	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL) {
-		sbk_error_setx(ctx, "Cannot write database");
+		sbk_error_sqlite_setd(ctx, db, "Cannot write database");
 		goto error;
 	}
 
 	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE) {
-		sbk_error_setx(ctx, "Cannot write database");
+		sbk_error_sqlite_setd(ctx, db, "Cannot write database");
 		sqlite3_backup_finish(bak);
 		goto error;
 	}
@@ -850,7 +888,7 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	sqlite3_backup_finish(bak);
 
 	if (sqlite3_close(db) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot close database");
+		sbk_error_sqlite_setd(ctx, db, "Cannot close database");
 		return -1;
 	}
 
