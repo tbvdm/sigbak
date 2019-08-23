@@ -763,11 +763,37 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 static int
+sbk_bind_param(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
+    Signal__SqlStatement__SqlParameter *par)
+{
+	if (par->stringparamter != NULL)
+		return sbk_sqlite_bind_text(ctx, stm, idx,
+		    par->stringparamter);
+
+	if (par->has_integerparameter)
+		return sbk_sqlite_bind_int64(ctx, stm, idx,
+		    par->integerparameter);
+
+	if (par->has_doubleparameter)
+		return sbk_sqlite_bind_double(ctx, stm, idx,
+		    par->doubleparameter);
+
+	if (par->has_blobparameter)
+		return sbk_sqlite_bind_blob(ctx, stm, idx,
+		    par->blobparameter.data, par->blobparameter.len);
+
+	if (par->has_nullparameter)
+		return sbk_sqlite_bind_null(ctx, stm, idx);
+
+	sbk_error_setx(ctx, "Unknown SQL parameter type");
+	return -1;
+}
+
+static int
 sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *sql)
 {
 	sqlite3_stmt	*stm;
 	size_t		 i;
-	int		 ret;
 
 	if (sql->statement == NULL) {
 		sbk_error_setx(ctx, "Invalid SQL frame");
@@ -781,35 +807,9 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *sql)
 	if (sbk_sqlite_prepare(ctx, &stm, sql->statement) == -1)
 		return -1;
 
-	for (i = 0; i < sql->n_parameters; i++) {
-		if (sql->parameters[i]->stringparamter != NULL)
-			ret = sbk_sqlite_bind_text(ctx, stm, i + 1,
-			    sql->parameters[i]->stringparamter);
-
-		else if (sql->parameters[i]->has_integerparameter)
-			ret = sbk_sqlite_bind_int64(ctx, stm, i + 1,
-			    sql->parameters[i]->integerparameter);
-
-		else if (sql->parameters[i]->has_doubleparameter)
-			ret = sbk_sqlite_bind_double(ctx, stm, i + 1,
-			    sql->parameters[i]->doubleparameter);
-
-		else if (sql->parameters[i]->has_blobparameter)
-			ret = sbk_sqlite_bind_blob(ctx, stm, i + 1,
-			    sql->parameters[i]->blobparameter.data,
-			    sql->parameters[i]->blobparameter.len);
-
-		else if (sql->parameters[i]->has_nullparameter)
-			ret = sbk_sqlite_bind_null(ctx, stm, i + 1);
-
-		else {
-			sbk_error_setx(ctx, "Unknown SQL parameter type");
+	for (i = 0; i < sql->n_parameters; i++)
+		if (sbk_bind_param(ctx, stm, i + 1, sql->parameters[i]) == -1)
 			goto error;
-		}
-
-		if (ret == -1)
-			goto error;
-	}
 
 	if (sbk_sqlite_step(ctx, stm) != SQLITE_DONE)
 		goto error;
