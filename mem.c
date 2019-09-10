@@ -39,18 +39,6 @@ mem_cmp(struct mem_entry *e, struct mem_entry *f)
 	return (e->ptr < f->ptr) ? -1 : (e->ptr > f->ptr);
 }
 
-static void
-mem_insert(struct mem_entry *e)
-{
-	RB_INSERT(mem_tree, &mem_tree, e);
-}
-
-static void
-mem_remove(struct mem_entry *e)
-{
-	RB_REMOVE(mem_tree, &mem_tree, e);
-}
-
 static struct mem_entry *
 mem_find(void *ptr)
 {
@@ -74,7 +62,7 @@ mem_malloc(size_t size)
 	}
 
 	e->size = size;
-	mem_insert(e);
+	RB_INSERT(mem_tree, &mem_tree, e);
 	return e->ptr;
 }
 
@@ -94,10 +82,10 @@ mem_realloc(void *ptr, size_t size)
 	if ((ptr = recallocarray(e->ptr, e->size, size, 1)) == NULL)
 		return NULL;
 
-	mem_remove(e);
+	RB_REMOVE(mem_tree, &mem_tree, e);
 	e->ptr = ptr;
 	e->size = size;
-	mem_insert(e);
+	RB_INSERT(mem_tree, &mem_tree, e);
 	return e->ptr;
 }
 
@@ -109,7 +97,7 @@ mem_free(void *ptr)
 	if (ptr == NULL || (e = mem_find(ptr)) == NULL)
 		return;
 
-	mem_remove(e);
+	RB_REMOVE(mem_tree, &mem_tree, e);
 	freezero(e->ptr, e->size);
 	free(e);
 }
