@@ -31,7 +31,8 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	struct sbk_ctx	*ctx;
 	struct sbk_file	*file;
 	FILE		*fp;
-	char		*cmd, *outdir, *passfile, passphr[128];
+	char		*cmd, *passfile, passphr[128];
+	const char	*outdir;
 	int		 c, ret;
 
 	cmd = argv[0];
