@@ -46,9 +46,6 @@ cmd_sqlite(int argc, char **argv)
 	if (argc != 2)
 		goto usage;
 
-	if (passfile != NULL && unveil(passfile, "r") == -1)
-		err(1, "unveil");
-
 	if (unveil(argv[0], "r") == -1)
 		err(1, "unveil");
 
@@ -63,8 +60,16 @@ cmd_sqlite(int argc, char **argv)
 	if (unveil("/dev/urandom", "r") == -1)
 		err(1, "unveil");
 
-	if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
-		err(1, "pledge");
+	if (passfile == NULL) {
+		if (pledge("stdio rpath wpath cpath flock tty", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (unveil(passfile, "r") == -1)
+			err(1, "unveil");
+
+		if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
+			err(1, "pledge");
+	}
 
 	/* Prevent SQLite from writing to an existing file */
 	if ((fd = open(argv[1], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1)
@@ -88,6 +93,10 @@ cmd_sqlite(int argc, char **argv)
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
+
+	if (passfile == NULL &&
+	    pledge("stdio rpath wpath cpath flock", NULL) == -1)
+		err(1, "pledge");
 
 	if ((ret = sbk_write_database(ctx, argv[1])) == -1)
 		warnx("%s", sbk_error(ctx));

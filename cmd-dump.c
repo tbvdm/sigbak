@@ -236,14 +236,19 @@ cmd_dump(int argc, char **argv)
 	if (argc != 1)
 		goto usage;
 
-	if (passfile != NULL && unveil(passfile, "r") == -1)
-		err(1, "unveil");
-
 	if (unveil(argv[0], "r") == -1)
 		err(1, "unveil");
 
-	if (pledge("stdio rpath", NULL) == -1)
-		err(1, "pledge");
+	if (passfile == NULL) {
+		if (pledge("stdio rpath tty", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (unveil(passfile, "r") == -1)
+			err(1, "unveil");
+
+		if (pledge("stdio rpath", NULL) == -1)
+			err(1, "pledge");
+	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
@@ -261,6 +266,10 @@ cmd_dump(int argc, char **argv)
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
+
+	if (pledge("stdio", NULL) == -1)
+		err(1, "pledge");
+
 	ret = 1;
 
 	while ((frm = sbk_get_frame(ctx)) != NULL) {

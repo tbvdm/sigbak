@@ -63,14 +63,19 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 		goto usage;
 	}
 
-	if (passfile != NULL && unveil(passfile, "r") == -1)
-		err(1, "unveil");
-
 	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1)
 		err(1, "unveil");
 
-	if (pledge("stdio rpath wpath cpath", NULL) == -1)
-		err(1, "pledge");
+	if (passfile == NULL) {
+		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (unveil(passfile, "r") == -1)
+			err(1, "unveil");
+
+		if (pledge("stdio rpath wpath cpath", NULL) == -1)
+			err(1, "pledge");
+	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
@@ -95,6 +100,9 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 		sbk_ctx_free(ctx);
 		return 1;
 	}
+
+	if (pledge("stdio wpath cpath", NULL) == -1)
+		err(1, "pledge");
 
 	ret = 1;
 

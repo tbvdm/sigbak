@@ -464,14 +464,19 @@ cmd_messages(int argc, char **argv)
 		goto usage;
 	}
 
-	if (passfile != NULL && unveil(passfile, "r") == -1)
-		err(1, "unveil");
-
 	if (unveil(argv[0], "r") == -1)
 		err(1, "unveil");
 
-	if (pledge("stdio rpath wpath cpath", NULL) == -1)
-		err(1, "pledge");
+	if (passfile == NULL) {
+		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (unveil(passfile, "r") == -1)
+			err(1, "unveil");
+
+		if (pledge("stdio rpath wpath cpath", NULL) == -1)
+			err(1, "pledge");
+	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
 		errx(1, "Cannot create backup context");
@@ -487,6 +492,9 @@ cmd_messages(int argc, char **argv)
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
+
+	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
+		err(1, "pledge");
 
 	switch (format) {
 	case FORMAT_MAILDIR:
