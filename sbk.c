@@ -680,7 +680,7 @@ static int
 sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
     int idx)
 {
-#if notyet
+#ifdef notyet
 	const unsigned char	*txt;
 	int			 len;
 
