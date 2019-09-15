@@ -607,7 +607,7 @@ sbk_freezero_string(char *s)
 
 static int
 sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
-    const char *val, size_t len)
+    const void *val, size_t len)
 {
 	if (sqlite3_bind_blob(stm, idx, val, len, SQLITE_STATIC) !=
 	    SQLITE_OK) {
