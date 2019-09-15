@@ -111,7 +111,7 @@ dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
 static void
 dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 {
-	dump_var(ind, name, "Avatar", NULL, NULL);
+	dump_var(ind, name, "Avatar", NULL);
 	if (avt->name != NULL)
 		dump_string(ind + 1, "name", avt->name);
 	if (avt->has_length)
@@ -132,7 +132,7 @@ static void
 dump_preference(unsigned int ind, const char *name,
     Signal__SharedPreference *prf)
 {
-	dump_var(ind, name, "SharedPreference", NULL, NULL);
+	dump_var(ind, name, "SharedPreference", NULL);
 	if (prf->file != NULL)
 		dump_string(ind + 1, "file", prf->file);
 	if (prf->key != NULL)
