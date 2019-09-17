@@ -14,11 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "config.h"
+
 #include <sys/types.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
 
-#include <err.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "compat.h"
 #include "sbk.h"
 #include "sigbak.h"
 

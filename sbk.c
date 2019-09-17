@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "config.h"
+
 #include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -24,11 +26,11 @@
 #include <strings.h>
 
 #include <openssl/evp.h>
-#include <openssl/hkdf.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <sqlite3.h>
 
+#include "compat.h"
 #include "mem.h"
 #include "sbk.h"
 

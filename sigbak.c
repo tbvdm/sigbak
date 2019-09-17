@@ -14,16 +14,17 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "config.h"
+
 #include <sys/stat.h>
 
-#include <err.h>
 #include <libgen.h>
-#include <readpassphrase.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "compat.h"
 #include "sbk.h"
 #include "sigbak.h"
 

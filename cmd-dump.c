@@ -14,7 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <err.h>
+#include "config.h"
+
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -22,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "compat.h"
 #include "sbk.h"
 #include "sigbak.h"
 

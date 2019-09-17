@@ -14,10 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/tree.h>
+#include "config.h"
 
 #include <errno.h>
 #include <stdlib.h>
+
+#include "compat.h"
 
 struct mem_entry {
 	void			*ptr;

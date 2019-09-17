@@ -17,8 +17,6 @@
 #ifndef SBK_H
 #define SBK_H
 
-#include <sys/queue.h>
-
 #include <stdint.h>
 #include <stdio.h>
 
