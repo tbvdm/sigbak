@@ -27,7 +27,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "compat.h"
 #include "sigbak.h"
 
 #define FORMAT_MAILDIR	0

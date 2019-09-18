@@ -19,7 +19,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include "compat.h"
+#include "sigbak.h"
 
 struct mem_entry {
 	void			*ptr;

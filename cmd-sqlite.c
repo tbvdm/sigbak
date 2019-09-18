@@ -20,7 +20,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "compat.h"
 #include "sigbak.h"
 
 int

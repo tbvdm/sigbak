@@ -21,6 +21,7 @@
 #include <stdio.h>
 
 #include "backup.pb-c.h"
+#include "compat.h"
 
 /*
  * Types for sms and mms messages

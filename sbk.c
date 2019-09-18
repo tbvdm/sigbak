@@ -30,7 +30,6 @@
 #include <openssl/sha.h>
 #include <sqlite3.h>
 
-#include "compat.h"
 #include "sigbak.h"
 
 #define SBK_IV_LEN		16
