@@ -29,8 +29,7 @@
 #include <openssl/sha.h>
 #include <sqlite3.h>
 
-#include "mem.h"
-#include "sbk.h"
+#include "sigbak.h"
 
 #define SBK_IV_LEN		16
 #define SBK_KEY_LEN		32

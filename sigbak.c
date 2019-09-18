@@ -24,7 +24,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "sbk.h"
 #include "sigbak.h"
 
 void
