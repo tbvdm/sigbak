@@ -34,4 +34,4 @@ install: sigbak
 	$(INSTALL) -dm 755 $(DESTDIR)$(BINDIR)
 	$(INSTALL) -dm 755 $(DESTDIR)$(MANDIR)
 	$(INSTALL) -m 555 sigbak $(DESTDIR)$(BINDIR)
-	$(INSTALL) -m 444 sigbak.1 $(DESTDIR)$(BINDIR)
+	$(INSTALL) -m 444 sigbak.1 $(DESTDIR)$(MANDIR)
