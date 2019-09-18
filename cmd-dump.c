@@ -24,7 +24,6 @@
 #include <unistd.h>
 
 #include "compat.h"
-#include "sbk.h"
 #include "sigbak.h"
 
 static void
