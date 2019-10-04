@@ -95,7 +95,7 @@
 #elif defined(__linux__)
 
 /*
- * Linux (tested on Debian 10.1)
+ * Linux (tested on Debian 9.11 and 10.1)
  */
 
 #define _GNU_SOURCE
@@ -108,12 +108,12 @@
 /* #define HAVE_GETPROGNAME */
 /* #define HAVE_PLEDGE */
 /* #define HAVE_READPASSPHRASE */
-#define HAVE_REALLOCARRAY
+/* #define HAVE_REALLOCARRAY */
 /* #define HAVE_RECALLOCARRAY */
 /* #define HAVE_UNVEIL */
 #define HAVE___ATTRIBUTE__
 
-#define HAVE_EXPLICIT_BZERO
+/* #define HAVE_EXPLICIT_BZERO */
 /* #define HAVE_EXPLICIT_MEMSET */
 /* #define HAVE_MEMSET_S */
 

@@ -3,7 +3,7 @@ BINDIR?=	$(PREFIX)/bin
 MANDIR?=	$(PREFIX)/man/man1
 
 INSTALL?=	install
-PROTOC?=	protoc
+PROTOC?=	protoc-c
 
 CFLAGS+=	$(shell pkg-config --cflags libcrypto libprotobuf-c sqlite3)
 LDFLAGS+=	$(shell pkg-config --libs libcrypto libprotobuf-c sqlite3)
