@@ -308,15 +308,27 @@ sbk_decrypt_reset(struct sbk_ctx *ctx)
 }
 
 static int
+sbk_read(struct sbk_ctx *ctx, void *ptr, size_t size)
+{
+	if (fread(ptr, size, 1, ctx->fp) != 1) {
+		if (ferror(ctx->fp))
+			sbk_error_set(ctx, NULL);
+		else
+			sbk_error_setx(ctx, "Unexpected end of file");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 {
 	int32_t		len;
 	unsigned char	lenbuf[4];
 
-	if (fread(lenbuf, sizeof lenbuf, 1, ctx->fp) != 1) {
-		sbk_error_set(ctx, "Cannot read backup");
+	if (sbk_read(ctx, lenbuf, sizeof lenbuf) == -1)
 		return -1;
-	}
 
 	len = (lenbuf[0] << 24) | (lenbuf[1] << 16) | (lenbuf[2] << 8) |
 	    lenbuf[3];
@@ -329,10 +341,8 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	if (sbk_enlarge_buffers(ctx, len) == -1)
 		return -1;
 
-	if (fread(ctx->ibuf, len, 1, ctx->fp) != 1) {
-		sbk_error_set(ctx, "Cannot read backup");
+	if (sbk_read(ctx, ctx->ibuf, len) == -1)
 		return -1;
-	}
 
 	*frmlen = len;
 	return 0;
@@ -562,10 +572,8 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	for (len = file->len; len > 0; len -= ibuflen) {
 		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
 
-		if (fread(ctx->ibuf, ibuflen, 1, ctx->fp) != 1) {
-			sbk_error_set(ctx, "Cannot read backup");
+		if (sbk_read(ctx, ctx->ibuf, ibuflen) == -1)
 			goto error;
-		}
 
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 			goto error;
@@ -576,10 +584,8 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		}
 	}
 
-	if (fread(mac, sizeof mac, 1, ctx->fp) != 1) {
-		sbk_error_set(ctx, "Cannot read backup");
+	if (sbk_read(ctx, mac, sizeof mac) == -1)
 		goto error;
-	}
 
 	obuflen = 0;
 
