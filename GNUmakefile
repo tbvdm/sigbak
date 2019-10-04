@@ -3,10 +3,11 @@ BINDIR?=	$(PREFIX)/bin
 MANDIR?=	$(PREFIX)/man/man1
 
 INSTALL?=	install
+PKGCONFIG?=	pkg-config
 PROTOC?=	protoc-c
 
-CFLAGS+=	$(shell pkg-config --cflags libcrypto libprotobuf-c sqlite3)
-LDFLAGS+=	$(shell pkg-config --libs libcrypto libprotobuf-c sqlite3)
+CFLAGS+=	$(shell $(PKGCONFIG) --cflags libcrypto libprotobuf-c sqlite3)
+LDFLAGS+=	$(shell $(PKGCONFIG) --libs libcrypto libprotobuf-c sqlite3)
 
 OBJS=		backup.pb-c.o cmd-attachments.o cmd-dump.o cmd-messages.o \
 		cmd-sqlite.o mem.o sbk.o sigbak.o
