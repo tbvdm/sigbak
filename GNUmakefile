@@ -23,7 +23,7 @@ all: sigbak
 
 sigbak: $(OBJS)
 
-$(OBJS): backup.pb-c.h
+$(OBJS): backup.pb-c.h config.h
 
 backup.pb-c.c backup.pb-c.h: backup.proto
 	$(PROTOC) --c_out=. backup.proto
