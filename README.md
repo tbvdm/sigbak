@@ -1,22 +1,39 @@
 sigbak
 ======
 
-sigbak is a command-line utility to read the encrypted backups created by the
-[Signal messaging app][1]. It can be used to extract messages and other data.
+[sigbak][1] is a command-line utility to read the encrypted backups created by
+the [Signal messaging app][2]. It can be used to extract messages and other
+data.
 
-sigbak depends on [LibreSSL][2]'s libcrypto, [protobuf-c][3] and [SQLite][4].
-In addition, it uses several OpenBSD extensions such as [explicit\_bzero(3)][5]
-and [readpassphrase(3)][6]. A portability layer may be added later.
+Documentation is available in the [manual page][3].
 
-The repository is [here][7].
+sigbak-portable
+---------------
 
-Documentation is available in the [manual page][8].
+This repository contains sigbak-portable, a portable version of sigbak. sigbak
+proper currently builds on OpenBSD only. sigbak-portable adds a portability
+layer so that it will build on other Unix systems.
 
-[1]: https://www.signal.org/
-[2]: https://www.libressl.org/
-[3]: https://github.com/protobuf-c/protobuf-c
-[4]: https://www.sqlite.org/
-[5]: https://man.openbsd.org/explicit_bzero.3
-[6]: https://man.openbsd.org/readpassphrase.3
-[7]: https://www.kariliq.nl/hg/sigbak/
-[8]: https://www.kariliq.nl/sigbak/manual.html
+Dependencies
+------------
+
+sigbak-portable depends on [libcrypto][4], [protobuf-c][5] and [SQLite][6]. A
+C compiler, [GNU make][7] and [pkg-config][8] are also needed.
+
+Building
+--------
+
+First check if config.h is suited to your system. Edit it if necessary.
+config.h already has support for several systems. On those systems, no editing
+should be necessary.
+
+Then run `make` (or `gmake`) and, if desired, `make install`.
+
+[1]: https://www.kariliq.nl/sigbak/
+[2]: https://www.signal.org/
+[3]: https://www.kariliq.nl/sigbak/manual.html
+[4]: https://man.openbsd.org/crypto.3
+[5]: https://github.com/protobuf-c/protobuf-c
+[6]: https://www.sqlite.org/
+[7]: https://www.gnu.org/software/make/
+[8]: https://www.freedesktop.org/wiki/Software/pkg-config/
