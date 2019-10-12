@@ -119,4 +119,16 @@
 #define HAVE_GETPAGESIZE
 #define HAVE___ATTRIBUTE__
 
+/* Indirectly include features.h for __GLIBC_PREREQ */
+#include <stdio.h>
+
+#ifdef __GLIBC_PREREQ
+#if __GLIBC_PREREQ(2, 25)
+#define HAVE_EXPLICIT_BZERO
+#endif
+#if __GLIBC_PREREQ(2, 26)
+#define HAVE_REALLOCARRAY
+#endif
+#endif
+
 #endif
