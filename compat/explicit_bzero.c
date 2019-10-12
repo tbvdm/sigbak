@@ -8,9 +8,9 @@
 
 #ifndef HAVE_EXPLICIT_BZERO
 
-#include <string.h>
-
 #ifdef HAVE_EXPLICIT_MEMSET
+
+#include <string.h>
 
 void
 explicit_bzero(void *buf, size_t len)
@@ -22,6 +22,8 @@ explicit_bzero(void *buf, size_t len)
 
 #define __STDC_WANT_LIB_EXT1__ 1
 
+#include <string.h>
+
 void
 explicit_bzero(void *buf, size_t len)
 {
@@ -29,6 +31,8 @@ explicit_bzero(void *buf, size_t len)
 }
 
 #else
+
+#include <string.h>
 
 __attribute__((weak)) void
 __explicit_bzero_hook(void *buf, size_t len)
