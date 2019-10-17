@@ -414,14 +414,20 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	ibuflen -= SBK_MAC_LEN;
 	mac = ctx->ibuf + ibuflen;
 
-	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
-		goto error;
+	if (sbk_decrypt_init(ctx, ctx->counter) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
-	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
-		goto error;
+	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
-	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
-		goto error;
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
 	if (sbk_decrypt_reset(ctx) == -1)
 		return NULL;
@@ -436,10 +442,6 @@ sbk_get_frame(struct sbk_ctx *ctx)
 
 	ctx->counter++;
 	return frm;
-
-error:
-	sbk_decrypt_reset(ctx);
-	return NULL;
 }
 
 void
