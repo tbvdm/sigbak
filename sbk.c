@@ -50,7 +50,7 @@ struct sbk_ctx {
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
 	unsigned char	 mackey[SBK_MACKEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
-	int32_t		 counter;
+	uint32_t	 counter;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
 	unsigned char	*obuf;
@@ -65,7 +65,7 @@ struct sbk_file {
 	char		*name;
 	uint32_t	 len;
 	long		 off;
-	int32_t		 counter;
+	uint32_t	 counter;
 };
 
 static ProtobufCAllocator sbk_protobuf_alloc = {
@@ -219,7 +219,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 }
 
 static int
-sbk_decrypt_init(struct sbk_ctx *ctx, int32_t counter)
+sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
 	ctx->iv[0] = counter >> 24;
 	ctx->iv[1] = counter >> 16;
