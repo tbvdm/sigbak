@@ -410,9 +410,11 @@ sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 		}
 		file->len = frm->avatar->length;
 	} else if (frm->sticker != NULL) {
-		/* TODO */
-		free(file);
-		return NULL;
+		if (!frm->sticker->has_length) {
+			sbk_error_setx(ctx, "Invalid sticker frame");
+			goto error;
+		}
+		file->len = frm->sticker->length;
 	}
 
 	file->counter = ctx->counter;
