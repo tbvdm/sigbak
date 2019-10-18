@@ -7,7 +7,7 @@ PKG_CONFIG?=	pkg-config
 PROTOC?=	protoc-c
 
 CFLAGS+=	$(shell $(PKG_CONFIG) --cflags libcrypto libprotobuf-c sqlite3)
-LDFLAGS+=	$(shell $(PKG_CONFIG) --libs libcrypto libprotobuf-c sqlite3)
+LDLIBS+=	$(shell $(PKG_CONFIG) --libs libcrypto libprotobuf-c sqlite3)
 
 OBJS=		backup.pb-c.o cmd-attachments.o cmd-dump.o cmd-messages.o \
 		cmd-sqlite.o mem.o sbk.o sigbak.o
