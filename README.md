@@ -18,7 +18,7 @@ Dependencies
 ------------
 
 sigbak-portable depends on [libcrypto][4], [protobuf-c][5] and [SQLite][6]. A
-C compiler, [GNU make][7] and [pkg-config][8] are also needed.
+C compiler, make and pkg-config are also needed.
 
 Building
 --------
@@ -27,7 +27,7 @@ First check if config.h is suited to your system. Edit it if necessary.
 config.h already has support for several systems. On those systems, no editing
 should be necessary.
 
-Then run `make` (or `gmake`) and, if desired, `make install`.
+Then run `make` and, if desired, `make install`.
 
 [1]: https://www.kariliq.nl/sigbak/
 [2]: https://www.signal.org/
@@ -35,5 +35,3 @@ Then run `make` (or `gmake`) and, if desired, `make install`.
 [4]: https://man.openbsd.org/crypto.3
 [5]: https://github.com/protobuf-c/protobuf-c
 [6]: https://www.sqlite.org/
-[7]: https://www.gnu.org/software/make/
-[8]: https://www.freedesktop.org/wiki/Software/pkg-config/
