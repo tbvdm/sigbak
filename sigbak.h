@@ -93,11 +93,6 @@
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
 
-enum sbk_file_type {
-	SBK_ATTACHMENT,
-	SBK_AVATAR
-};
-
 struct sbk_ctx;
 
 struct sbk_file;
@@ -147,17 +142,10 @@ void		 sbk_close(struct sbk_ctx *);
 int		 sbk_eof(struct sbk_ctx *);
 int		 sbk_rewind(struct sbk_ctx *);
 
-Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *);
-void		 sbk_free_frame(Signal__BackupFrame *);
-int		 sbk_has_file_data(Signal__BackupFrame *);
-int		 sbk_skip_file_data(struct sbk_ctx *, Signal__BackupFrame *);
-
-struct sbk_file	*sbk_get_file(struct sbk_ctx *);
-void		 sbk_free_file(struct sbk_file *);
-enum sbk_file_type sbk_get_file_type(struct sbk_file *);
-const char	*sbk_get_file_name(struct sbk_file *);
-size_t		 sbk_get_file_size(struct sbk_file *);
+Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *, struct sbk_file **);
 int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
+void		 sbk_free_frame(Signal__BackupFrame *);
+void		 sbk_free_file(struct sbk_file *);
 
 struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *);
 void		 sbk_free_sms_list(struct sbk_sms_list *);

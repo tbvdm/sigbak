@@ -269,29 +269,18 @@ cmd_dump(int argc, char **argv)
 	if (pledge("stdio", NULL) == -1)
 		err(1, "pledge");
 
-	ret = 1;
-
-	while ((frm = sbk_get_frame(ctx)) != NULL) {
+	while ((frm = sbk_get_frame(ctx, NULL)) != NULL) {
 		dump_frame(frm);
-
-		if (sbk_has_file_data(frm) &&
-		    sbk_skip_file_data(ctx, frm) == -1) {
-			warnx("%s: %s", argv[0], sbk_error(ctx));
-			goto out;
-		}
-
 		sbk_free_frame(frm);
 	}
 
-	if (!sbk_eof(ctx)) {
+	if (sbk_eof(ctx))
+		ret = 0;
+	else {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
-		goto out;
+		ret = 1;
 	}
 
-	ret = 0;
-
-out:
-	sbk_free_frame(frm);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;

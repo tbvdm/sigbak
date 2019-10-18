@@ -15,7 +15,6 @@
  */
 
 #include <errno.h>
-#include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -61,10 +60,8 @@ struct sbk_ctx {
 };
 
 struct sbk_file {
-	enum sbk_file_type type;
-	char		*name;
+	long		 pos;
 	uint32_t	 len;
-	long		 off;
 	uint32_t	 counter;
 };
 
@@ -347,14 +344,14 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	return 0;
 }
 
-int
+static int
 sbk_has_file_data(Signal__BackupFrame *frm)
 {
 	return frm->attachment != NULL || frm->avatar != NULL ||
 	    frm->sticker != NULL;
 }
 
-int
+static int
 sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
@@ -385,12 +382,56 @@ sbk_unpack_frame(unsigned char *buf, size_t len)
 	return signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf);
 }
 
+static struct sbk_file *
+sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
+{
+	struct sbk_file *file;
+
+	if ((file = malloc(sizeof *file)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	if ((file->pos = ftell(ctx->fp)) == -1) {
+		sbk_error_set(ctx, NULL);
+		goto error;
+	}
+
+	if (frm->attachment != NULL) {
+		if (!frm->attachment->has_length) {
+			sbk_error_setx(ctx, "Invalid attachment frame");
+			goto error;
+		}
+		file->len = frm->attachment->length;
+	} else if (frm->avatar != NULL) {
+		if (!frm->avatar->has_length) {
+			sbk_error_setx(ctx, "Invalid avatar frame");
+			goto error;
+		}
+		file->len = frm->avatar->length;
+	} else if (frm->sticker != NULL) {
+		/* TODO */
+		free(file);
+		return NULL;
+	}
+
+	file->counter = ctx->counter;
+	return file;
+
+error:
+	free(file);
+	return NULL;
+}
+
 Signal__BackupFrame *
-sbk_get_frame(struct sbk_ctx *ctx)
+sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 {
 	Signal__BackupFrame	*frm;
 	size_t			 ibuflen, obuflen;
 	unsigned char		*mac;
+
+	if (file != NULL)
+		*file = NULL;
 
 	if (ctx->eof)
 		return NULL;
@@ -441,6 +482,19 @@ sbk_get_frame(struct sbk_ctx *ctx)
 		ctx->eof = 1;
 
 	ctx->counter++;
+
+	if (sbk_has_file_data(frm)) {
+		if (file != NULL && (*file = sbk_get_file(ctx, frm)) == NULL) {
+			sbk_free_frame(frm);
+			return NULL;
+		}
+
+		if (sbk_skip_file_data(ctx, frm) == -1) {
+			sbk_free_frame(frm);
+			return NULL;
+		}
+	}
+
 	return frm;
 }
 
@@ -451,101 +505,10 @@ sbk_free_frame(Signal__BackupFrame *frm)
 		signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
 }
 
-struct sbk_file *
-sbk_get_file(struct sbk_ctx *ctx)
-{
-	struct sbk_file		*file;
-	Signal__BackupFrame	*frm;
-
-	while ((frm = sbk_get_frame(ctx)) != NULL)
-		if (sbk_has_file_data(frm))
-			break;
-
-	if (frm == NULL)
-		return NULL;
-
-	if ((file = malloc(sizeof *file)) == NULL) {
-		sbk_error_set(ctx, NULL);
-		goto error;
-	}
-
-	file->counter = ctx->counter;
-
-	if ((file->off = ftell(ctx->fp)) == -1) {
-		sbk_error_set(ctx, "Cannot get file offset");
-		goto error;
-	}
-
-	if (sbk_skip_file_data(ctx, frm) == -1)
-		goto error;
-
-	if (frm->attachment != NULL) {
-		if (!frm->attachment->has_attachmentid ||
-		    !frm->attachment->has_length) {
-			sbk_error_setx(ctx, "Invalid attachment frame");
-			goto error;
-		}
-
-		if (asprintf(&file->name, "%" PRIu64,
-		    frm->attachment->attachmentid) == -1) {
-			sbk_error_setx(ctx, "Cannot get attachment name");
-			goto error;
-		}
-
-		file->len = frm->attachment->length;
-		file->type = SBK_ATTACHMENT;
-	} else if (frm->avatar != NULL) {
-		if (frm->avatar->name == NULL || !frm->avatar->has_length) {
-			sbk_error_setx(ctx, "Invalid avatar frame");
-			goto error;
-		}
-
-		if ((file->name = strdup(frm->avatar->name)) == NULL) {
-			sbk_error_set(ctx, NULL);
-			goto error;
-		}
-
-		file->len = frm->avatar->length;
-		file->type = SBK_AVATAR;
-	} else if (frm->sticker != NULL) {
-		/* TODO */
-		goto error;
-	}
-
-	sbk_free_frame(frm);
-	return file;
-
-error:
-	sbk_free_frame(frm);
-	freezero(file, sizeof *file);
-	return NULL;
-}
-
 void
 sbk_free_file(struct sbk_file *file)
 {
-	if (file != NULL) {
-		freezero(file->name, strlen(file->name));
-		freezero(file, sizeof *file);
-	}
-}
-
-enum sbk_file_type
-sbk_get_file_type(struct sbk_file *file)
-{
-	return file->type;
-}
-
-const char *
-sbk_get_file_name(struct sbk_file *file)
-{
-	return file->name;
-}
-
-size_t
-sbk_get_file_size(struct sbk_file *file)
-{
-	return file->len;
+	freezero(file, sizeof *file);
 }
 
 int
@@ -557,7 +520,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
-	if (fseek(ctx->fp, file->off, SEEK_SET) == -1) {
+	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
 		sbk_error_set(ctx, "Cannot seek");
 		return -1;
 	}
@@ -846,16 +809,11 @@ sbk_create_database(struct sbk_ctx *ctx)
 
 	ret = 0;
 
-	while ((frm = sbk_get_frame(ctx)) != NULL) {
+	while ((frm = sbk_get_frame(ctx, NULL)) != NULL) {
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx, frm->statement);
-		else if (sbk_has_file_data(frm))
-			ret = sbk_skip_file_data(ctx, frm);
 
 		sbk_free_frame(frm);
-
-		if (ret == -1)
-			goto error;
 	}
 
 	if (!ctx->eof)
@@ -1390,7 +1348,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	ctx->firstframe = 1;
 	ctx->eof = 0;
 
-	if ((frm = sbk_get_frame(ctx)) == NULL)
+	if ((frm = sbk_get_frame(ctx, NULL)) == NULL)
 		goto error;
 
 	if (frm->header == NULL) {
