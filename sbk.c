@@ -816,6 +816,9 @@ sbk_create_database(struct sbk_ctx *ctx)
 			ret = sbk_exec_statement(ctx, frm->statement);
 
 		sbk_free_frame(frm);
+
+		if (ret == -1)
+			goto error;
 	}
 
 	if (!ctx->eof)
