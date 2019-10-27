@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/tree.h>
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -47,9 +49,18 @@ struct sbk_file {
 	uint32_t	 counter;
 };
 
+struct sbk_attachment_entry {
+	int64_t		 id;
+	struct sbk_file	*file;
+	RB_ENTRY(sbk_attachment_entry) entries;
+};
+
+RB_HEAD(sbk_attachment_tree, sbk_attachment_entry);
+
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
+	struct sbk_attachment_tree attachments;
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
@@ -64,6 +75,12 @@ struct sbk_ctx {
 	int		 eof;
 	char		*error;
 };
+
+static int sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
+    struct sbk_attachment_entry *);
+
+RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
+    sbk_cmp_attachment_entries)
 
 static ProtobufCAllocator sbk_protobuf_alloc = {
 	mem_protobuf_malloc,
@@ -735,6 +752,49 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 static int
+sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
+    struct sbk_attachment_entry *b)
+{
+	return (a->id < b->id) ? -1 : (a->id > b->id);
+}
+
+static int
+sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
+    struct sbk_file *file)
+{
+	struct sbk_attachment_entry *entry;
+
+	if (!frm->attachment->has_attachmentid) {
+		sbk_error_setx(ctx, "Invalid attachment frame");
+		sbk_free_file(file);
+		return -1;
+	}
+
+	if ((entry = malloc(sizeof *entry)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		sbk_free_file(file);
+		return -1;
+	}
+
+	entry->id = frm->attachment->attachmentid;
+	entry->file = file;
+	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
+	return 0;
+}
+
+static void
+sbk_free_attachment_tree(struct sbk_ctx *ctx)
+{
+	struct sbk_attachment_entry *entry;
+
+	while ((entry = RB_ROOT(&ctx->attachments)) != NULL) {
+		RB_REMOVE(sbk_attachment_tree, &ctx->attachments, entry);
+		sbk_free_file(entry->file);
+		freezero(entry, sizeof *entry);
+	}
+}
+
+static int
 sbk_bind_param(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     Signal__SqlStatement__SqlParameter *par)
 {
@@ -798,6 +858,7 @@ static int
 sbk_create_database(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
+	struct sbk_file		*file;
 	int			 ret;
 
 	if (ctx->db != NULL)
@@ -811,9 +872,13 @@ sbk_create_database(struct sbk_ctx *ctx)
 
 	ret = 0;
 
-	while ((frm = sbk_get_frame(ctx, NULL)) != NULL) {
+	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
 		if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx, frm->statement);
+		else if (frm->attachment != NULL)
+			ret = sbk_insert_attachment_entry(ctx, frm, file);
+		else
+			sbk_free_file(file);
 
 		sbk_free_frame(frm);
 
@@ -827,6 +892,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 	return 0;
 
 error:
+	sbk_free_attachment_tree(ctx);
 	sqlite3_close(ctx->db);
 	ctx->db = NULL;
 	return -1;
@@ -1391,6 +1457,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
+	RB_INIT(&ctx->attachments);
 	return 0;
 
 error:
@@ -1404,6 +1471,7 @@ error:
 void
 sbk_close(struct sbk_ctx *ctx)
 {
+	sbk_free_attachment_tree(ctx);
 	sbk_error_clear(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
