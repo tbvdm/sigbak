@@ -165,7 +165,7 @@ dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
 
 	dump_var(ind, name, "SqlStatement", NULL);
 	if (stm->statement != NULL)
-		dump_string(ind + 1, "string", stm->statement);
+		dump_string(ind + 1, "statement", stm->statement);
 	for (i = 0; i < stm->n_parameters; i++)
 		dump_parameter(ind + 1, "parameters", stm->parameters[i]);
 }
