@@ -782,6 +782,16 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 	return 0;
 }
 
+static struct sbk_file *
+sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t id)
+{
+	struct sbk_attachment_entry find, *result;
+
+	find.id = id;
+	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
+	return (result != NULL) ? result->file : NULL;
+}
+
 static void
 sbk_free_attachment_tree(struct sbk_ctx *ctx)
 {
@@ -1236,6 +1246,18 @@ sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
 
 		att->id = sqlite3_column_int64(stm, 2);
 		att->size = sqlite3_column_int64(stm, 3);
+
+		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
+		    NULL) {
+			sbk_error_setx(ctx, "Cannot find attachment file");
+			goto error;
+		}
+
+		if (att->size != att->file->len) {
+			sbk_error_setx(ctx, "Inconsistent attachment size");
+			goto error;
+		}
+
 		SIMPLEQ_INSERT_TAIL(lst, att, entries);
 	}
 

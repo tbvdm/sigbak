@@ -129,6 +129,7 @@ struct sbk_attachment {
 	char		*filename;
 	char		*content_type;
 	uint64_t	 size;
+	struct sbk_file	*file;
 	SIMPLEQ_ENTRY(sbk_attachment) entries;
 };
 
