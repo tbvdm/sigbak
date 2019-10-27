@@ -41,6 +41,12 @@
 
 #define SBK_GROUP_PREFIX	"__textsecure_group__!"
 
+struct sbk_file {
+	long		 pos;
+	uint32_t	 len;
+	uint32_t	 counter;
+};
+
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
@@ -57,12 +63,6 @@ struct sbk_ctx {
 	int		 firstframe;
 	int		 eof;
 	char		*error;
-};
-
-struct sbk_file {
-	long		 pos;
-	uint32_t	 len;
-	uint32_t	 counter;
 };
 
 static ProtobufCAllocator sbk_protobuf_alloc = {
