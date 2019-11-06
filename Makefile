@@ -1,6 +1,6 @@
 PROG=		sigbak
-SRCS=		backup.pb-c.c cmd-attachments.c cmd-dump.c cmd-messages.c \
-		cmd-sqlite.c mem.c sbk.c sigbak.c
+SRCS=		backup.pb-c.c cmd-attachments.c cmd-check.c cmd-dump.c \
+		cmd-messages.c cmd-sqlite.c mem.c sbk.c sigbak.c
 BUILDFIRST=	backup.pb-c.h
 CLEANFILES=	backup.pb-c.c backup.pb-c.h
 

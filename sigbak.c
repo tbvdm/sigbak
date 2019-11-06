@@ -117,6 +117,8 @@ main(int argc, char **argv)
 		return cmd_attachments(argc, argv);
 	if (strcmp(argv[0], "avatars") == 0)
 		return cmd_avatars(argc, argv);
+	if (strcmp(argv[0], "check") == 0)
+		return cmd_check(argc, argv);
 	if (strcmp(argv[0], "dump") == 0)
 		return cmd_dump(argc, argv);
 	if (strcmp(argv[0], "messages") == 0)

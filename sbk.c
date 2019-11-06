@@ -569,7 +569,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 			goto error;
 
-		if (fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+		if (fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
 			sbk_error_set(ctx, "Cannot write file");
 			goto error;
 		}
@@ -583,7 +583,8 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		goto error;
 
-	if (obuflen > 0 && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+	if (obuflen > 0 && fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) !=
+	    1) {
 		sbk_error_set(ctx, "Cannot write file");
 		goto error;
 	}

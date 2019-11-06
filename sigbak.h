@@ -182,6 +182,7 @@ void		 usage(const char *, const char *) __dead;
 
 int		 cmd_attachments(int, char **);
 int		 cmd_avatars(int, char **);
+int		 cmd_check(int, char **);
 int		 cmd_dump(int, char **);
 int		 cmd_messages(int, char **);
 int		 cmd_sqlite(int, char **);
