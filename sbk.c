@@ -17,6 +17,7 @@
 #include <sys/tree.h>
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -759,6 +760,21 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 static int
+sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
+{
+	char *errmsg;
+
+	if (sqlite3_exec(ctx->db, sql, NULL, NULL, &errmsg) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot execute SQL statement: %s",
+		    errmsg);
+		sqlite3_free(errmsg);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
@@ -872,6 +888,28 @@ error:
 }
 
 static int
+sbk_set_database_version(struct sbk_ctx *ctx, Signal__DatabaseVersion *ver)
+{
+	char	*sql;
+	int	 ret;
+
+	if (!ver->has_version) {
+		sbk_error_setx(ctx, "Invalid version frame");
+		return -1;
+	}
+
+	if (asprintf(&sql, "PRAGMA user_version = %" PRIu32, ver->version) ==
+	    -1) {
+		sbk_error_setx(ctx, "asprintf() failed");
+		return -1;
+	}
+
+	ret = sbk_sqlite_exec(ctx, sql);
+	free(sql);
+	return ret;
+}
+
+static int
 sbk_create_database(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
@@ -890,7 +928,9 @@ sbk_create_database(struct sbk_ctx *ctx)
 	ret = 0;
 
 	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
-		if (frm->statement != NULL)
+		if (frm->version != NULL)
+			ret = sbk_set_database_version(ctx, frm->version);
+		else if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx, frm->statement);
 		else if (frm->attachment != NULL)
 			ret = sbk_insert_attachment_entry(ctx, frm, file);
