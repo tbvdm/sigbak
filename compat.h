@@ -29,6 +29,11 @@
 #define __unused	__attribute__((__unused__))
 #endif
 
+#include <stdarg.h>
+#include <stdio.h>
+
+#include <openssl/opensslv.h>
+
 #ifdef __OpenBSD__
 #include <sys/queue.h>
 #include <sys/tree.h>
@@ -36,11 +41,6 @@
 #include "compat/queue.h"
 #include "compat/tree.h"
 #endif
-
-#include <stdarg.h>
-#include <stdio.h>
-
-#include <openssl/opensslv.h>
 
 #ifndef HAVE_ASPRINTF
 int	 asprintf(char **, const char *, ...);
