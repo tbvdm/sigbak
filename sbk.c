@@ -43,15 +43,30 @@
 
 #define SBK_GROUP_PREFIX	"__textsecure_group__!"
 
+struct sbk_file {
+	long		 pos;
+	uint32_t	 len;
+	uint32_t	 counter;
+};
+
+struct sbk_attachment_entry {
+	int64_t		 id;
+	struct sbk_file	*file;
+	RB_ENTRY(sbk_attachment_entry) entries;
+};
+
+RB_HEAD(sbk_attachment_tree, sbk_attachment_entry);
+
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
+	struct sbk_attachment_tree attachments;
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
 	unsigned char	 mackey[SBK_MACKEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
-	int32_t		 counter;
+	uint32_t	 counter;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
 	unsigned char	*obuf;
@@ -61,13 +76,11 @@ struct sbk_ctx {
 	char		*error;
 };
 
-struct sbk_file {
-	enum sbk_file_type type;
-	char		*name;
-	uint32_t	 len;
-	long		 off;
-	int32_t		 counter;
-};
+static int sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
+    struct sbk_attachment_entry *);
+
+RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
+    sbk_cmp_attachment_entries)
 
 static ProtobufCAllocator sbk_protobuf_alloc = {
 	mem_protobuf_malloc,
@@ -220,7 +233,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 }
 
 static int
-sbk_decrypt_init(struct sbk_ctx *ctx, int32_t counter)
+sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
 	ctx->iv[0] = counter >> 24;
 	ctx->iv[1] = counter >> 16;
@@ -348,14 +361,14 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	return 0;
 }
 
-int
+static int
 sbk_has_file_data(Signal__BackupFrame *frm)
 {
 	return frm->attachment != NULL || frm->avatar != NULL ||
 	    frm->sticker != NULL;
 }
 
-int
+static int
 sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 {
 	uint32_t len;
@@ -386,12 +399,58 @@ sbk_unpack_frame(unsigned char *buf, size_t len)
 	return signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf);
 }
 
+static struct sbk_file *
+sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
+{
+	struct sbk_file *file;
+
+	if ((file = malloc(sizeof *file)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	if ((file->pos = ftell(ctx->fp)) == -1) {
+		sbk_error_set(ctx, NULL);
+		goto error;
+	}
+
+	if (frm->attachment != NULL) {
+		if (!frm->attachment->has_length) {
+			sbk_error_setx(ctx, "Invalid attachment frame");
+			goto error;
+		}
+		file->len = frm->attachment->length;
+	} else if (frm->avatar != NULL) {
+		if (!frm->avatar->has_length) {
+			sbk_error_setx(ctx, "Invalid avatar frame");
+			goto error;
+		}
+		file->len = frm->avatar->length;
+	} else if (frm->sticker != NULL) {
+		if (!frm->sticker->has_length) {
+			sbk_error_setx(ctx, "Invalid sticker frame");
+			goto error;
+		}
+		file->len = frm->sticker->length;
+	}
+
+	file->counter = ctx->counter;
+	return file;
+
+error:
+	free(file);
+	return NULL;
+}
+
 Signal__BackupFrame *
-sbk_get_frame(struct sbk_ctx *ctx)
+sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 {
 	Signal__BackupFrame	*frm;
 	size_t			 ibuflen, obuflen;
 	unsigned char		*mac;
+
+	if (file != NULL)
+		*file = NULL;
 
 	if (ctx->eof)
 		return NULL;
@@ -415,14 +474,20 @@ sbk_get_frame(struct sbk_ctx *ctx)
 	ibuflen -= SBK_MAC_LEN;
 	mac = ctx->ibuf + ibuflen;
 
-	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
-		goto error;
+	if (sbk_decrypt_init(ctx, ctx->counter) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
-	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
-		goto error;
+	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
-	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
-		goto error;
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1) {
+		sbk_decrypt_reset(ctx);
+		return NULL;
+	}
 
 	if (sbk_decrypt_reset(ctx) == -1)
 		return NULL;
@@ -436,11 +501,27 @@ sbk_get_frame(struct sbk_ctx *ctx)
 		ctx->eof = 1;
 
 	ctx->counter++;
-	return frm;
 
-error:
-	sbk_decrypt_reset(ctx);
-	return NULL;
+	if (sbk_has_file_data(frm)) {
+		if (file == NULL) {
+			if (sbk_skip_file_data(ctx, frm) == -1) {
+				sbk_free_frame(frm);
+				return NULL;
+			}
+		} else {
+			if ((*file = sbk_get_file(ctx, frm)) == NULL) {
+				sbk_free_frame(frm);
+				return NULL;
+			}
+			if (sbk_skip_file_data(ctx, frm) == -1) {
+				sbk_free_frame(frm);
+				sbk_free_file(*file);
+				return NULL;
+			}
+		}
+	}
+
+	return frm;
 }
 
 void
@@ -450,101 +531,10 @@ sbk_free_frame(Signal__BackupFrame *frm)
 		signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
 }
 
-struct sbk_file *
-sbk_get_file(struct sbk_ctx *ctx)
-{
-	struct sbk_file		*file;
-	Signal__BackupFrame	*frm;
-
-	while ((frm = sbk_get_frame(ctx)) != NULL)
-		if (sbk_has_file_data(frm))
-			break;
-
-	if (frm == NULL)
-		return NULL;
-
-	if ((file = malloc(sizeof *file)) == NULL) {
-		sbk_error_set(ctx, NULL);
-		goto error;
-	}
-
-	file->counter = ctx->counter;
-
-	if ((file->off = ftell(ctx->fp)) == -1) {
-		sbk_error_set(ctx, "Cannot get file offset");
-		goto error;
-	}
-
-	if (sbk_skip_file_data(ctx, frm) == -1)
-		goto error;
-
-	if (frm->attachment != NULL) {
-		if (!frm->attachment->has_attachmentid ||
-		    !frm->attachment->has_length) {
-			sbk_error_setx(ctx, "Invalid attachment frame");
-			goto error;
-		}
-
-		if (asprintf(&file->name, "%" PRIu64,
-		    frm->attachment->attachmentid) == -1) {
-			sbk_error_setx(ctx, "Cannot get attachment name");
-			goto error;
-		}
-
-		file->len = frm->attachment->length;
-		file->type = SBK_ATTACHMENT;
-	} else if (frm->avatar != NULL) {
-		if (frm->avatar->name == NULL || !frm->avatar->has_length) {
-			sbk_error_setx(ctx, "Invalid avatar frame");
-			goto error;
-		}
-
-		if ((file->name = strdup(frm->avatar->name)) == NULL) {
-			sbk_error_set(ctx, NULL);
-			goto error;
-		}
-
-		file->len = frm->avatar->length;
-		file->type = SBK_AVATAR;
-	} else if (frm->sticker != NULL) {
-		/* TODO */
-		goto error;
-	}
-
-	sbk_free_frame(frm);
-	return file;
-
-error:
-	sbk_free_frame(frm);
-	freezero(file, sizeof *file);
-	return NULL;
-}
-
 void
 sbk_free_file(struct sbk_file *file)
 {
-	if (file != NULL) {
-		freezero(file->name, strlen(file->name));
-		freezero(file, sizeof *file);
-	}
-}
-
-enum sbk_file_type
-sbk_get_file_type(struct sbk_file *file)
-{
-	return file->type;
-}
-
-const char *
-sbk_get_file_name(struct sbk_file *file)
-{
-	return file->name;
-}
-
-size_t
-sbk_get_file_size(struct sbk_file *file)
-{
-	return file->len;
+	freezero(file, sizeof *file);
 }
 
 int
@@ -556,7 +546,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
-	if (fseek(ctx->fp, file->off, SEEK_SET) == -1) {
+	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
 		sbk_error_set(ctx, "Cannot seek");
 		return -1;
 	}
@@ -578,7 +568,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 			goto error;
 
-		if (fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+		if (fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
 			sbk_error_set(ctx, "Cannot write file");
 			goto error;
 		}
@@ -592,7 +582,8 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		goto error;
 
-	if (obuflen > 0 && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
+	if (obuflen > 0 && fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) !=
+	    1) {
 		sbk_error_set(ctx, "Cannot write file");
 		goto error;
 	}
@@ -769,6 +760,74 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 static int
+sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
+{
+	char *errmsg;
+
+	if (sqlite3_exec(ctx->db, sql, NULL, NULL, &errmsg) != SQLITE_OK) {
+		sbk_error_setx(ctx, "Cannot execute SQL statement: %s",
+		    errmsg);
+		sqlite3_free(errmsg);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
+    struct sbk_attachment_entry *b)
+{
+	return (a->id < b->id) ? -1 : (a->id > b->id);
+}
+
+static int
+sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
+    struct sbk_file *file)
+{
+	struct sbk_attachment_entry *entry;
+
+	if (!frm->attachment->has_attachmentid) {
+		sbk_error_setx(ctx, "Invalid attachment frame");
+		sbk_free_file(file);
+		return -1;
+	}
+
+	if ((entry = malloc(sizeof *entry)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		sbk_free_file(file);
+		return -1;
+	}
+
+	entry->id = frm->attachment->attachmentid;
+	entry->file = file;
+	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
+	return 0;
+}
+
+static struct sbk_file *
+sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t id)
+{
+	struct sbk_attachment_entry find, *result;
+
+	find.id = id;
+	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
+	return (result != NULL) ? result->file : NULL;
+}
+
+static void
+sbk_free_attachment_tree(struct sbk_ctx *ctx)
+{
+	struct sbk_attachment_entry *entry;
+
+	while ((entry = RB_ROOT(&ctx->attachments)) != NULL) {
+		RB_REMOVE(sbk_attachment_tree, &ctx->attachments, entry);
+		sbk_free_file(entry->file);
+		freezero(entry, sizeof *entry);
+	}
+}
+
+static int
 sbk_bind_param(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     Signal__SqlStatement__SqlParameter *par)
 {
@@ -829,9 +888,32 @@ error:
 }
 
 static int
+sbk_set_database_version(struct sbk_ctx *ctx, Signal__DatabaseVersion *ver)
+{
+	char	*sql;
+	int	 ret;
+
+	if (!ver->has_version) {
+		sbk_error_setx(ctx, "Invalid version frame");
+		return -1;
+	}
+
+	if (asprintf(&sql, "PRAGMA user_version = %" PRIu32, ver->version) ==
+	    -1) {
+		sbk_error_setx(ctx, "asprintf() failed");
+		return -1;
+	}
+
+	ret = sbk_sqlite_exec(ctx, sql);
+	free(sql);
+	return ret;
+}
+
+static int
 sbk_create_database(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
+	struct sbk_file		*file;
 	int			 ret;
 
 	if (ctx->db != NULL)
@@ -843,13 +925,20 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (sbk_rewind(ctx) == -1)
 		goto error;
 
+	if (sbk_sqlite_exec(ctx, "BEGIN TRANSACTION") == -1)
+		goto error;
+
 	ret = 0;
 
-	while ((frm = sbk_get_frame(ctx)) != NULL) {
-		if (frm->statement != NULL)
+	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
+		if (frm->version != NULL)
+			ret = sbk_set_database_version(ctx, frm->version);
+		else if (frm->statement != NULL)
 			ret = sbk_exec_statement(ctx, frm->statement);
-		else if (sbk_has_file_data(frm))
-			ret = sbk_skip_file_data(ctx, frm);
+		else if (frm->attachment != NULL)
+			ret = sbk_insert_attachment_entry(ctx, frm, file);
+		else
+			sbk_free_file(file);
 
 		sbk_free_frame(frm);
 
@@ -857,12 +946,16 @@ sbk_create_database(struct sbk_ctx *ctx)
 			goto error;
 	}
 
+	if (sbk_sqlite_exec(ctx, "END TRANSACTION") == -1)
+		goto error;
+
 	if (!ctx->eof)
 		goto error;
 
 	return 0;
 
 error:
+	sbk_free_attachment_tree(ctx);
 	sqlite3_close(ctx->db);
 	ctx->db = NULL;
 	return -1;
@@ -1206,6 +1299,18 @@ sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
 
 		att->id = sqlite3_column_int64(stm, 2);
 		att->size = sqlite3_column_int64(stm, 3);
+
+		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
+		    NULL) {
+			sbk_error_setx(ctx, "Cannot find attachment file");
+			goto error;
+		}
+
+		if (att->size != att->file->len) {
+			sbk_error_setx(ctx, "Inconsistent attachment size");
+			goto error;
+		}
+
 		SIMPLEQ_INSERT_TAIL(lst, att, entries);
 	}
 
@@ -1389,7 +1494,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	ctx->firstframe = 1;
 	ctx->eof = 0;
 
-	if ((frm = sbk_get_frame(ctx)) == NULL)
+	if ((frm = sbk_get_frame(ctx, NULL)) == NULL)
 		goto error;
 
 	if (frm->header == NULL) {
@@ -1427,6 +1532,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
+	RB_INIT(&ctx->attachments);
 	return 0;
 
 error:
@@ -1440,6 +1546,7 @@ error:
 void
 sbk_close(struct sbk_ctx *ctx)
 {
+	sbk_free_attachment_tree(ctx);
 	sbk_error_clear(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);

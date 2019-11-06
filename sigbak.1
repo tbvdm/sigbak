@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd August 20, 2019
+.Dd November 6, 2019
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -58,6 +58,11 @@ to
 or to the current directory if
 .Ar directory
 is not specified.
+.It Ic check Oo Fl p Ar passfile Oc Ar backup
+Check that the file
+.Ar backup
+can be decrypted and parsed correctly.
+The check is aborted after the first encountered error.
 .It Ic dump Oo Fl p Ar passfile Oc Ar backup
 Print the raw contents of the file
 .Ar backup

@@ -20,21 +20,92 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "sigbak.h"
 
+enum type {
+	ATTACHMENT,
+	AVATAR,
+};
+
 static int
-write_files(int argc, char **argv, enum sbk_file_type type)
+write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
+    struct sbk_file *file, enum type type)
 {
-	struct sbk_ctx	*ctx;
-	struct sbk_file	*file;
-	FILE		*fp;
-	char		*cmd, *passfile, passphr[128];
-	const char	*outdir;
-	int		 c, ret;
+	FILE	*fp;
+	char	*fname, *tmp;
+	int	 ret;
+
+	tmp = NULL;
+
+	switch (type) {
+	case ATTACHMENT:
+		if (frm->attachment == NULL)
+			return 0;
+		if (!frm->attachment->has_attachmentid) {
+			warnx("Invalid attachment frame");
+			return 1;
+		}
+		if (asprintf(&tmp, "%" PRIu64, frm->attachment->attachmentid)
+		    == -1) {
+			warnx("asprintf() failed");
+			return 1;
+		}
+		fname = tmp;
+		break;
+	case AVATAR:
+		if (frm->avatar == NULL)
+			return 0;
+		if (frm->avatar->recipientid != NULL)
+			fname = frm->avatar->recipientid;
+		else if (frm->avatar->name != NULL)
+			fname = frm->avatar->name;
+		else {
+			warnx("Invalid avatar frame");
+			return 1;
+		}
+		if (fname[0] == '\0' || strchr(fname, '/') != NULL) {
+			warnx("Invalid avatar filename");
+			return 1;
+		}
+		break;
+	default:
+		return 0;
+	}
+
+	ret = 0;
+
+	if ((fp = fopen(fname, "wx")) == NULL) {
+		warn("%s", fname);
+		ret = 1;
+	} else {
+		if (sbk_write_file(ctx, file, fp) == -1) {
+			warnx("%s: %s", fname, sbk_error(ctx));
+			ret = 1;
+		}
+		fclose(fp);
+	}
+
+	if (tmp != NULL)
+		freezero(tmp, strlen(tmp));
+
+	return ret;
+}
+
+static int
+write_files(int argc, char **argv, enum type type)
+{
+	struct sbk_ctx		*ctx;
+	struct sbk_file		*file;
+	Signal__BackupFrame	*frm;
+	char			*cmd, *passfile, passphr[128];
+	const char		*outdir;
+	int			 c, ret;
 
 	cmd = argv[0];
 	passfile = NULL;
@@ -105,37 +176,19 @@ write_files(int argc, char **argv, enum sbk_file_type type)
 	if (pledge("stdio wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = 1;
+	ret = 0;
 
-	while ((file = sbk_get_file(ctx)) != NULL) {
-		if (sbk_get_file_type(file) != type)
-			continue;
-
-		if ((fp = fopen(sbk_get_file_name(file), "wbx")) == NULL) {
-			warn("%s", sbk_get_file_name(file));
-			goto out;
-		}
-
-		if (sbk_write_file(ctx, file, fp) == -1) {
-			warnx("%s: %s", sbk_get_file_name(file),
-			    sbk_error(ctx));
-			fclose(fp);
-			goto out;
-		}
-
-		fclose(fp);
+	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
+		ret |= write_file(ctx, frm, file, type);
+		sbk_free_frame(frm);
 		sbk_free_file(file);
 	}
 
 	if (!sbk_eof(ctx)) {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
-		goto out;
+		ret = 1;
 	}
 
-	ret = 0;
-
-out:
-	sbk_free_file(file);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
@@ -147,11 +200,11 @@ usage:
 int
 cmd_attachments(int argc, char **argv)
 {
-	return write_files(argc, argv, SBK_ATTACHMENT);
+	return write_files(argc, argv, ATTACHMENT);
 }
 
 int
 cmd_avatars(int argc, char **argv)
 {
-	return write_files(argc, argv, SBK_AVATAR);
+	return write_files(argc, argv, AVATAR);
 }

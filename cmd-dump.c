@@ -99,64 +99,65 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 static void
 dump_attachment(unsigned int ind, const char *name, Signal__Attachment *att)
 {
-	dump_var(ind, name, "Attachment", NULL);
+	dump_var(ind++, name, "Attachment", NULL);
 	if (att->has_rowid)
-		dump_uint64(ind + 1, "rowId", att->rowid);
+		dump_uint64(ind, "rowId", att->rowid);
 	if (att->has_attachmentid)
-		dump_uint64(ind + 1, "attachmentId", att->attachmentid);
+		dump_uint64(ind, "attachmentId", att->attachmentid);
 	if (att->has_length)
-		dump_uint32(ind + 1, "length", att->length);
+		dump_uint32(ind, "length", att->length);
 }
 
 static void
 dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 {
-	dump_var(ind, name, "Avatar", NULL);
+	dump_var(ind++, name, "Avatar", NULL);
 	if (avt->name != NULL)
-		dump_string(ind + 1, "name", avt->name);
+		dump_string(ind, "name", avt->name);
 	if (avt->has_length)
-		dump_uint32(ind + 1, "length", avt->length);
+		dump_uint32(ind, "length", avt->length);
+	if (avt->recipientid != NULL)
+		dump_string(ind, "recipientId", avt->recipientid);
 }
 
 static void
 dump_header(unsigned int ind, const char *name, Signal__Header *hdr)
 {
-	dump_var(ind, name, "Header", NULL);
+	dump_var(ind++, name, "Header", NULL);
 	if (hdr->has_iv)
-		dump_binary(ind + 1, "iv", &hdr->iv);
+		dump_binary(ind, "iv", &hdr->iv);
 	if (hdr->has_salt)
-		dump_binary(ind + 1, "salt", &hdr->salt);
+		dump_binary(ind, "salt", &hdr->salt);
 }
 
 static void
 dump_preference(unsigned int ind, const char *name,
     Signal__SharedPreference *prf)
 {
-	dump_var(ind, name, "SharedPreference", NULL);
+	dump_var(ind++, name, "SharedPreference", NULL);
 	if (prf->file != NULL)
-		dump_string(ind + 1, "file", prf->file);
+		dump_string(ind, "file", prf->file);
 	if (prf->key != NULL)
-		dump_string(ind + 1, "key", prf->key);
+		dump_string(ind, "key", prf->key);
 	if (prf->value != NULL)
-		dump_string(ind + 1, "value", prf->value);
+		dump_string(ind, "value", prf->value);
 }
 
 static void
 dump_parameter(unsigned int ind, const char *name,
     Signal__SqlStatement__SqlParameter *par)
 {
-	dump_var(ind, name, "SqlParameter", NULL);
+	dump_var(ind++, name, "SqlParameter", NULL);
 	if (par->stringparamter != NULL)
-		dump_string(ind + 1, "stringParamter", par->stringparamter);
+		dump_string(ind, "stringParamter", par->stringparamter);
 	if (par->has_integerparameter)
-		dump_uint64(ind + 1, "integerParameter",
-		    par->integerparameter);
+		dump_uint64(ind, "integerParameter", par->integerparameter);
 	if (par->has_doubleparameter)
-		dump_double(ind + 1, "doubleParameter", par->doubleparameter);
+		dump_double(ind, "doubleParameter", par->doubleparameter);
 	if (par->has_blobparameter)
-		dump_binary(ind + 1, "blobParameter", &par->blobparameter);
+		dump_binary(ind, "blobParameter", &par->blobparameter);
 	if (par->has_nullparameter)
-		dump_bool(ind + 1, "nullparameter", par->nullparameter);
+		dump_bool(ind, "nullparameter", par->nullparameter);
 }
 
 static void
@@ -164,29 +165,29 @@ dump_statement(unsigned int ind, const char *name, Signal__SqlStatement *stm)
 {
 	size_t i;
 
-	dump_var(ind, name, "SqlStatement", NULL);
+	dump_var(ind++, name, "SqlStatement", NULL);
 	if (stm->statement != NULL)
-		dump_string(ind + 1, "string", stm->statement);
+		dump_string(ind, "statement", stm->statement);
 	for (i = 0; i < stm->n_parameters; i++)
-		dump_parameter(ind + 1, "parameters", stm->parameters[i]);
+		dump_parameter(ind, "parameters", stm->parameters[i]);
 }
 
 static void
 dump_sticker(unsigned int ind, const char *name, Signal__Sticker *stk)
 {
-	dump_var(ind, name, "Sticker", NULL);
+	dump_var(ind++, name, "Sticker", NULL);
 	if (stk->has_rowid)
-		dump_uint64(ind + 1, "rowId", stk->rowid);
+		dump_uint64(ind, "rowId", stk->rowid);
 	if (stk->has_length)
-		dump_uint32(ind + 1, "length", stk->length);
+		dump_uint32(ind, "length", stk->length);
 }
 
 static void
 dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 {
-	dump_var(ind, name, "DatabaseVersion", NULL);
+	dump_var(ind++, name, "DatabaseVersion", NULL);
 	if (ver->has_version)
-		dump_uint32(ind + 1, "version", ver->version);
+		dump_uint32(ind, "version", ver->version);
 }
 
 static void
@@ -270,29 +271,18 @@ cmd_dump(int argc, char **argv)
 	if (pledge("stdio", NULL) == -1)
 		err(1, "pledge");
 
-	ret = 1;
-
-	while ((frm = sbk_get_frame(ctx)) != NULL) {
+	while ((frm = sbk_get_frame(ctx, NULL)) != NULL) {
 		dump_frame(frm);
-
-		if (sbk_has_file_data(frm) &&
-		    sbk_skip_file_data(ctx, frm) == -1) {
-			warnx("%s: %s", argv[0], sbk_error(ctx));
-			goto out;
-		}
-
 		sbk_free_frame(frm);
 	}
 
-	if (!sbk_eof(ctx)) {
+	if (sbk_eof(ctx))
+		ret = 0;
+	else {
 		warnx("%s: %s", argv[0], sbk_error(ctx));
-		goto out;
+		ret = 1;
 	}
 
-	ret = 0;
-
-out:
-	sbk_free_frame(frm);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
