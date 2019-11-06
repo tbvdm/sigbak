@@ -503,14 +503,21 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	ctx->counter++;
 
 	if (sbk_has_file_data(frm)) {
-		if (file != NULL && (*file = sbk_get_file(ctx, frm)) == NULL) {
-			sbk_free_frame(frm);
-			return NULL;
-		}
-
-		if (sbk_skip_file_data(ctx, frm) == -1) {
-			sbk_free_frame(frm);
-			return NULL;
+		if (file == NULL) {
+			if (sbk_skip_file_data(ctx, frm) == -1) {
+				sbk_free_frame(frm);
+				return NULL;
+			}
+		} else {
+			if ((*file = sbk_get_file(ctx, frm)) == NULL) {
+				sbk_free_frame(frm);
+				return NULL;
+			}
+			if (sbk_skip_file_data(ctx, frm) == -1) {
+				sbk_free_frame(frm);
+				sbk_free_file(*file);
+				return NULL;
+			}
 		}
 	}
 
