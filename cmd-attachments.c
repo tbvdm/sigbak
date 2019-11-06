@@ -68,6 +68,10 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 			warnx("Invalid avatar frame");
 			return 1;
 		}
+		if (fname[0] == '\0' || strchr(fname, '/') != NULL) {
+			warnx("Invalid avatar filename");
+			return 1;
+		}
 		break;
 	default:
 		return 0;
