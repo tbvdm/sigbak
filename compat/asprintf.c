@@ -20,6 +20,7 @@
 
 #include <limits.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -33,13 +34,18 @@ vasprintf(char **buf, const char *fmt, va_list ap)
 	len = vsnprintf(NULL, 0, fmt, ap2);
 	va_end(ap2);
 
-	if (len < 0 || len == INT_MAX)
+	if (len < 0)
 		return -1;
 
-	if ((*buf = malloc(len + 1)) == NULL)
+#if SIZE_MAX <= INT_MAX
+	if (len >= SIZE_MAX)
+		return -1;
+#endif
+
+	if ((*buf = malloc((size_t)len + 1)) == NULL)
 		return -1;
 
-	if (vsnprintf(*buf, len + 1, fmt, ap) < 0) {
+	if (vsnprintf(*buf, (size_t)len + 1, fmt, ap) < 0) {
 		free(*buf);
 		return -1;
 	}

@@ -107,7 +107,11 @@ warnx(const char *fmt, ...)
 void
 vwarn(const char *fmt, va_list ap)
 {
+	int saved_errno;
+
+	saved_errno = errno;
 	vwarnc(errno, fmt, ap);
+	errno = saved_errno;
 }
 
 void
