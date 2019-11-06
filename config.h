@@ -47,9 +47,6 @@
 /* Define if you have unveil(). */
 /* #define HAVE_UNVEIL */
 
-/* Define if your compiler supports __attribute__(). */
-/* #define HAVE___ATTRIBUTE__ */
-
 #ifdef __DragonFly__
 
 /* Untested */
@@ -64,7 +61,6 @@
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
 #define HAVE_RECALLOCARRAY
-#define HAVE___ATTRIBUTE__
 
 #elif defined(__FreeBSD__)
 
@@ -76,7 +72,6 @@
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE___ATTRIBUTE__
 
 #elif defined(__NetBSD__)
 
@@ -89,7 +84,6 @@
 #define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_REALLOCARRAY
-#define HAVE___ATTRIBUTE__
 
 #elif defined(__OpenBSD__)
 
@@ -105,7 +99,6 @@
 #define HAVE_REALLOCARRAY
 #define HAVE_RECALLOCARRAY
 #define HAVE_UNVEIL
-#define HAVE___ATTRIBUTE__
 
 #elif defined(__linux__)
 
@@ -117,7 +110,6 @@
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPAGESIZE
-#define HAVE___ATTRIBUTE__
 
 /* Indirectly include features.h for __GLIBC_PREREQ */
 #include <stdio.h>

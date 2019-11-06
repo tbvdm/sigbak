@@ -17,7 +17,7 @@
 #ifndef COMPAT_H
 #define COMPAT_H
 
-#ifndef HAVE___ATTRIBUTE__
+#if !defined(__GNUC__) && !defined(__clang__)
 #define __attribute__(a)
 #endif
 
