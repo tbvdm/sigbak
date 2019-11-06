@@ -925,6 +925,9 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (sbk_rewind(ctx) == -1)
 		goto error;
 
+	if (sbk_sqlite_exec(ctx, "BEGIN TRANSACTION") == -1)
+		goto error;
+
 	ret = 0;
 
 	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
@@ -942,6 +945,9 @@ sbk_create_database(struct sbk_ctx *ctx)
 		if (ret == -1)
 			goto error;
 	}
+
+	if (sbk_sqlite_exec(ctx, "END TRANSACTION") == -1)
+		goto error;
 
 	if (!ctx->eof)
 		goto error;
