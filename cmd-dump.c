@@ -115,6 +115,8 @@ dump_avatar(unsigned int ind, const char *name, Signal__Avatar *avt)
 		dump_string(ind, "name", avt->name);
 	if (avt->has_length)
 		dump_uint32(ind, "length", avt->length);
+	if (avt->recipientid != NULL)
+		dump_string(ind, "recipientId", avt->recipientid);
 }
 
 static void

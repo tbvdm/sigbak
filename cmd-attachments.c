@@ -60,11 +60,14 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 	case AVATAR:
 		if (frm->avatar == NULL)
 			return 0;
-		if (frm->avatar->name == NULL) {
+		if (frm->avatar->recipientid != NULL)
+			fname = frm->avatar->recipientid;
+		else if (frm->avatar->name != NULL)
+			fname = frm->avatar->name;
+		else {
 			warnx("Invalid avatar frame");
 			return 1;
 		}
-		fname = frm->avatar->name;
 		break;
 	default:
 		return 0;
