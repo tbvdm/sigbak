@@ -439,7 +439,7 @@ sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	return file;
 
 error:
-	free(file);
+	sbk_free_file(file);
 	return NULL;
 }
 
