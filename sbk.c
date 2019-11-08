@@ -1144,93 +1144,6 @@ error:
 }
 
 static void
-sbk_free_mms(struct sbk_mms *mms)
-{
-	sbk_freezero_string(mms->address);
-	sbk_freezero_string(mms->body);
-	freezero(mms, sizeof *mms);
-}
-
-void
-sbk_free_mms_list(struct sbk_mms_list *lst)
-{
-	struct sbk_mms *mms;
-
-	if (lst != NULL) {
-		while ((mms = SIMPLEQ_FIRST(lst)) != NULL) {
-			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			sbk_free_mms(mms);
-		}
-		free(lst);
-	}
-}
-
-struct sbk_mms_list *
-sbk_get_mmses(struct sbk_ctx *ctx)
-{
-	struct sbk_mms_list	*lst;
-	struct sbk_mms		*mms;
-	sqlite3_stmt		*stm;
-	int			 ret;
-
-	if (sbk_create_database(ctx) == -1)
-		return NULL;
-
-	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
-		return NULL;
-	}
-
-	SIMPLEQ_INIT(lst);
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
-	    "date_received, date, thread_id, msg_box, part_count FROM mms "
-	    "ORDER BY date_received") == -1)
-		goto error;
-
-	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
-		if ((mms = malloc(sizeof *mms)) == NULL) {
-			sbk_error_set(ctx, NULL);
-			goto error;
-		}
-
-		mms->address = NULL;
-		mms->body = NULL;
-
-		if (sbk_sqlite_column_text_copy(ctx, &mms->address, stm, 0) ==
-		    -1) {
-			sbk_free_mms(mms);
-			goto error;
-		}
-
-		if (sbk_sqlite_column_text_copy(ctx, &mms->body, stm, 1) ==
-		    -1) {
-			sbk_free_mms(mms);
-			goto error;
-		}
-
-		mms->id = sqlite3_column_int(stm, 2);
-		mms->date_recv = sqlite3_column_int64(stm, 3);
-		mms->date_sent = sqlite3_column_int64(stm, 4);
-		mms->thread = sqlite3_column_int(stm, 5);
-		mms->type = sqlite3_column_int(stm, 6);
-		mms->nattachments = sqlite3_column_int(stm, 7);
-		SIMPLEQ_INSERT_TAIL(lst, mms, entries);
-	}
-
-	if (ret != SQLITE_DONE)
-		goto error;
-
-	sqlite3_finalize(stm);
-	return lst;
-
-error:
-	sbk_free_mms_list(lst);
-	sqlite3_finalize(stm);
-	return NULL;
-}
-
-static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
 	sbk_freezero_string(att->filename);
@@ -1323,6 +1236,93 @@ sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
 
 error:
 	sbk_free_attachment_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+static void
+sbk_free_mms(struct sbk_mms *mms)
+{
+	sbk_freezero_string(mms->address);
+	sbk_freezero_string(mms->body);
+	freezero(mms, sizeof *mms);
+}
+
+void
+sbk_free_mms_list(struct sbk_mms_list *lst)
+{
+	struct sbk_mms *mms;
+
+	if (lst != NULL) {
+		while ((mms = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_mms(mms);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_mms_list *
+sbk_get_mmses(struct sbk_ctx *ctx)
+{
+	struct sbk_mms_list	*lst;
+	struct sbk_mms		*mms;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+	    "date_received, date, thread_id, msg_box, part_count FROM mms "
+	    "ORDER BY date_received") == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((mms = malloc(sizeof *mms)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		mms->address = NULL;
+		mms->body = NULL;
+
+		if (sbk_sqlite_column_text_copy(ctx, &mms->address, stm, 0) ==
+		    -1) {
+			sbk_free_mms(mms);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &mms->body, stm, 1) ==
+		    -1) {
+			sbk_free_mms(mms);
+			goto error;
+		}
+
+		mms->id = sqlite3_column_int(stm, 2);
+		mms->date_recv = sqlite3_column_int64(stm, 3);
+		mms->date_sent = sqlite3_column_int64(stm, 4);
+		mms->thread = sqlite3_column_int(stm, 5);
+		mms->type = sqlite3_column_int(stm, 6);
+		mms->nattachments = sqlite3_column_int(stm, 7);
+		SIMPLEQ_INSERT_TAIL(lst, mms, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_mms_list(lst);
 	sqlite3_finalize(stm);
 	return NULL;
 }

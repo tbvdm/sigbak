@@ -110,6 +110,17 @@ struct sbk_sms {
 
 SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
 
+struct sbk_attachment {
+	int64_t		 id;
+	char		*filename;
+	char		*content_type;
+	uint64_t	 size;
+	struct sbk_file	*file;
+	SIMPLEQ_ENTRY(sbk_attachment) entries;
+};
+
+SIMPLEQ_HEAD(sbk_attachment_list, sbk_attachment);
+
 struct sbk_mms {
 	int		 id;
 	char		*address;
@@ -123,17 +134,6 @@ struct sbk_mms {
 };
 
 SIMPLEQ_HEAD(sbk_mms_list, sbk_mms);
-
-struct sbk_attachment {
-	int64_t		 id;
-	char		*filename;
-	char		*content_type;
-	uint64_t	 size;
-	struct sbk_file	*file;
-	SIMPLEQ_ENTRY(sbk_attachment) entries;
-};
-
-SIMPLEQ_HEAD(sbk_attachment_list, sbk_attachment);
 
 struct sbk_ctx	*sbk_ctx_new(void);
 void		 sbk_ctx_free(struct sbk_ctx *);
