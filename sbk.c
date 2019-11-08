@@ -1151,7 +1151,7 @@ sbk_free_attachment(struct sbk_attachment *att)
 	freezero(att, sizeof *att);
 }
 
-void
+static void
 sbk_free_attachment_list(struct sbk_attachment_list *lst)
 {
 	struct sbk_attachment *att;
@@ -1165,29 +1165,31 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
-struct sbk_attachment_list *
-sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
+int
+sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 {
-	struct sbk_attachment_list	*lst;
-	struct sbk_attachment		*att;
-	sqlite3_stmt			*stm;
-	int				 ret;
+	struct sbk_attachment	*att;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (mms->attachments != NULL)
+		return 0;
 
 	if (sbk_create_database(ctx) == -1)
-		return NULL;
+		return -1;
 
-	if ((lst = malloc(sizeof *lst)) == NULL) {
+	if ((mms->attachments = malloc(sizeof *mms->attachments)) == NULL) {
 		sbk_error_set(ctx, NULL);
-		return NULL;
+		return -1;
 	}
 
-	SIMPLEQ_INIT(lst);
+	SIMPLEQ_INIT(mms->attachments);
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
 	    "data_size FROM part WHERE mid = ?") == -1)
 		goto error;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1)
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
 		goto error;
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
@@ -1225,19 +1227,20 @@ sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
 			goto error;
 		}
 
-		SIMPLEQ_INSERT_TAIL(lst, att, entries);
+		SIMPLEQ_INSERT_TAIL(mms->attachments, att, entries);
 	}
 
 	if (ret != SQLITE_DONE)
 		goto error;
 
 	sqlite3_finalize(stm);
-	return lst;
+	return 0;
 
 error:
-	sbk_free_attachment_list(lst);
 	sqlite3_finalize(stm);
-	return NULL;
+	sbk_free_attachment_list(mms->attachments);
+	mms->attachments = NULL;
+	return -1;
 }
 
 static void
@@ -1245,6 +1248,7 @@ sbk_free_mms(struct sbk_mms *mms)
 {
 	sbk_freezero_string(mms->address);
 	sbk_freezero_string(mms->body);
+	sbk_free_attachment_list(mms->attachments);
 	freezero(mms, sizeof *mms);
 }
 
@@ -1293,6 +1297,7 @@ sbk_get_mmses(struct sbk_ctx *ctx)
 
 		mms->address = NULL;
 		mms->body = NULL;
+		mms->attachments = NULL;
 
 		if (sbk_sqlite_column_text_copy(ctx, &mms->address, stm, 0) ==
 		    -1) {

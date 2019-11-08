@@ -130,6 +130,7 @@ struct sbk_mms {
 	int		 type;
 	char		*body;
 	int		 nattachments;
+	struct sbk_attachment_list *attachments;
 	SIMPLEQ_ENTRY(sbk_mms) entries;
 };
 
@@ -152,10 +153,8 @@ struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *);
 void		 sbk_free_sms_list(struct sbk_sms_list *);
 
 struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *);
+int		 sbk_get_attachments(struct sbk_ctx *, struct sbk_mms *);
 void		 sbk_free_mms_list(struct sbk_mms_list *);
-
-struct sbk_attachment_list *sbk_get_attachments(struct sbk_ctx *, int);
-void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
 char		*sbk_get_contact_name(struct sbk_ctx *, const char *);
 char		*sbk_get_group_name(struct sbk_ctx *, const char *);
