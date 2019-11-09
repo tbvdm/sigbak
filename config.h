@@ -111,7 +111,10 @@
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPAGESIZE
 
-/* Indirectly include features.h for __GLIBC_PREREQ */
+/*
+ * Indirectly include features.h (for __GLIBC_PREREQ) or sys/cdefs.h (for
+ * __ANDROID_API__)
+ */
 #include <stdio.h>
 
 #ifdef __GLIBC_PREREQ
@@ -119,6 +122,15 @@
 #define HAVE_EXPLICIT_BZERO
 #endif
 #if __GLIBC_PREREQ(2, 26)
+#define HAVE_REALLOCARRAY
+#endif
+#endif
+
+#ifdef __ANDROID_API__
+#if __ANDROID_API__ >= 21
+#define HAVE_GETPROGNAME
+#endif
+#if __ANDROID_API__ >= 29
 #define HAVE_REALLOCARRAY
 #endif
 #endif
