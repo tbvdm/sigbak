@@ -438,7 +438,7 @@ sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	return file;
 
 error:
-	free(file);
+	sbk_free_file(file);
 	return NULL;
 }
 
@@ -593,6 +593,82 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 error:
 	sbk_decrypt_reset(ctx);
 	return -1;
+}
+
+char *
+sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
+{
+	size_t		 ibuflen, len, obuflen, obufsize;
+	unsigned char	 mac[SBK_MAC_LEN];
+	char		*obuf, *ptr;
+
+	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+		return NULL;
+
+	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
+		sbk_error_set(ctx, "Cannot seek");
+		return NULL;
+	}
+
+	if ((size_t)file->len > SIZE_MAX - EVP_MAX_BLOCK_LENGTH - 1) {
+		sbk_error_setx(ctx, "File too large");
+		return NULL;
+	}
+
+	obufsize = file->len + EVP_MAX_BLOCK_LENGTH + 1;
+
+	if ((obuf = malloc(obufsize)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	if (sbk_decrypt_init(ctx, file->counter) == -1)
+		goto error;
+
+	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
+		sbk_error_setx(ctx, "Cannot compute HMAC");
+		goto error;
+	}
+
+	ptr = obuf;
+
+	for (len = file->len; len > 0; len -= ibuflen) {
+		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
+
+		if (sbk_read(ctx, ctx->ibuf, ibuflen) == -1)
+			goto error;
+
+		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
+			goto error;
+
+		memcpy(ptr, ctx->obuf, obuflen);
+		ptr += obuflen;
+	}
+
+	if (sbk_read(ctx, mac, sizeof mac) == -1)
+		goto error;
+
+	obuflen = 0;
+
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+		goto error;
+
+	if (obuflen > 0) {
+		memcpy(ptr, ctx->obuf, obuflen);
+		ptr += obuflen;
+	}
+
+	*ptr = '\0';
+
+	if (sbk_decrypt_reset(ctx) == -1)
+		goto error;
+
+	return obuf;
+
+error:
+	freezero(obuf, obufsize);
+	sbk_decrypt_reset(ctx);
+	return NULL;
 }
 
 static void
@@ -1143,10 +1219,111 @@ error:
 }
 
 static void
+sbk_free_attachment(struct sbk_attachment *att)
+{
+	sbk_freezero_string(att->filename);
+	sbk_freezero_string(att->content_type);
+	freezero(att, sizeof *att);
+}
+
+static void
+sbk_free_attachment_list(struct sbk_attachment_list *lst)
+{
+	struct sbk_attachment *att;
+
+	if (lst != NULL) {
+		while ((att = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_attachment(att);
+		}
+		free(lst);
+	}
+}
+
+int
+sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
+{
+	struct sbk_attachment	*att;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (mms->attachments != NULL)
+		return 0;
+
+	if (sbk_create_database(ctx) == -1)
+		return -1;
+
+	if ((mms->attachments = malloc(sizeof *mms->attachments)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return -1;
+	}
+
+	SIMPLEQ_INIT(mms->attachments);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
+	    "data_size FROM part WHERE mid = ?") == -1)
+		goto error;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((att = malloc(sizeof *att)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		att->filename = NULL;
+		att->content_type = NULL;
+
+		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
+		    == -1) {
+			sbk_free_attachment(att);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
+		    1) == -1) {
+			sbk_free_attachment(att);
+			goto error;
+		}
+
+		att->id = sqlite3_column_int64(stm, 2);
+		att->size = sqlite3_column_int64(stm, 3);
+
+		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
+		    NULL) {
+			sbk_error_setx(ctx, "Cannot find attachment file");
+			goto error;
+		}
+
+		if (att->size != att->file->len) {
+			sbk_error_setx(ctx, "Inconsistent attachment size");
+			goto error;
+		}
+
+		SIMPLEQ_INSERT_TAIL(mms->attachments, att, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return 0;
+
+error:
+	sqlite3_finalize(stm);
+	sbk_free_attachment_list(mms->attachments);
+	mms->attachments = NULL;
+	return -1;
+}
+
+static void
 sbk_free_mms(struct sbk_mms *mms)
 {
 	sbk_freezero_string(mms->address);
 	sbk_freezero_string(mms->body);
+	sbk_free_attachment_list(mms->attachments);
 	freezero(mms, sizeof *mms);
 }
 
@@ -1195,6 +1372,7 @@ sbk_get_mmses(struct sbk_ctx *ctx)
 
 		mms->address = NULL;
 		mms->body = NULL;
+		mms->attachments = NULL;
 
 		if (sbk_sqlite_column_text_copy(ctx, &mms->address, stm, 0) ==
 		    -1) {
@@ -1229,101 +1407,32 @@ error:
 	return NULL;
 }
 
-static void
-sbk_free_attachment(struct sbk_attachment *att)
+int
+sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 {
-	sbk_freezero_string(att->filename);
-	sbk_freezero_string(att->content_type);
-	freezero(att, sizeof *att);
-}
+	struct sbk_attachment	*att;
+	char			*longmsg;
+	int			 found;
 
-void
-sbk_free_attachment_list(struct sbk_attachment_list *lst)
-{
-	struct sbk_attachment *att;
+	if (sbk_get_attachments(ctx, mms) == -1)
+		return -1;
 
-	if (lst != NULL) {
-		while ((att = SIMPLEQ_FIRST(lst)) != NULL) {
-			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			sbk_free_attachment(att);
-		}
-		free(lst);
-	}
-}
-
-struct sbk_attachment_list *
-sbk_get_attachments(struct sbk_ctx *ctx, int mms_id)
-{
-	struct sbk_attachment_list	*lst;
-	struct sbk_attachment		*att;
-	sqlite3_stmt			*stm;
-	int				 ret;
-
-	if (sbk_create_database(ctx) == -1)
-		return NULL;
-
-	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
-		return NULL;
-	}
-
-	SIMPLEQ_INIT(lst);
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "data_size FROM part WHERE mid = ?") == -1)
-		goto error;
-
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1)
-		goto error;
-
-	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
-		if ((att = malloc(sizeof *att)) == NULL) {
-			sbk_error_set(ctx, NULL);
-			goto error;
+	found = 0;
+	SIMPLEQ_FOREACH(att, mms->attachments, entries)
+		if (strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
+			found = 1;
+			break;
 		}
 
-		att->filename = NULL;
-		att->content_type = NULL;
+	if (!found)
+		return 0;
 
-		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
-		    == -1) {
-			sbk_free_attachment(att);
-			goto error;
-		}
+	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
+		return -1;
 
-		if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
-		    1) == -1) {
-			sbk_free_attachment(att);
-			goto error;
-		}
-
-		att->id = sqlite3_column_int64(stm, 2);
-		att->size = sqlite3_column_int64(stm, 3);
-
-		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
-		    NULL) {
-			sbk_error_setx(ctx, "Cannot find attachment file");
-			goto error;
-		}
-
-		if (att->size != att->file->len) {
-			sbk_error_setx(ctx, "Inconsistent attachment size");
-			goto error;
-		}
-
-		SIMPLEQ_INSERT_TAIL(lst, att, entries);
-	}
-
-	if (ret != SQLITE_DONE)
-		goto error;
-
-	sqlite3_finalize(stm);
-	return lst;
-
-error:
-	sbk_free_attachment_list(lst);
-	sqlite3_finalize(stm);
-	return NULL;
+	sbk_freezero_string(mms->body);
+	mms->body = longmsg;
+	return 0;
 }
 
 char *

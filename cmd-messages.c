@@ -162,6 +162,11 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
+	if (sbk_get_long_message(ctx, mms) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
+	}
+
 	if (mms->body != NULL)
 		fprintf(fp, "\n%s\n", mms->body);
 
@@ -257,7 +262,6 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir)
 static int
 text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 {
-	struct sbk_attachment_list *lst;
 	struct sbk_attachment *att;
 	char	*name;
 	time_t	 date;
@@ -296,10 +300,12 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	fprintf(fp, "Thread: %d\n", mms->thread);
 
 	if (mms->nattachments > 0) {
-		if ((lst = sbk_get_attachments(ctx, mms->id)) == NULL)
+		if (sbk_get_attachments(ctx, mms) == -1) {
+			warnx("%s", sbk_error(ctx));
 			return -1;
+		}
 
-		SIMPLEQ_FOREACH(att, lst, entries) {
+		SIMPLEQ_FOREACH(att, mms->attachments, entries) {
 			fputs("Attachment: ", fp);
 			if (att->filename == NULL)
 				fputs("no filename", fp);
@@ -309,8 +315,11 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 			    ")\n", (att->content_type != NULL) ?
 			    att->content_type : "", att->size, att->id);
 		}
+	}
 
-		sbk_free_attachment_list(lst);
+	if (sbk_get_long_message(ctx, mms) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
 	}
 
 	if (mms->body != NULL)
