@@ -596,6 +596,82 @@ error:
 	return -1;
 }
 
+char *
+sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
+{
+	size_t		 ibuflen, len, obuflen, obufsize;
+	unsigned char	 mac[SBK_MAC_LEN];
+	char		*obuf, *ptr;
+
+	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+		return NULL;
+
+	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
+		sbk_error_set(ctx, "Cannot seek");
+		return NULL;
+	}
+
+	if ((size_t)file->len > SIZE_MAX - EVP_MAX_BLOCK_LENGTH - 1) {
+		sbk_error_setx(ctx, "File too large");
+		return NULL;
+	}
+
+	obufsize = file->len + EVP_MAX_BLOCK_LENGTH + 1;
+
+	if ((obuf = malloc(obufsize)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	if (sbk_decrypt_init(ctx, file->counter) == -1)
+		goto error;
+
+	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
+		sbk_error_setx(ctx, "Cannot compute HMAC");
+		goto error;
+	}
+
+	ptr = obuf;
+
+	for (len = file->len; len > 0; len -= ibuflen) {
+		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
+
+		if (sbk_read(ctx, ctx->ibuf, ibuflen) == -1)
+			goto error;
+
+		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
+			goto error;
+
+		memcpy(ptr, ctx->obuf, obuflen);
+		ptr += obuflen;
+	}
+
+	if (sbk_read(ctx, mac, sizeof mac) == -1)
+		goto error;
+
+	obuflen = 0;
+
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+		goto error;
+
+	if (obuflen > 0) {
+		memcpy(ptr, ctx->obuf, obuflen);
+		ptr += obuflen;
+	}
+
+	*ptr = '\0';
+
+	if (sbk_decrypt_reset(ctx) == -1)
+		goto error;
+
+	return obuf;
+
+error:
+	freezero(obuf, obufsize);
+	sbk_decrypt_reset(ctx);
+	return NULL;
+}
+
 static void
 sbk_freezero_string(char *s)
 {
@@ -1330,6 +1406,34 @@ error:
 	sbk_free_mms_list(lst);
 	sqlite3_finalize(stm);
 	return NULL;
+}
+
+int
+sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
+{
+	struct sbk_attachment	*att;
+	char			*longmsg;
+	int			 found;
+
+	if (sbk_get_attachments(ctx, mms) == -1)
+		return -1;
+
+	found = 0;
+	SIMPLEQ_FOREACH(att, mms->attachments, entries)
+		if (strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
+			found = 1;
+			break;
+		}
+
+	if (!found)
+		return 0;
+
+	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
+		return -1;
+
+	sbk_freezero_string(mms->body);
+	mms->body = longmsg;
+	return 0;
 }
 
 char *

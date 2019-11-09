@@ -93,6 +93,9 @@
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
 
+/* Content type of the long-text attachment of a long message */
+#define SBK_LONG_TEXT_TYPE	"text/x-signal-plain"
+
 struct sbk_ctx;
 
 struct sbk_file;
@@ -146,6 +149,7 @@ int		 sbk_rewind(struct sbk_ctx *);
 
 Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *, struct sbk_file **);
 int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
+char		*sbk_get_file_as_string(struct sbk_ctx *, struct sbk_file *);
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
@@ -154,6 +158,7 @@ void		 sbk_free_sms_list(struct sbk_sms_list *);
 
 struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *);
 int		 sbk_get_attachments(struct sbk_ctx *, struct sbk_mms *);
+int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
 void		 sbk_free_mms_list(struct sbk_mms_list *);
 
 char		*sbk_get_contact_name(struct sbk_ctx *, const char *);

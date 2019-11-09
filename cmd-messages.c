@@ -162,6 +162,11 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
+	if (sbk_get_long_message(ctx, mms) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
+	}
+
 	if (mms->body != NULL)
 		fprintf(fp, "\n%s\n", mms->body);
 
@@ -310,6 +315,11 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 			    ")\n", (att->content_type != NULL) ?
 			    att->content_type : "", att->size, att->id);
 		}
+	}
+
+	if (sbk_get_long_message(ctx, mms) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
 	}
 
 	if (mms->body != NULL)
