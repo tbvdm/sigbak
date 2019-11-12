@@ -672,13 +672,6 @@ error:
 	return NULL;
 }
 
-static void
-sbk_freezero_string(char *s)
-{
-	if (s != NULL)
-		freezero(s, strlen(s));
-}
-
 static int
 sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     const void *val, size_t len)
@@ -1122,7 +1115,7 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 	else
 		contact = sms->address;
 
-	sbk_freezero_string(sms->body);
+	freezero_string(sms->body);
 
 	if (asprintf(&sms->body, fmt, contact) == -1)
 		sms->body = NULL;
@@ -1133,8 +1126,8 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 static void
 sbk_free_sms(struct sbk_sms *sms)
 {
-	sbk_freezero_string(sms->address);
-	sbk_freezero_string(sms->body);
+	freezero_string(sms->address);
+	freezero_string(sms->body);
 	freezero(sms, sizeof *sms);
 }
 
@@ -1222,8 +1215,8 @@ error:
 static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
-	sbk_freezero_string(att->filename);
-	sbk_freezero_string(att->content_type);
+	freezero_string(att->filename);
+	freezero_string(att->content_type);
 	freezero(att, sizeof *att);
 }
 
@@ -1322,8 +1315,8 @@ error:
 static void
 sbk_free_mms(struct sbk_mms *mms)
 {
-	sbk_freezero_string(mms->address);
-	sbk_freezero_string(mms->body);
+	freezero_string(mms->address);
+	freezero_string(mms->body);
 	sbk_free_attachment_list(mms->attachments);
 	freezero(mms, sizeof *mms);
 }
@@ -1431,7 +1424,7 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
 		return -1;
 
-	sbk_freezero_string(mms->body);
+	freezero_string(mms->body);
 	mms->body = longmsg;
 	return 0;
 }
