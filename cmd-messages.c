@@ -150,7 +150,7 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
-	free(name);
+	freezero_string(name);
 	maildir_write_date_header(fp, "Date", mms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
@@ -194,7 +194,7 @@ maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
-	free(name);
+	freezero_string(name);
 	maildir_write_date_header(fp, "Date", sms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
@@ -285,7 +285,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	else {
 		fprintf(fp, "%s (%s)\n", name, isgroup ? "group" :
 		    mms->address);
-		free(name);
+		freezero_string(name);
 	}
 
 	date = mms->date_sent / 1000;
@@ -345,7 +345,7 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 		fprintf(fp, "%s\n", sms->address);
 	else {
 		fprintf(fp, "%s (%s)\n", name, sms->address);
-		free(name);
+		freezero_string(name);
 	}
 
 	date = sms->date_sent / 1000;
