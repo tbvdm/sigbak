@@ -170,6 +170,7 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
 	if (mms->body != NULL)
 		fprintf(fp, "\n%s\n", mms->body);
 
+	fclose(fp);
 	return 0;
 }
 
