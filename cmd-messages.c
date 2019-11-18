@@ -265,7 +265,6 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 {
 	struct sbk_attachment *att;
 	char	*name;
-	time_t	 date;
 	int	 isgroup;
 
 	if (SBK_IS_OUTGOING_MESSAGE(mms->type))
@@ -289,13 +288,10 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 		freezero_string(name);
 	}
 
-	date = mms->date_sent / 1000;
-	fprintf(fp, "Sent: %s", ctime(&date));
+	maildir_write_date_header(fp, "Sent", mms->date_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(mms->type)) {
-		date = mms->date_recv / 1000;
-		fprintf(fp, "Received: %s", ctime(&date));
-	}
+	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
+		maildir_write_date_header(fp, "Received", mms->date_sent);
 
 	fprintf(fp, "Type: %#x\n", mms->type);
 	fprintf(fp, "Thread: %d\n", mms->thread);
@@ -334,8 +330,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 static int
 text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 {
-	char	*name;
-	time_t	 date;
+	char *name;
 
 	if (SBK_IS_OUTGOING_MESSAGE(sms->type))
 		fputs("To: ", fp);
@@ -349,13 +344,10 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 		freezero_string(name);
 	}
 
-	date = sms->date_sent / 1000;
-	fprintf(fp, "Sent: %s", ctime(&date));
+	maildir_write_date_header(fp, "Sent", sms->date_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(sms->type)) {
-		date = sms->date_recv / 1000;
-		fprintf(fp, "Received: %s", ctime(&date));
-	}
+	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
+		maildir_write_date_header(fp, "Received", sms->date_sent);
 
 	fprintf(fp, "Type: %#x\n", sms->type);
 	fprintf(fp, "Thread: %d\n", sms->thread);
