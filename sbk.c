@@ -62,6 +62,10 @@ struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
 	struct sbk_attachment_tree attachments;
+	int		(*get_contact)(struct sbk_ctx *, const char *, char **,
+			    char **);
+	int		(*get_group)(struct sbk_ctx *, const char *, char **);
+	int		(*is_group)(struct sbk_ctx *, const char *);
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
@@ -77,8 +81,9 @@ struct sbk_ctx {
 	char		*error;
 };
 
-static int sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
-    struct sbk_attachment_entry *);
+static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
+		    struct sbk_attachment_entry *);
+static void	sbk_set_function_pointers(struct sbk_ctx *);
 
 RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
     sbk_cmp_attachment_entries)
@@ -845,6 +850,25 @@ sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
 }
 
 static int
+sbk_sqlite_table_exists(struct sbk_ctx *ctx, const char *table)
+{
+	sqlite3_stmt	*stm;
+	int		 ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT name FROM sqlite_master "
+	    "WHERE type = 'table' AND NAME = ?") == -1)
+		return 0;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, table) == -1)
+		ret = 0;
+	else
+		ret = sbk_sqlite_step(ctx, stm) == SQLITE_ROW;
+
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
@@ -1110,10 +1134,11 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 	if (fmt == NULL)
 		return;
 
-	if ((name = sbk_get_contact_name(ctx, sms->address)) != NULL)
-		contact = name;
-	else
+	if (sbk_get_contact(ctx, sms->address, &name, NULL) == -1 ||
+	    name == NULL)
 		contact = sms->address;
+	else
+		contact = name;
 
 	freezero_string(sms->body);
 
@@ -1429,48 +1454,205 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	return 0;
 }
 
-char *
-sbk_get_contact_name(struct sbk_ctx *ctx, const char *addr)
+static int
+sbk_get_contact_1(struct sbk_ctx *ctx, const char *id, char **name,
+    char **phone)
 {
 	sqlite3_stmt	*stm;
-	char		*name;
-
-	if (addr == NULL)
-		return NULL;
+	int		 result, ret;
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name FROM "
 	    "recipient_preferences WHERE recipient_ids = ?") == -1)
-		return NULL;
+		return -1;
 
-	name = NULL;
+	ret = -1;
 
-	if (sbk_sqlite_bind_text(ctx, stm, 1, addr) == -1)
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
 		goto out;
 
-	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such contact");
 		goto out;
+	}
 
-	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	if (phone != NULL) {
+		if ((*phone = strdup(id)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			if (name != NULL) {
+				freezero_string(*name);
+				*name = NULL;
+			}
+			goto out;
+		}
+	}
+
+	ret = 0;
 
 out:
 	sqlite3_finalize(stm);
-	return name;
+	return ret;
 }
 
-char *
-sbk_get_group_name(struct sbk_ctx *ctx, const char *id)
+static int
+sbk_get_contact_2(struct sbk_ctx *ctx, const char *id, char **name,
+    char **phone)
 {
 	sqlite3_stmt	*stm;
-	char		*name;
+	int		 result, ret;
 
-	if (id == NULL)
-		return NULL;
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name, phone "
+	    "FROM recipient WHERE _id = ?") == -1)
+		return -1;
+
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such contact");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	if (phone != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, phone, stm, 1) == -1) {
+			if (name != NULL) {
+				freezero_string(*name);
+				*name = NULL;
+			}
+			goto out;
+		}
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_contact(struct sbk_ctx *ctx, const char *id, char **name, char **phone)
+{
+	if (name != NULL)
+		*name = NULL;
+
+	if (phone != NULL)
+		*phone = NULL;
+
+	if (ctx->get_contact == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->get_contact(ctx, id, name, phone);
+}
+
+int
+sbk_get_group_1(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	sqlite3_stmt	*stm;
+	int		 result, ret;
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
 	    "group_id = ?") == -1)
-		return NULL;
+		return -1;
 
-	name = NULL;
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such group");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_group_2(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	sqlite3_stmt	*stm;
+	int		 result, ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
+		"recipient_id = ?") == -1)
+		return -1;
+
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such group");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_group(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	if (name != NULL)
+		*name = NULL;
+
+	if (ctx->get_group == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->get_group(ctx, id, name);
+}
+
+int
+sbk_is_group_1(__unused struct sbk_ctx *ctx, const char *id)
+{
+	return strncmp(id, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1) == 0;
+}
+
+int
+sbk_is_group_2(struct sbk_ctx *ctx, const char *id)
+{
+	sqlite3_stmt	*stm;
+	int		 ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT group_id FROM recipient "
+	    "WHERE _id = ?") == -1)
+		return -1;
+
+	ret = -1;
 
 	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
 		goto out;
@@ -1478,18 +1660,34 @@ sbk_get_group_name(struct sbk_ctx *ctx, const char *id)
 	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
 		goto out;
 
-	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+	ret = sqlite3_column_type(stm, 0) != SQLITE_NULL;
 
 out:
 	sqlite3_finalize(stm);
-	return name;
+	return ret;
 }
 
 int
-sbk_is_group_address(const char *addr)
+sbk_is_group(struct sbk_ctx *ctx, const char *id)
 {
-	return strncmp(addr, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1)
-	    == 0;
+	if (ctx->is_group == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->is_group(ctx, id);
+}
+
+static void
+sbk_set_function_pointers(struct sbk_ctx *ctx)
+{
+	if (sbk_sqlite_table_exists(ctx, "recipient_preferences")) {
+		ctx->get_contact = sbk_get_contact_1;
+		ctx->get_group = sbk_get_group_1;
+		ctx->is_group = sbk_is_group_1;
+	} else {
+		ctx->get_contact = sbk_get_contact_2;
+		ctx->get_group = sbk_get_group_2;
+		ctx->is_group = sbk_is_group_2;
+	}
 }
 
 static int
@@ -1635,6 +1833,9 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
+	ctx->get_contact = NULL;
+	ctx->get_group = NULL;
+	ctx->is_group = NULL;
 	RB_INIT(&ctx->attachments);
 	return 0;
 
