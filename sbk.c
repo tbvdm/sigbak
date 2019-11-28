@@ -1280,7 +1280,7 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	SIMPLEQ_INIT(mms->attachments);
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "data_size FROM part WHERE mid = ?") == -1)
+	    "data_size FROM part WHERE mid = ? ORDER BY unique_id, _id") == -1)
 		goto error;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
