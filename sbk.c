@@ -383,9 +383,15 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 }
 
 static Signal__BackupFrame *
-sbk_unpack_frame(unsigned char *buf, size_t len)
+sbk_unpack_frame(struct sbk_ctx *ctx, unsigned char *buf, size_t len)
 {
-	return signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf);
+	Signal__BackupFrame *frm;
+
+	if ((frm = signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf))
+	    == NULL)
+		sbk_error_setx(ctx, "Cannot unpack frame");
+
+	return frm;
 }
 
 static struct sbk_file *
@@ -450,9 +456,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	/* The first frame is not encrypted */
 	if (ctx->firstframe) {
 		ctx->firstframe = 0;
-		if ((frm = sbk_unpack_frame(ctx->ibuf, ibuflen)) == NULL)
-			sbk_error_setx(ctx, "Cannot unpack frame");
-		return frm;
+		return sbk_unpack_frame(ctx, ctx->ibuf, ibuflen);
 	}
 
 	if (ibuflen <= SBK_MAC_LEN) {
@@ -472,10 +476,8 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		return NULL;
 
-	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL) {
-		sbk_error_setx(ctx, "Cannot unpack frame");
+	if ((frm = sbk_unpack_frame(ctx, ctx->obuf, obuflen)) == NULL)
 		return NULL;
-	}
 
 	if (frm->has_end)
 		ctx->eof = 1;
