@@ -126,31 +126,43 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
     struct sbk_mms *mms)
 {
 	FILE	*fp;
-	char	*name;
-	int	 isgroup;
+	char	*name, *phone;
+	int	 isgroup, ret;
+
+	ret = -1;
+	isgroup = sbk_is_group(ctx, mms->address);
+
+	if (isgroup) {
+		if (sbk_get_group(ctx, mms->address, &name) == -1) {
+			warnx("%s", sbk_error(ctx));
+			return -1;
+		}
+		phone = NULL;
+	} else {
+		if (sbk_get_contact(ctx, mms->address, &name, &phone) == -1) {
+			warnx("%s", sbk_error(ctx));
+			return -1;
+		}
+	}
+
+	if (sbk_get_long_message(ctx, mms) == -1) {
+		warnx("%s", sbk_error(ctx));
+		goto out;
+	}
 
 	if ((fp = maildir_open_file(maildir, mms->date_recv, mms->date_sent))
 	    == NULL)
-		return -1;
-
-	if (sbk_is_group_address(mms->address)) {
-		name = sbk_get_group_name(ctx, mms->address);
-		isgroup = 1;
-	} else {
-		name = sbk_get_contact_name(ctx, mms->address);
-		isgroup = 0;
-	}
+		goto out;
 
 	if (SBK_IS_OUTGOING_MESSAGE(mms->type)) {
 		maildir_write_address_header(fp, "From", "you", "You");
 		maildir_write_address_header(fp, "To",
-		    isgroup ? "group" : mms->address, name);
+		    isgroup ? "group" : phone, name);
 	} else {
-		maildir_write_address_header(fp, "From", mms->address, name);
+		maildir_write_address_header(fp, "From", phone, name);
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
-	free(name);
 	maildir_write_date_header(fp, "Date", mms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
@@ -162,15 +174,16 @@ maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
-	if (sbk_get_long_message(ctx, mms) == -1) {
-		warnx("%s", sbk_error(ctx));
-		return -1;
-	}
-
 	if (mms->body != NULL)
 		fprintf(fp, "\n%s\n", mms->body);
 
-	return 0;
+	fclose(fp);
+	ret = 0;
+
+out:
+	freezero_string(name);
+	freezero_string(phone);
+	return ret;
 }
 
 static int
@@ -178,23 +191,32 @@ maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
     struct sbk_sms *sms)
 {
 	FILE	*fp;
-	char	*name;
+	char	*name, *phone;
+	int	 ret;
+
+	ret = -1;
+
+	if (sbk_get_contact(ctx, sms->address, &name, &phone) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
+	}
 
 	if ((fp = maildir_open_file(maildir, sms->date_recv, sms->date_sent))
 	    == NULL)
-		return -1;
-
-	name = sbk_get_contact_name(ctx, sms->address);
+	    	goto out;
 
 	if (SBK_IS_OUTGOING_MESSAGE(sms->type)) {
 		maildir_write_address_header(fp, "From", "you", "You");
-		maildir_write_address_header(fp, "To", sms->address, name);
+		maildir_write_address_header(fp, "To",
+		    (phone != NULL) ? phone : "unknown",
+		    (name != NULL) ? name : "unknown");
 	} else {
-		maildir_write_address_header(fp, "From", sms->address, name);
+		maildir_write_address_header(fp, "From",
+		    (phone != NULL) ? phone : "unknown",
+		    (name != NULL) ? name : "unknown");
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
-	free(name);
 	maildir_write_date_header(fp, "Date", sms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
@@ -210,7 +232,12 @@ maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
 		fprintf(fp, "\n%s\n", sms->body);
 
 	fclose(fp);
-	return 0;
+	ret = 0;
+
+out:
+	freezero_string(name);
+	freezero_string(phone);
+	return ret;
 }
 
 static int
@@ -263,38 +290,37 @@ static int
 text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 {
 	struct sbk_attachment *att;
-	char	*name;
-	time_t	 date;
+	char	*name, *phone;
 	int	 isgroup;
+
+	isgroup = sbk_is_group(ctx, mms->address);
+
+	if (isgroup) {
+		if (sbk_get_group(ctx, mms->address, &name) == -1) {
+			warnx("%s", sbk_error(ctx));
+			return -1;
+		}
+		phone = NULL;
+	} else {
+		if (sbk_get_contact(ctx, mms->address, &name, &phone) == -1) {
+			warnx("%s", sbk_error(ctx));
+			return -1;
+		}
+	}
 
 	if (SBK_IS_OUTGOING_MESSAGE(mms->type))
 		fputs("To: ", fp);
 	else
 		fputs("From: ", fp);
 
-	if (sbk_is_group_address(mms->address)) {
-		name = sbk_get_group_name(ctx, mms->address);
-		isgroup = 1;
-	} else {
-		name = sbk_get_contact_name(ctx, mms->address);
-		isgroup = 0;
-	}
+	fprintf(fp, "%s (%s)\n",
+	    (name != NULL) ? name : "unknown",
+	    isgroup ? "group" : ((phone != NULL) ? phone : "unknown"));
 
-	if (name == NULL)
-		fprintf(fp, "%s\n", isgroup ? "unknown group" : mms->address);
-	else {
-		fprintf(fp, "%s (%s)\n", name, isgroup ? "group" :
-		    mms->address);
-		free(name);
-	}
+	maildir_write_date_header(fp, "Sent", mms->date_sent);
 
-	date = mms->date_sent / 1000;
-	fprintf(fp, "Sent: %s", ctime(&date));
-
-	if (!SBK_IS_OUTGOING_MESSAGE(mms->type)) {
-		date = mms->date_recv / 1000;
-		fprintf(fp, "Received: %s", ctime(&date));
-	}
+	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
+		maildir_write_date_header(fp, "Received", mms->date_sent);
 
 	fprintf(fp, "Type: %#x\n", mms->type);
 	fprintf(fp, "Thread: %d\n", mms->thread);
@@ -327,34 +353,35 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	else
 		fputs("\n", fp);
 
+	freezero_string(name);
+	freezero_string(phone);
+
 	return 0;
 }
 
 static int
 text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 {
-	char	*name;
-	time_t	 date;
+	char *name, *phone;
+
+	if (sbk_get_contact(ctx, sms->address, &name, &phone) == -1) {
+		warnx("%s", sbk_error(ctx));
+		return -1;
+	}
 
 	if (SBK_IS_OUTGOING_MESSAGE(sms->type))
 		fputs("To: ", fp);
 	else
 		fputs("From: ", fp);
 
-	if ((name = sbk_get_contact_name(ctx, sms->address)) == NULL)
-		fprintf(fp, "%s\n", sms->address);
-	else {
-		fprintf(fp, "%s (%s)\n", name, sms->address);
-		free(name);
-	}
+	fprintf(fp, "%s (%s)\n",
+	    (name != NULL) ? name : "unknown",
+	    (phone != NULL) ? phone : "unknown");
 
-	date = sms->date_sent / 1000;
-	fprintf(fp, "Sent: %s", ctime(&date));
+	maildir_write_date_header(fp, "Sent", sms->date_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(sms->type)) {
-		date = sms->date_recv / 1000;
-		fprintf(fp, "Received: %s", ctime(&date));
-	}
+	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
+		maildir_write_date_header(fp, "Received", sms->date_sent);
 
 	fprintf(fp, "Type: %#x\n", sms->type);
 	fprintf(fp, "Thread: %d\n", sms->thread);
@@ -364,6 +391,8 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 	else
 		fputs("\n", fp);
 
+	freezero_string(name);
+	freezero_string(phone);
 	return 0;
 }
 

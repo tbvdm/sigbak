@@ -61,6 +61,10 @@ struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
 	struct sbk_attachment_tree attachments;
+	int		(*get_contact)(struct sbk_ctx *, const char *, char **,
+			    char **);
+	int		(*get_group)(struct sbk_ctx *, const char *, char **);
+	int		(*is_group)(struct sbk_ctx *, const char *);
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
@@ -76,8 +80,9 @@ struct sbk_ctx {
 	char		*error;
 };
 
-static int sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
-    struct sbk_attachment_entry *);
+static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
+		    struct sbk_attachment_entry *);
+static void	sbk_set_function_pointers(struct sbk_ctx *);
 
 RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
     sbk_cmp_attachment_entries)
@@ -240,14 +245,13 @@ sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 	ctx->iv[2] = counter >> 8;
 	ctx->iv[3] = counter;
 
-	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
-	    NULL) == 0) {
+	if (HMAC_Init_ex(ctx->hmac, NULL, 0, NULL, NULL) == 0) {
 		sbk_error_setx(ctx, "Cannot initialise HMAC");
 		return -1;
 	}
 
-	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
-	    ctx->cipherkey, ctx->iv) == 0) {
+	if (EVP_DecryptInit_ex(ctx->cipher, NULL, NULL, ctx->cipherkey,
+	    ctx->iv) == 0) {
 		sbk_error_setx(ctx, "Cannot initialise cipher");
 		return -1;
 	}
@@ -298,22 +302,6 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 
 	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
 		sbk_error_setx(ctx, "HMAC mismatch");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int
-sbk_decrypt_reset(struct sbk_ctx *ctx)
-{
-	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0) {
-		sbk_error_setx(ctx, "Cannot reset cipher");
-		return -1;
-	}
-
-	if (HMAC_CTX_reset(ctx->hmac) == 0) {
-		sbk_error_setx(ctx, "Cannot reset HMAC");
 		return -1;
 	}
 
@@ -394,9 +382,15 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 }
 
 static Signal__BackupFrame *
-sbk_unpack_frame(unsigned char *buf, size_t len)
+sbk_unpack_frame(struct sbk_ctx *ctx, unsigned char *buf, size_t len)
 {
-	return signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf);
+	Signal__BackupFrame *frm;
+
+	if ((frm = signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf))
+	    == NULL)
+		sbk_error_setx(ctx, "Cannot unpack frame");
+
+	return frm;
 }
 
 static struct sbk_file *
@@ -461,9 +455,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	/* The first frame is not encrypted */
 	if (ctx->firstframe) {
 		ctx->firstframe = 0;
-		if ((frm = sbk_unpack_frame(ctx->ibuf, ibuflen)) == NULL)
-			sbk_error_setx(ctx, "Cannot unpack frame");
-		return frm;
+		return sbk_unpack_frame(ctx, ctx->ibuf, ibuflen);
 	}
 
 	if (ibuflen <= SBK_MAC_LEN) {
@@ -474,28 +466,17 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	ibuflen -= SBK_MAC_LEN;
 	mac = ctx->ibuf + ibuflen;
 
-	if (sbk_decrypt_init(ctx, ctx->counter) == -1) {
-		sbk_decrypt_reset(ctx);
-		return NULL;
-	}
-
-	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1) {
-		sbk_decrypt_reset(ctx);
-		return NULL;
-	}
-
-	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1) {
-		sbk_decrypt_reset(ctx);
-		return NULL;
-	}
-
-	if (sbk_decrypt_reset(ctx) == -1)
+	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
 		return NULL;
 
-	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL) {
-		sbk_error_setx(ctx, "Cannot unpack frame");
+	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 		return NULL;
-	}
+
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+		return NULL;
+
+	if ((frm = sbk_unpack_frame(ctx, ctx->obuf, obuflen)) == NULL)
+		return NULL;
 
 	if (frm->has_end)
 		ctx->eof = 1;
@@ -552,47 +533,43 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	}
 
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
-		goto error;
+		return -1;
 
 	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
 		sbk_error_setx(ctx, "Cannot compute HMAC");
-		goto error;
+		return -1;
 	}
 
 	for (len = file->len; len > 0; len -= ibuflen) {
 		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
 
 		if (sbk_read(ctx, ctx->ibuf, ibuflen) == -1)
-			goto error;
+			return -1;
 
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
-			goto error;
+			return -1;
 
 		if (fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
 			sbk_error_set(ctx, "Cannot write file");
-			goto error;
+			return -1;
 		}
 	}
 
 	if (sbk_read(ctx, mac, sizeof mac) == -1)
-		goto error;
+		return -1;
 
 	obuflen = 0;
 
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
-		goto error;
+		return -1;
 
 	if (obuflen > 0 && fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) !=
 	    1) {
 		sbk_error_set(ctx, "Cannot write file");
-		goto error;
+		return -1;
 	}
 
-	return sbk_decrypt_reset(ctx);
-
-error:
-	sbk_decrypt_reset(ctx);
-	return -1;
+	return 0;
 }
 
 char *
@@ -659,23 +636,11 @@ sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 	}
 
 	*ptr = '\0';
-
-	if (sbk_decrypt_reset(ctx) == -1)
-		goto error;
-
 	return obuf;
 
 error:
 	freezero(obuf, obufsize);
-	sbk_decrypt_reset(ctx);
 	return NULL;
-}
-
-static void
-sbk_freezero_string(char *s)
-{
-	if (s != NULL)
-		freezero(s, strlen(s));
 }
 
 static int
@@ -848,6 +813,25 @@ sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
 	}
 
 	return 0;
+}
+
+static int
+sbk_sqlite_table_exists(struct sbk_ctx *ctx, const char *table)
+{
+	sqlite3_stmt	*stm;
+	int		 ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT name FROM sqlite_master "
+	    "WHERE type = 'table' AND NAME = ?") == -1)
+		return 0;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, table) == -1)
+		ret = 0;
+	else
+		ret = sbk_sqlite_step(ctx, stm) == SQLITE_ROW;
+
+	sqlite3_finalize(stm);
+	return ret;
 }
 
 static int
@@ -1116,12 +1100,13 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 	if (fmt == NULL)
 		return;
 
-	if ((name = sbk_get_contact_name(ctx, sms->address)) != NULL)
-		contact = name;
-	else
+	if (sbk_get_contact(ctx, sms->address, &name, NULL) == -1 ||
+	    name == NULL)
 		contact = sms->address;
+	else
+		contact = name;
 
-	sbk_freezero_string(sms->body);
+	freezero_string(sms->body);
 
 	if (asprintf(&sms->body, fmt, contact) == -1)
 		sms->body = NULL;
@@ -1132,8 +1117,8 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 static void
 sbk_free_sms(struct sbk_sms *sms)
 {
-	sbk_freezero_string(sms->address);
-	sbk_freezero_string(sms->body);
+	freezero_string(sms->address);
+	freezero_string(sms->body);
 	freezero(sms, sizeof *sms);
 }
 
@@ -1221,8 +1206,8 @@ error:
 static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
-	sbk_freezero_string(att->filename);
-	sbk_freezero_string(att->content_type);
+	freezero_string(att->filename);
+	freezero_string(att->content_type);
 	freezero(att, sizeof *att);
 }
 
@@ -1261,7 +1246,7 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	SIMPLEQ_INIT(mms->attachments);
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "data_size FROM part WHERE mid = ?") == -1)
+	    "data_size FROM part WHERE mid = ? ORDER BY unique_id, _id") == -1)
 		goto error;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
@@ -1321,8 +1306,8 @@ error:
 static void
 sbk_free_mms(struct sbk_mms *mms)
 {
-	sbk_freezero_string(mms->address);
-	sbk_freezero_string(mms->body);
+	freezero_string(mms->address);
+	freezero_string(mms->body);
 	sbk_free_attachment_list(mms->attachments);
 	freezero(mms, sizeof *mms);
 }
@@ -1430,53 +1415,210 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
 		return -1;
 
-	sbk_freezero_string(mms->body);
+	freezero_string(mms->body);
 	mms->body = longmsg;
 	return 0;
 }
 
-char *
-sbk_get_contact_name(struct sbk_ctx *ctx, const char *addr)
+static int
+sbk_get_contact_1(struct sbk_ctx *ctx, const char *id, char **name,
+    char **phone)
 {
 	sqlite3_stmt	*stm;
-	char		*name;
-
-	if (addr == NULL)
-		return NULL;
+	int		 result, ret;
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name FROM "
 	    "recipient_preferences WHERE recipient_ids = ?") == -1)
-		return NULL;
+		return -1;
 
-	name = NULL;
+	ret = -1;
 
-	if (sbk_sqlite_bind_text(ctx, stm, 1, addr) == -1)
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
 		goto out;
 
-	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such contact");
 		goto out;
+	}
 
-	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	if (phone != NULL) {
+		if ((*phone = strdup(id)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			if (name != NULL) {
+				freezero_string(*name);
+				*name = NULL;
+			}
+			goto out;
+		}
+	}
+
+	ret = 0;
 
 out:
 	sqlite3_finalize(stm);
-	return name;
+	return ret;
 }
 
-char *
-sbk_get_group_name(struct sbk_ctx *ctx, const char *id)
+static int
+sbk_get_contact_2(struct sbk_ctx *ctx, const char *id, char **name,
+    char **phone)
 {
 	sqlite3_stmt	*stm;
-	char		*name;
+	int		 result, ret;
 
-	if (id == NULL)
-		return NULL;
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name, phone "
+	    "FROM recipient WHERE _id = ?") == -1)
+		return -1;
+
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such contact");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	if (phone != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, phone, stm, 1) == -1) {
+			if (name != NULL) {
+				freezero_string(*name);
+				*name = NULL;
+			}
+			goto out;
+		}
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_contact(struct sbk_ctx *ctx, const char *id, char **name, char **phone)
+{
+	if (name != NULL)
+		*name = NULL;
+
+	if (phone != NULL)
+		*phone = NULL;
+
+	if (ctx->get_contact == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->get_contact(ctx, id, name, phone);
+}
+
+int
+sbk_get_group_1(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	sqlite3_stmt	*stm;
+	int		 result, ret;
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
 	    "group_id = ?") == -1)
-		return NULL;
+		return -1;
 
-	name = NULL;
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such group");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_group_2(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	sqlite3_stmt	*stm;
+	int		 result, ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
+		"recipient_id = ?") == -1)
+		return -1;
+
+	ret = -1;
+
+	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
+		goto out;
+
+	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
+		if (result == SQLITE_DONE)
+			sbk_error_setx(ctx, "No such group");
+		goto out;
+	}
+
+	if (name != NULL) {
+		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
+			goto out;
+	}
+
+	ret = 0;
+
+out:
+	sqlite3_finalize(stm);
+	return ret;
+}
+
+int
+sbk_get_group(struct sbk_ctx *ctx, const char *id, char **name)
+{
+	if (name != NULL)
+		*name = NULL;
+
+	if (ctx->get_group == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->get_group(ctx, id, name);
+}
+
+int
+sbk_is_group_1(__unused struct sbk_ctx *ctx, const char *id)
+{
+	return strncmp(id, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1) == 0;
+}
+
+int
+sbk_is_group_2(struct sbk_ctx *ctx, const char *id)
+{
+	sqlite3_stmt	*stm;
+	int		 ret;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT group_id FROM recipient "
+	    "WHERE _id = ?") == -1)
+		return -1;
+
+	ret = -1;
 
 	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
 		goto out;
@@ -1484,18 +1626,34 @@ sbk_get_group_name(struct sbk_ctx *ctx, const char *id)
 	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
 		goto out;
 
-	sbk_sqlite_column_text_copy(ctx, &name, stm, 0);
+	ret = sqlite3_column_type(stm, 0) != SQLITE_NULL;
 
 out:
 	sqlite3_finalize(stm);
-	return name;
+	return ret;
 }
 
 int
-sbk_is_group_address(const char *addr)
+sbk_is_group(struct sbk_ctx *ctx, const char *id)
 {
-	return strncmp(addr, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1)
-	    == 0;
+	if (ctx->is_group == NULL)
+		sbk_set_function_pointers(ctx);
+
+	return ctx->is_group(ctx, id);
+}
+
+static void
+sbk_set_function_pointers(struct sbk_ctx *ctx)
+{
+	if (sbk_sqlite_table_exists(ctx, "recipient_preferences")) {
+		ctx->get_contact = sbk_get_contact_1;
+		ctx->get_group = sbk_get_group_1;
+		ctx->is_group = sbk_is_group_1;
+	} else {
+		ctx->get_contact = sbk_get_contact_2;
+		ctx->get_group = sbk_get_group_2;
+		ctx->is_group = sbk_is_group_2;
+	}
 }
 
 static int
@@ -1636,11 +1794,24 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	if (sbk_compute_keys(ctx, passphr, salt, saltlen) == -1)
 		goto error;
 
+	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL, NULL,
+	    NULL) == 0)
+		goto error;
+
+	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
+	    NULL) == 0) {
+		sbk_error_setx(ctx, "Cannot initialise HMAC");
+		goto error;
+	}
+
 	if (sbk_rewind(ctx) == -1)
 		goto error;
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
+	ctx->get_contact = NULL;
+	ctx->get_group = NULL;
+	ctx->is_group = NULL;
 	RB_INIT(&ctx->attachments);
 	return 0;
 

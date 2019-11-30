@@ -91,9 +91,7 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		fclose(fp);
 	}
 
-	if (tmp != NULL)
-		freezero(tmp, strlen(tmp));
-
+	freezero_string(tmp);
 	return ret;
 }
 

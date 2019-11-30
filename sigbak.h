@@ -160,9 +160,10 @@ int		 sbk_get_attachments(struct sbk_ctx *, struct sbk_mms *);
 int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
 void		 sbk_free_mms_list(struct sbk_mms_list *);
 
-char		*sbk_get_contact_name(struct sbk_ctx *, const char *);
-char		*sbk_get_group_name(struct sbk_ctx *, const char *);
-int		 sbk_is_group_address(const char *);
+int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
+		    char **);
+int		 sbk_get_group(struct sbk_ctx *, const char *, char **);
+int		 sbk_is_group(struct sbk_ctx *, const char *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
@@ -179,6 +180,7 @@ void		 mem_sqlite_free(void *);
 int		 mem_sqlite_size(void *);
 int		 mem_sqlite_roundup(int);
 
+void		 freezero_string(char *);
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 usage(const char *, const char *) __dead;
