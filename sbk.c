@@ -246,14 +246,13 @@ sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 	ctx->iv[2] = counter >> 8;
 	ctx->iv[3] = counter;
 
-	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
-	    NULL) == 0) {
+	if (HMAC_Init_ex(ctx->hmac, NULL, 0, NULL, NULL) == 0) {
 		sbk_error_setx(ctx, "Cannot initialise HMAC");
 		return -1;
 	}
 
-	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL,
-	    ctx->cipherkey, ctx->iv) == 0) {
+	if (EVP_DecryptInit_ex(ctx->cipher, NULL, NULL, ctx->cipherkey,
+	    ctx->iv) == 0) {
 		sbk_error_setx(ctx, "Cannot initialise cipher");
 		return -1;
 	}
@@ -1793,6 +1792,16 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	if (sbk_compute_keys(ctx, passphr, salt, saltlen) == -1)
 		goto error;
+
+	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL, NULL,
+	    NULL) == 0)
+		goto error;
+
+	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
+	    NULL) == 0) {
+		sbk_error_setx(ctx, "Cannot initialise HMAC");
+		goto error;
+	}
 
 	if (sbk_rewind(ctx) == -1)
 		goto error;
