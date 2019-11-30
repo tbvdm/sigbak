@@ -311,22 +311,6 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 }
 
 static int
-sbk_decrypt_reset(struct sbk_ctx *ctx)
-{
-	if (EVP_CIPHER_CTX_reset(ctx->cipher) == 0) {
-		sbk_error_setx(ctx, "Cannot reset cipher");
-		return -1;
-	}
-
-	if (HMAC_CTX_reset(ctx->hmac) == 0) {
-		sbk_error_setx(ctx, "Cannot reset HMAC");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int
 sbk_read(struct sbk_ctx *ctx, void *ptr, size_t size)
 {
 	if (fread(ptr, size, 1, ctx->fp) != 1) {
@@ -480,22 +464,13 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	ibuflen -= SBK_MAC_LEN;
 	mac = ctx->ibuf + ibuflen;
 
-	if (sbk_decrypt_init(ctx, ctx->counter) == -1) {
-		sbk_decrypt_reset(ctx);
+	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
 		return NULL;
-	}
 
-	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1) {
-		sbk_decrypt_reset(ctx);
+	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
 		return NULL;
-	}
 
-	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1) {
-		sbk_decrypt_reset(ctx);
-		return NULL;
-	}
-
-	if (sbk_decrypt_reset(ctx) == -1)
+	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		return NULL;
 
 	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL) {
@@ -558,47 +533,43 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	}
 
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
-		goto error;
+		return -1;
 
 	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
 		sbk_error_setx(ctx, "Cannot compute HMAC");
-		goto error;
+		return -1;
 	}
 
 	for (len = file->len; len > 0; len -= ibuflen) {
 		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
 
 		if (sbk_read(ctx, ctx->ibuf, ibuflen) == -1)
-			goto error;
+			return -1;
 
 		if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
-			goto error;
+			return -1;
 
 		if (fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
 			sbk_error_set(ctx, "Cannot write file");
-			goto error;
+			return -1;
 		}
 	}
 
 	if (sbk_read(ctx, mac, sizeof mac) == -1)
-		goto error;
+		return -1;
 
 	obuflen = 0;
 
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
-		goto error;
+		return -1;
 
 	if (obuflen > 0 && fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) !=
 	    1) {
 		sbk_error_set(ctx, "Cannot write file");
-		goto error;
+		return -1;
 	}
 
-	return sbk_decrypt_reset(ctx);
-
-error:
-	sbk_decrypt_reset(ctx);
-	return -1;
+	return 0;
 }
 
 char *
@@ -665,15 +636,10 @@ sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 	}
 
 	*ptr = '\0';
-
-	if (sbk_decrypt_reset(ctx) == -1)
-		goto error;
-
 	return obuf;
 
 error:
 	freezero(obuf, obufsize);
-	sbk_decrypt_reset(ctx);
 	return NULL;
 }
 
