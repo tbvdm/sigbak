@@ -15,11 +15,11 @@ sigbak currently builds on OpenBSD only. For the time being, a portable version
 of sigbak is maintained in a [separate repository][9].
 
 [1]: https://www.signal.org/
-[2]: https://www.kariliq.nl/hg/sigbak/
+[2]: https://www.kariliq.nl/git/sigbak/
 [3]: https://www.kariliq.nl/sigbak/manual.html
 [4]: https://man.openbsd.org/crypto.3
 [5]: https://github.com/protobuf-c/protobuf-c
 [6]: https://www.sqlite.org/
 [7]: https://man.openbsd.org/explicit_bzero.3
 [8]: https://man.openbsd.org/readpassphrase.3
-[9]: https://www.kariliq.nl/hg/sigbak-portable/
+[9]: https://www.kariliq.nl/git/sigbak-portable/

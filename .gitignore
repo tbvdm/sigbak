@@ -1,5 +1,3 @@
-syntax: glob
-
 *.d
 *.o
 *.swp
