@@ -1739,6 +1739,7 @@ void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	if (ctx != NULL) {
+		sbk_error_clear(ctx);
 		EVP_CIPHER_CTX_free(ctx->cipher);
 		HMAC_CTX_free(ctx->hmac);
 		free(ctx->ibuf);
@@ -1828,7 +1829,6 @@ void
 sbk_close(struct sbk_ctx *ctx)
 {
 	sbk_free_attachment_tree(ctx);
-	sbk_error_clear(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
 	sqlite3_close(ctx->db);
