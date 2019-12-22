@@ -139,6 +139,16 @@ struct sbk_mms {
 
 SIMPLEQ_HEAD(sbk_mms_list, sbk_mms);
 
+struct sbk_thread {
+	uint64_t	 id;
+	char		*recipient;
+	uint64_t	 date;
+	uint64_t	 nmessages;
+	SIMPLEQ_ENTRY(sbk_thread) entries;
+};
+
+SIMPLEQ_HEAD(sbk_thread_list, sbk_thread);
+
 struct sbk_ctx	*sbk_ctx_new(void);
 void		 sbk_ctx_free(struct sbk_ctx *);
 
@@ -166,6 +176,9 @@ int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
 int		 sbk_get_group(struct sbk_ctx *, const char *, char **);
 int		 sbk_is_group(struct sbk_ctx *, const char *);
 
+struct sbk_thread_list *sbk_get_threads(struct sbk_ctx *);
+void		 sbk_free_thread_list(struct sbk_thread_list *);
+
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
 const char	*sbk_error(struct sbk_ctx *);
@@ -192,5 +205,6 @@ int		 cmd_check(int, char **);
 int		 cmd_dump(int, char **);
 int		 cmd_messages(int, char **);
 int		 cmd_sqlite(int, char **);
+int		 cmd_threads(int, char **);
 
 #endif

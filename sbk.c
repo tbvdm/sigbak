@@ -1421,6 +1421,72 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	return 0;
 }
 
+void
+sbk_free_thread_list(struct sbk_thread_list *lst)
+{
+	struct sbk_thread *thd;
+
+	if (lst != NULL) {
+		while ((thd = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			freezero(thd, sizeof *thd);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_thread_list *
+sbk_get_threads(struct sbk_ctx *ctx)
+{
+	struct sbk_thread_list	*lst;
+	struct sbk_thread	*thd;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT recipient_ids, _id, date, "
+	    "message_count FROM thread ORDER BY _id") == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((thd = malloc(sizeof *thd)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &thd->recipient, stm, 0)
+		    == -1) {
+			freezero(thd, sizeof *thd);
+			goto error;
+		}
+
+		thd->id = sqlite3_column_int64(stm, 1);
+		thd->date = sqlite3_column_int64(stm, 2);
+		thd->nmessages = sqlite3_column_int64(stm, 3);
+		SIMPLEQ_INSERT_TAIL(lst, thd, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_thread_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
 static int
 sbk_get_contact_1(struct sbk_ctx *ctx, const char *id, char **name,
     char **phone)
