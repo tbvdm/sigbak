@@ -1138,7 +1138,7 @@ sbk_free_sms_list(struct sbk_sms_list *lst)
 }
 
 struct sbk_sms_list *
-sbk_get_smses(struct sbk_ctx *ctx)
+sbk_get_smses(struct sbk_ctx *ctx, int thread)
 {
 	struct sbk_sms_list	*lst;
 	struct sbk_sms		*sms;
@@ -1155,9 +1155,20 @@ sbk_get_smses(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, date, "
-	    "date_sent, thread_id, type FROM sms ORDER BY date") == -1)
-		goto error;
+	if (thread == -1) {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date, date_sent, thread_id, type FROM sms ORDER BY date")
+		    == -1)
+			goto error;
+	} else {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date, date_sent, thread_id, type FROM sms WHERE "
+		    "thread_id = ? ORDER BY date") == -1)
+			goto error;
+
+		if (sbk_sqlite_bind_int(ctx, stm, 1, thread) == -1)
+			goto error;
+	}
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((sms = malloc(sizeof *sms)) == NULL) {
@@ -1328,7 +1339,7 @@ sbk_free_mms_list(struct sbk_mms_list *lst)
 }
 
 struct sbk_mms_list *
-sbk_get_mmses(struct sbk_ctx *ctx)
+sbk_get_mmses(struct sbk_ctx *ctx, int thread)
 {
 	struct sbk_mms_list	*lst;
 	struct sbk_mms		*mms;
@@ -1345,10 +1356,20 @@ sbk_get_mmses(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
-	    "date_received, date, thread_id, msg_box, part_count FROM mms "
-	    "ORDER BY date_received") == -1)
-		goto error;
+	if (thread == -1) {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date_received, date, thread_id, msg_box, part_count FROM "
+		    "mms ORDER BY date_received") == -1)
+			goto error;
+	} else {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date_received, date, thread_id, msg_box, part_count FROM "
+		    "mms WHERE thread_id = ? ORDER BY date_received") == -1)
+			goto error;
+
+		if (sbk_sqlite_bind_int(ctx, stm, 1, thread) == -1)
+			goto error;
+	}
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((mms = malloc(sizeof *mms)) == NULL) {

@@ -21,6 +21,7 @@
 #include <err.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -241,19 +242,19 @@ out:
 }
 
 static int
-maildir_write_messages(struct sbk_ctx *ctx, const char *maildir)
+maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 {
 	struct sbk_mms_list	*mmslst;
 	struct sbk_sms_list	*smslst;
 	struct sbk_mms		*mms;
 	struct sbk_sms		*sms;
 
-	if ((mmslst = sbk_get_mmses(ctx)) == NULL) {
+	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
 		warnx("Cannot get mms messages: %s", sbk_error(ctx));
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx)) == NULL) {
+	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
 		warnx("Cannot get sms messages: %s", sbk_error(ctx));
 		sbk_free_mms_list(mmslst);
 		return -1;
@@ -397,7 +398,7 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 }
 
 static int
-text_write_messages(struct sbk_ctx *ctx, const char *outfile)
+text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 {
 	struct sbk_mms_list	*mmslst;
 	struct sbk_sms_list	*smslst;
@@ -412,12 +413,12 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile)
 		return -1;
 	}
 
-	if ((mmslst = sbk_get_mmses(ctx)) == NULL) {
+	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
 		warnx("Cannot get mms messages: %s", sbk_error(ctx));
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx)) == NULL) {
+	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
 		warnx("Cannot get sms messages: %s", sbk_error(ctx));
 		sbk_free_mms_list(mmslst);
 		return -1;
@@ -459,12 +460,14 @@ cmd_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*dest, *passfile, passphr[128];
-	int		 c, format, ret;
+	const char	*errstr;
+	int		 c, format, ret, thread;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
+	thread = -1;
 
-	while ((c = getopt(argc, argv, "f:p:")) != -1)
+	while ((c = getopt(argc, argv, "f:p:t:")) != -1)
 		switch (c) {
 		case 'f':
 			if (strcmp(optarg, "maildir") == 0)
@@ -476,6 +479,13 @@ cmd_messages(int argc, char **argv)
 			break;
 		case 'p':
 			passfile = optarg;
+			break;
+		case 't':
+			errstr = NULL;
+			thread = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "%s: thread id is %s", optarg,
+				    errstr);
 			break;
 		default:
 			goto usage;
@@ -539,10 +549,10 @@ cmd_messages(int argc, char **argv)
 
 	switch (format) {
 	case FORMAT_MAILDIR:
-		ret = maildir_write_messages(ctx, dest);
+		ret = maildir_write_messages(ctx, dest, thread);
 		break;
 	case FORMAT_TEXT:
-		ret = text_write_messages(ctx, dest);
+		ret = text_write_messages(ctx, dest, thread);
 		break;
 	}
 
@@ -551,5 +561,5 @@ cmd_messages(int argc, char **argv)
 	return (ret == 0) ? 0 : 1;
 
 usage:
-	usage("messages", "[-f format] [-p passfile] backup dest");
+	usage("messages", "[-f format] [-p passfile] [-t thread] backup dest");
 }

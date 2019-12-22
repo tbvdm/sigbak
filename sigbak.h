@@ -163,10 +163,10 @@ char		*sbk_get_file_as_string(struct sbk_ctx *, struct sbk_file *);
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
-struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *);
+struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *, int);
 void		 sbk_free_sms_list(struct sbk_sms_list *);
 
-struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *);
+struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *, int);
 int		 sbk_get_attachments(struct sbk_ctx *, struct sbk_mms *);
 int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
 void		 sbk_free_mms_list(struct sbk_mms_list *);
