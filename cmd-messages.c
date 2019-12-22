@@ -204,7 +204,7 @@ maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
 
 	if ((fp = maildir_open_file(maildir, sms->date_recv, sms->date_sent))
 	    == NULL)
-	    	goto out;
+		goto out;
 
 	if (SBK_IS_OUTGOING_MESSAGE(sms->type)) {
 		maildir_write_address_header(fp, "From", "you", "You");
