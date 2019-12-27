@@ -321,7 +321,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	maildir_write_date_header(fp, "Sent", mms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
-		maildir_write_date_header(fp, "Received", mms->date_sent);
+		maildir_write_date_header(fp, "Received", mms->date_recv);
 
 	fprintf(fp, "Type: %#x\n", mms->type);
 	fprintf(fp, "Thread: %d\n", mms->thread);
@@ -382,7 +382,7 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 	maildir_write_date_header(fp, "Sent", sms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
-		maildir_write_date_header(fp, "Received", sms->date_sent);
+		maildir_write_date_header(fp, "Received", sms->date_recv);
 
 	fprintf(fp, "Type: %#x\n", sms->type);
 	fprintf(fp, "Thread: %d\n", sms->thread);
