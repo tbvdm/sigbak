@@ -45,7 +45,7 @@ vasprintf(char **buf, const char *fmt, va_list ap)
 	if ((*buf = malloc((size_t)len + 1)) == NULL)
 		return -1;
 
-	if (vsnprintf(*buf, (size_t)len + 1, fmt, ap) < 0) {
+	if (vsnprintf(*buf, (size_t)len + 1, fmt, ap) != len) {
 		free(*buf);
 		return -1;
 	}
