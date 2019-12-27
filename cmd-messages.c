@@ -248,6 +248,7 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	struct sbk_sms_list	*smslst;
 	struct sbk_mms		*mms;
 	struct sbk_sms		*sms;
+	int			 ret;
 
 	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
 		warnx("Cannot get mms messages: %s", sbk_error(ctx));
@@ -262,6 +263,7 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 
 	mms = SIMPLEQ_FIRST(mmslst);
 	sms = SIMPLEQ_FIRST(smslst);
+	ret = 0;
 
 	/* Print mms and sms messages in the order they were received */
 	for (;;)
@@ -269,22 +271,22 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 			if (sms == NULL)
 				break; /* Done */
 			else {
-				maildir_write_sms(ctx, maildir, sms);
+				ret |= maildir_write_sms(ctx, maildir, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		} else {
 			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				maildir_write_mms(ctx, maildir, mms);
+				ret |= maildir_write_mms(ctx, maildir, mms);
 				mms = SIMPLEQ_NEXT(mms, entries);
 			} else {
-				maildir_write_sms(ctx, maildir, sms);
+				ret |= maildir_write_sms(ctx, maildir, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		}
 
 	sbk_free_mms_list(mmslst);
 	sbk_free_sms_list(smslst);
-	return 0;
+	return (ret == 0) ? 0 : -1;
 }
 
 static int
@@ -405,6 +407,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 	struct sbk_mms		*mms;
 	struct sbk_sms		*sms;
 	FILE			*fp;
+	int			 ret;
 
 	if (outfile == NULL)
 		fp = stdout;
@@ -426,6 +429,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 
 	mms = SIMPLEQ_FIRST(mmslst);
 	sms = SIMPLEQ_FIRST(smslst);
+	ret = 0;
 
 	/* Print mms and sms messages in the order they were received */
 	for (;;)
@@ -433,15 +437,15 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 			if (sms == NULL)
 				break; /* Done */
 			else {
-				text_write_sms(ctx, fp, sms);
+				ret |= text_write_sms(ctx, fp, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		} else {
 			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				text_write_mms(ctx, fp, mms);
+				ret |= text_write_mms(ctx, fp, mms);
 				mms = SIMPLEQ_NEXT(mms, entries);
 			} else {
-				text_write_sms(ctx, fp, sms);
+				ret |= text_write_sms(ctx, fp, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		}
@@ -452,7 +456,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 	if (fp != stdout)
 		fclose(fp);
 
-	return 0;
+	return (ret == 0) ? 0 : -1;
 }
 
 int
