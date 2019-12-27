@@ -93,6 +93,11 @@
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
 
+#define SBK_ATTACHMENT_TRANSFER_DONE	0
+#define SBK_ATTACHMENT_TRANSFER_STARTED	1
+#define SBK_ATTACHMENT_TRANSFER_PENDING	2
+#define SBK_ATTACHMENT_TRANSFER_FAILED	3
+
 /* Content type of the long-text attachment of a long message */
 #define SBK_LONG_TEXT_TYPE	"text/x-signal-plain"
 
@@ -115,6 +120,7 @@ SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
 
 struct sbk_attachment {
 	int64_t		 id;
+	int		 status;
 	char		*filename;
 	char		*content_type;
 	uint64_t	 size;

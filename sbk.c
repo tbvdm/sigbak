@@ -1258,7 +1258,8 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	SIMPLEQ_INIT(mms->attachments);
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "data_size FROM part WHERE mid = ? ORDER BY unique_id, _id") == -1)
+	    "pending_push, data_size FROM part WHERE mid = ? "
+	    "ORDER BY unique_id, _id") == -1)
 		goto error;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
@@ -1286,17 +1287,22 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 		}
 
 		att->id = sqlite3_column_int64(stm, 2);
-		att->size = sqlite3_column_int64(stm, 3);
+		att->status = sqlite3_column_int(stm, 3);
+		att->size = sqlite3_column_int64(stm, 4);
 
-		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
-		    NULL) {
-			sbk_error_setx(ctx, "Cannot find attachment file");
-			goto error;
-		}
+		if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
+			if ((att->file = sbk_get_attachment_file(ctx, att->id))
+			    == NULL) {
+				sbk_error_setx(ctx, "Cannot find attachment "
+				    "file");
+				goto error;
+			}
 
-		if (att->size != att->file->len) {
-			sbk_error_setx(ctx, "Inconsistent attachment size");
-			goto error;
+			if (att->size != att->file->len) {
+				sbk_error_setx(ctx, "Inconsistent attachment "
+				    "size");
+				goto error;
+			}
 		}
 
 		SIMPLEQ_INSERT_TAIL(mms->attachments, att, entries);
