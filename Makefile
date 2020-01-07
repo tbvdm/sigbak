@@ -21,7 +21,7 @@ OBJS=		backup.pb-c.o cmd-attachments.o cmd-check.o cmd-dump.o \
 OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/freezero.o compat/hkdf.o \
 		compat/pledge.o compat/readpassphrase.o compat/reallocarray.o \
-		compat/recallocarray.o compat/unveil.o
+		compat/recallocarray.o compat/strtonum.o compat/unveil.o
 
 .PHONY: all clean install
 

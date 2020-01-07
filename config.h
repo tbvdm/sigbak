@@ -44,6 +44,9 @@
 /* Define if you have recallocarray(). */
 /* #define HAVE_RECALLOCARRAY */
 
+/* Define if you have strtonum(). */
+/* #define HAVE_STRTONUM */
+
 /* Define if you have unveil(). */
 /* #define HAVE_UNVEIL */
 
@@ -61,6 +64,7 @@
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
 #define HAVE_RECALLOCARRAY
+#define HAVE_STRTONUM
 
 #elif defined(__FreeBSD__)
 
@@ -72,6 +76,7 @@
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
+#define HAVE_STRTONUM
 
 #elif defined(__NetBSD__)
 
@@ -84,6 +89,7 @@
 #define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_REALLOCARRAY
+#define HAVE_STRTONUM
 
 #elif defined(__OpenBSD__)
 
@@ -98,6 +104,7 @@
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
 #define HAVE_RECALLOCARRAY
+#define HAVE_STRTONUM
 #define HAVE_UNVEIL
 
 #elif defined(__linux__)
