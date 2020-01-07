@@ -51,7 +51,8 @@ struct sbk_file {
 };
 
 struct sbk_attachment_entry {
-	int64_t		 id;
+	int64_t		 rowid;
+	int64_t		 attachmentid;
 	struct sbk_file	*file;
 	RB_ENTRY(sbk_attachment_entry) entries;
 };
@@ -839,7 +840,14 @@ static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
-	return (a->id < b->id) ? -1 : (a->id > b->id);
+	if (a->rowid < b->rowid)
+		return -1;
+
+	if (a->rowid > b->rowid)
+		return 1;
+
+	return (a->attachmentid < b->attachmentid) ? -1 :
+	    (a->attachmentid > b->attachmentid);
 }
 
 static int
@@ -848,7 +856,8 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 {
 	struct sbk_attachment_entry *entry;
 
-	if (!frm->attachment->has_attachmentid) {
+	if (!frm->attachment->has_rowid ||
+	    !frm->attachment->has_attachmentid) {
 		sbk_error_setx(ctx, "Invalid attachment frame");
 		sbk_free_file(file);
 		return -1;
@@ -860,18 +869,21 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		return -1;
 	}
 
-	entry->id = frm->attachment->attachmentid;
+	entry->rowid = frm->attachment->rowid;
+	entry->attachmentid = frm->attachment->attachmentid;
 	entry->file = file;
 	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
 	return 0;
 }
 
 static struct sbk_file *
-sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t id)
+sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t rowid,
+    int64_t attachmentid)
 {
 	struct sbk_attachment_entry find, *result;
 
-	find.id = id;
+	find.rowid = rowid;
+	find.attachmentid = attachmentid;
 	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
 	return (result != NULL) ? result->file : NULL;
 }
@@ -1257,8 +1269,8 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 	SIMPLEQ_INIT(mms->attachments);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "pending_push, data_size FROM part WHERE mid = ? "
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
+	    "unique_id, pending_push, data_size FROM part WHERE mid = ? "
 	    "ORDER BY unique_id, _id") == -1)
 		goto error;
 
@@ -1286,13 +1298,14 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 			goto error;
 		}
 
-		att->id = sqlite3_column_int64(stm, 2);
-		att->status = sqlite3_column_int(stm, 3);
-		att->size = sqlite3_column_int64(stm, 4);
+		att->rowid = sqlite3_column_int64(stm, 2);
+		att->attachmentid = sqlite3_column_int64(stm, 3);
+		att->status = sqlite3_column_int(stm, 4);
+		att->size = sqlite3_column_int64(stm, 5);
 
 		if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
-			if ((att->file = sbk_get_attachment_file(ctx, att->id))
-			    == NULL) {
+			if ((att->file = sbk_get_attachment_file(ctx,
+			    att->rowid, att->attachmentid)) == NULL) {
 				sbk_error_setx(ctx, "Cannot find attachment "
 				    "file");
 				goto error;

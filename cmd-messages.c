@@ -341,8 +341,9 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 			else
 				fprintf(fp, "\"%s\"", att->filename);
 			fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64
-			    ")\n", (att->content_type != NULL) ?
-			    att->content_type : "", att->size, att->id);
+			    "-%" PRId64 ")\n", (att->content_type != NULL) ?
+			    att->content_type : "", att->size, att->rowid,
+			    att->attachmentid);
 		}
 	}
 

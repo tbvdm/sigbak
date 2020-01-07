@@ -119,7 +119,8 @@ struct sbk_sms {
 SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
 
 struct sbk_attachment {
-	int64_t		 id;
+	int64_t		 rowid;
+	int64_t		 attachmentid;
 	int		 status;
 	char		*filename;
 	char		*content_type;
