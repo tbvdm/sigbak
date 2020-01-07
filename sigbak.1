@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd November 6, 2019
+.Dd December 22, 2019
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -67,7 +67,13 @@ The check is aborted after the first encountered error.
 Print the raw contents of the file
 .Ar backup
 in a readable format on standard output.
-.It Ic messages Oo Fl f Ar format Oc Oo Fl p Ar passfile Oc Ar backup Ar dest
+.It Xo
+.Ic messages
+.Oo Fl f Ar format Oc
+.Oo Fl p Ar passfile Oc
+.Oo Fl t Ar thread Oc
+.Ar backup Ar dest
+.Xc
 Export all messages in the file
 .Ar backup
 to
@@ -98,11 +104,26 @@ format, messages are written as plain text to the file
 If
 .Ar dest
 is omitted, messages are written to standard output instead.
+.Pp
+By default, all messages are exported.
+The
+.Fl t
+option may be used to export only the messages from a single conversation
+thread.
+The
+.Ar thread
+argument should be a number.
+The
+.Ic threads
+command can be used to view a list of conversation threads.
+.Pp
 .It Ic sqlite Oo Fl p Ar passfile Oc Ar backup Ar database
 Export the SQLite database in the file
 .Ar backup
 to the file
 .Ar database .
+.It Ic threads Oo Fl p Ar passfile Oc Ar backup
+Print a list of all conversation threads.
 .El
 .Sh EXIT STATUS
 .Ex -std
@@ -119,6 +140,16 @@ long lines for readability and view the result:
 .Bd -literal -offset indent
 $ echo 01234 56789 01234 56789 01234 56789 > passfile
 $ sigbak messages -p passfile signal.backup | fold -s | less
+.Ed
+.Pp
+Export only the messages from the conversation with Charlie:
+.Bd -literal -offset indent
+$ sigbak threads signal.backup
+[...]
+   1: Alice
+   2: Bob
+   3: Charlie
+$ sigbak messages -t 3 signal.backup charlie.txt
 .Ed
 .Pp
 Export the SQLite database and use

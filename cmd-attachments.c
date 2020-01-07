@@ -47,11 +47,13 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 	case ATTACHMENT:
 		if (frm->attachment == NULL)
 			return 0;
-		if (!frm->attachment->has_attachmentid) {
+		if (!frm->attachment->has_rowid ||
+		    !frm->attachment->has_attachmentid) {
 			warnx("Invalid attachment frame");
 			return 1;
 		}
-		if (asprintf(&tmp, "%" PRIu64, frm->attachment->attachmentid)
+		if (asprintf(&tmp, "%" PRIu64 "-%" PRIu64,
+		    frm->attachment->rowid, frm->attachment->attachmentid)
 		    == -1) {
 			warnx("asprintf() failed");
 			return 1;

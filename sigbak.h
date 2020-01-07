@@ -92,6 +92,11 @@
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
     ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
 
+#define SBK_ATTACHMENT_TRANSFER_DONE	0
+#define SBK_ATTACHMENT_TRANSFER_STARTED	1
+#define SBK_ATTACHMENT_TRANSFER_PENDING	2
+#define SBK_ATTACHMENT_TRANSFER_FAILED	3
+
 /* Content type of the long-text attachment of a long message */
 #define SBK_LONG_TEXT_TYPE	"text/x-signal-plain"
 
@@ -113,7 +118,9 @@ struct sbk_sms {
 SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
 
 struct sbk_attachment {
-	int64_t		 id;
+	int64_t		 rowid;
+	int64_t		 attachmentid;
+	int		 status;
 	char		*filename;
 	char		*content_type;
 	uint64_t	 size;
@@ -138,6 +145,16 @@ struct sbk_mms {
 
 SIMPLEQ_HEAD(sbk_mms_list, sbk_mms);
 
+struct sbk_thread {
+	uint64_t	 id;
+	char		*recipient;
+	uint64_t	 date;
+	uint64_t	 nmessages;
+	SIMPLEQ_ENTRY(sbk_thread) entries;
+};
+
+SIMPLEQ_HEAD(sbk_thread_list, sbk_thread);
+
 struct sbk_ctx	*sbk_ctx_new(void);
 void		 sbk_ctx_free(struct sbk_ctx *);
 
@@ -152,10 +169,10 @@ char		*sbk_get_file_as_string(struct sbk_ctx *, struct sbk_file *);
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
-struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *);
+struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *, int);
 void		 sbk_free_sms_list(struct sbk_sms_list *);
 
-struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *);
+struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *, int);
 int		 sbk_get_attachments(struct sbk_ctx *, struct sbk_mms *);
 int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
 void		 sbk_free_mms_list(struct sbk_mms_list *);
@@ -164,6 +181,9 @@ int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
 		    char **);
 int		 sbk_get_group(struct sbk_ctx *, const char *, char **);
 int		 sbk_is_group(struct sbk_ctx *, const char *);
+
+struct sbk_thread_list *sbk_get_threads(struct sbk_ctx *);
+void		 sbk_free_thread_list(struct sbk_thread_list *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
@@ -191,5 +211,6 @@ int		 cmd_check(int, char **);
 int		 cmd_dump(int, char **);
 int		 cmd_messages(int, char **);
 int		 cmd_sqlite(int, char **);
+int		 cmd_threads(int, char **);
 
 #endif

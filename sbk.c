@@ -50,7 +50,8 @@ struct sbk_file {
 };
 
 struct sbk_attachment_entry {
-	int64_t		 id;
+	int64_t		 rowid;
+	int64_t		 attachmentid;
 	struct sbk_file	*file;
 	RB_ENTRY(sbk_attachment_entry) entries;
 };
@@ -838,7 +839,14 @@ static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
-	return (a->id < b->id) ? -1 : (a->id > b->id);
+	if (a->rowid < b->rowid)
+		return -1;
+
+	if (a->rowid > b->rowid)
+		return 1;
+
+	return (a->attachmentid < b->attachmentid) ? -1 :
+	    (a->attachmentid > b->attachmentid);
 }
 
 static int
@@ -847,7 +855,8 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 {
 	struct sbk_attachment_entry *entry;
 
-	if (!frm->attachment->has_attachmentid) {
+	if (!frm->attachment->has_rowid ||
+	    !frm->attachment->has_attachmentid) {
 		sbk_error_setx(ctx, "Invalid attachment frame");
 		sbk_free_file(file);
 		return -1;
@@ -859,18 +868,21 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		return -1;
 	}
 
-	entry->id = frm->attachment->attachmentid;
+	entry->rowid = frm->attachment->rowid;
+	entry->attachmentid = frm->attachment->attachmentid;
 	entry->file = file;
 	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
 	return 0;
 }
 
 static struct sbk_file *
-sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t id)
+sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t rowid,
+    int64_t attachmentid)
 {
 	struct sbk_attachment_entry find, *result;
 
-	find.id = id;
+	find.rowid = rowid;
+	find.attachmentid = attachmentid;
 	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
 	return (result != NULL) ? result->file : NULL;
 }
@@ -1137,7 +1149,7 @@ sbk_free_sms_list(struct sbk_sms_list *lst)
 }
 
 struct sbk_sms_list *
-sbk_get_smses(struct sbk_ctx *ctx)
+sbk_get_smses(struct sbk_ctx *ctx, int thread)
 {
 	struct sbk_sms_list	*lst;
 	struct sbk_sms		*sms;
@@ -1154,9 +1166,20 @@ sbk_get_smses(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, date, "
-	    "date_sent, thread_id, type FROM sms ORDER BY date") == -1)
-		goto error;
+	if (thread == -1) {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date, date_sent, thread_id, type FROM sms ORDER BY date")
+		    == -1)
+			goto error;
+	} else {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date, date_sent, thread_id, type FROM sms WHERE "
+		    "thread_id = ? ORDER BY date") == -1)
+			goto error;
+
+		if (sbk_sqlite_bind_int(ctx, stm, 1, thread) == -1)
+			goto error;
+	}
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((sms = malloc(sizeof *sms)) == NULL) {
@@ -1245,8 +1268,9 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 	SIMPLEQ_INIT(mms->attachments);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, unique_id, "
-	    "data_size FROM part WHERE mid = ? ORDER BY unique_id, _id") == -1)
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
+	    "unique_id, pending_push, data_size FROM part WHERE mid = ? "
+	    "ORDER BY unique_id, _id") == -1)
 		goto error;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
@@ -1273,18 +1297,24 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 			goto error;
 		}
 
-		att->id = sqlite3_column_int64(stm, 2);
-		att->size = sqlite3_column_int64(stm, 3);
+		att->rowid = sqlite3_column_int64(stm, 2);
+		att->attachmentid = sqlite3_column_int64(stm, 3);
+		att->status = sqlite3_column_int(stm, 4);
+		att->size = sqlite3_column_int64(stm, 5);
 
-		if ((att->file = sbk_get_attachment_file(ctx, att->id)) ==
-		    NULL) {
-			sbk_error_setx(ctx, "Cannot find attachment file");
-			goto error;
-		}
+		if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
+			if ((att->file = sbk_get_attachment_file(ctx,
+			    att->rowid, att->attachmentid)) == NULL) {
+				sbk_error_setx(ctx, "Cannot find attachment "
+				    "file");
+				goto error;
+			}
 
-		if (att->size != att->file->len) {
-			sbk_error_setx(ctx, "Inconsistent attachment size");
-			goto error;
+			if (att->size != att->file->len) {
+				sbk_error_setx(ctx, "Inconsistent attachment "
+				    "size");
+				goto error;
+			}
 		}
 
 		SIMPLEQ_INSERT_TAIL(mms->attachments, att, entries);
@@ -1327,7 +1357,7 @@ sbk_free_mms_list(struct sbk_mms_list *lst)
 }
 
 struct sbk_mms_list *
-sbk_get_mmses(struct sbk_ctx *ctx)
+sbk_get_mmses(struct sbk_ctx *ctx, int thread)
 {
 	struct sbk_mms_list	*lst;
 	struct sbk_mms		*mms;
@@ -1344,10 +1374,20 @@ sbk_get_mmses(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
-	    "date_received, date, thread_id, msg_box, part_count FROM mms "
-	    "ORDER BY date_received") == -1)
-		goto error;
+	if (thread == -1) {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date_received, date, thread_id, msg_box, part_count FROM "
+		    "mms ORDER BY date_received") == -1)
+			goto error;
+	} else {
+		if (sbk_sqlite_prepare(ctx, &stm, "SELECT address, body, _id, "
+		    "date_received, date, thread_id, msg_box, part_count FROM "
+		    "mms WHERE thread_id = ? ORDER BY date_received") == -1)
+			goto error;
+
+		if (sbk_sqlite_bind_int(ctx, stm, 1, thread) == -1)
+			goto error;
+	}
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((mms = malloc(sizeof *mms)) == NULL) {
@@ -1418,6 +1458,72 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	freezero_string(mms->body);
 	mms->body = longmsg;
 	return 0;
+}
+
+void
+sbk_free_thread_list(struct sbk_thread_list *lst)
+{
+	struct sbk_thread *thd;
+
+	if (lst != NULL) {
+		while ((thd = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			freezero(thd, sizeof *thd);
+		}
+		free(lst);
+	}
+}
+
+struct sbk_thread_list *
+sbk_get_threads(struct sbk_ctx *ctx)
+{
+	struct sbk_thread_list	*lst;
+	struct sbk_thread	*thd;
+	sqlite3_stmt		*stm;
+	int			 ret;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT recipient_ids, _id, date, "
+	    "message_count FROM thread ORDER BY _id") == -1)
+		goto error;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((thd = malloc(sizeof *thd)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &thd->recipient, stm, 0)
+		    == -1) {
+			freezero(thd, sizeof *thd);
+			goto error;
+		}
+
+		thd->id = sqlite3_column_int64(stm, 1);
+		thd->date = sqlite3_column_int64(stm, 2);
+		thd->nmessages = sqlite3_column_int64(stm, 3);
+		SIMPLEQ_INSERT_TAIL(lst, thd, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_thread_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
 }
 
 static int
@@ -1738,6 +1844,7 @@ void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	if (ctx != NULL) {
+		sbk_error_clear(ctx);
 		EVP_CIPHER_CTX_free(ctx->cipher);
 		HMAC_CTX_free(ctx->hmac);
 		free(ctx->ibuf);
@@ -1827,7 +1934,6 @@ void
 sbk_close(struct sbk_ctx *ctx)
 {
 	sbk_free_attachment_tree(ctx);
-	sbk_error_clear(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
 	sqlite3_close(ctx->db);

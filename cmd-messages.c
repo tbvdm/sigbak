@@ -21,6 +21,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,7 +204,7 @@ maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
 
 	if ((fp = maildir_open_file(maildir, sms->date_recv, sms->date_sent))
 	    == NULL)
-	    	goto out;
+		goto out;
 
 	if (SBK_IS_OUTGOING_MESSAGE(sms->type)) {
 		maildir_write_address_header(fp, "From", "you", "You");
@@ -241,19 +242,20 @@ out:
 }
 
 static int
-maildir_write_messages(struct sbk_ctx *ctx, const char *maildir)
+maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 {
 	struct sbk_mms_list	*mmslst;
 	struct sbk_sms_list	*smslst;
 	struct sbk_mms		*mms;
 	struct sbk_sms		*sms;
+	int			 ret;
 
-	if ((mmslst = sbk_get_mmses(ctx)) == NULL) {
+	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
 		warnx("Cannot get mms messages: %s", sbk_error(ctx));
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx)) == NULL) {
+	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
 		warnx("Cannot get sms messages: %s", sbk_error(ctx));
 		sbk_free_mms_list(mmslst);
 		return -1;
@@ -261,6 +263,7 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir)
 
 	mms = SIMPLEQ_FIRST(mmslst);
 	sms = SIMPLEQ_FIRST(smslst);
+	ret = 0;
 
 	/* Print mms and sms messages in the order they were received */
 	for (;;)
@@ -268,22 +271,22 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir)
 			if (sms == NULL)
 				break; /* Done */
 			else {
-				maildir_write_sms(ctx, maildir, sms);
+				ret |= maildir_write_sms(ctx, maildir, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		} else {
 			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				maildir_write_mms(ctx, maildir, mms);
+				ret |= maildir_write_mms(ctx, maildir, mms);
 				mms = SIMPLEQ_NEXT(mms, entries);
 			} else {
-				maildir_write_sms(ctx, maildir, sms);
+				ret |= maildir_write_sms(ctx, maildir, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		}
 
 	sbk_free_mms_list(mmslst);
 	sbk_free_sms_list(smslst);
-	return 0;
+	return (ret == 0) ? 0 : -1;
 }
 
 static int
@@ -320,7 +323,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	maildir_write_date_header(fp, "Sent", mms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
-		maildir_write_date_header(fp, "Received", mms->date_sent);
+		maildir_write_date_header(fp, "Received", mms->date_recv);
 
 	fprintf(fp, "Type: %#x\n", mms->type);
 	fprintf(fp, "Thread: %d\n", mms->thread);
@@ -338,8 +341,9 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 			else
 				fprintf(fp, "\"%s\"", att->filename);
 			fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64
-			    ")\n", (att->content_type != NULL) ?
-			    att->content_type : "", att->size, att->id);
+			    "-%" PRId64 ")\n", (att->content_type != NULL) ?
+			    att->content_type : "", att->size, att->rowid,
+			    att->attachmentid);
 		}
 	}
 
@@ -381,7 +385,7 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 	maildir_write_date_header(fp, "Sent", sms->date_sent);
 
 	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
-		maildir_write_date_header(fp, "Received", sms->date_sent);
+		maildir_write_date_header(fp, "Received", sms->date_recv);
 
 	fprintf(fp, "Type: %#x\n", sms->type);
 	fprintf(fp, "Thread: %d\n", sms->thread);
@@ -397,13 +401,14 @@ text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
 }
 
 static int
-text_write_messages(struct sbk_ctx *ctx, const char *outfile)
+text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 {
 	struct sbk_mms_list	*mmslst;
 	struct sbk_sms_list	*smslst;
 	struct sbk_mms		*mms;
 	struct sbk_sms		*sms;
 	FILE			*fp;
+	int			 ret;
 
 	if (outfile == NULL)
 		fp = stdout;
@@ -412,12 +417,12 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile)
 		return -1;
 	}
 
-	if ((mmslst = sbk_get_mmses(ctx)) == NULL) {
+	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
 		warnx("Cannot get mms messages: %s", sbk_error(ctx));
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx)) == NULL) {
+	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
 		warnx("Cannot get sms messages: %s", sbk_error(ctx));
 		sbk_free_mms_list(mmslst);
 		return -1;
@@ -425,6 +430,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile)
 
 	mms = SIMPLEQ_FIRST(mmslst);
 	sms = SIMPLEQ_FIRST(smslst);
+	ret = 0;
 
 	/* Print mms and sms messages in the order they were received */
 	for (;;)
@@ -432,15 +438,15 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile)
 			if (sms == NULL)
 				break; /* Done */
 			else {
-				text_write_sms(ctx, fp, sms);
+				ret |= text_write_sms(ctx, fp, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		} else {
 			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				text_write_mms(ctx, fp, mms);
+				ret |= text_write_mms(ctx, fp, mms);
 				mms = SIMPLEQ_NEXT(mms, entries);
 			} else {
-				text_write_sms(ctx, fp, sms);
+				ret |= text_write_sms(ctx, fp, sms);
 				sms = SIMPLEQ_NEXT(sms, entries);
 			}
 		}
@@ -451,7 +457,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile)
 	if (fp != stdout)
 		fclose(fp);
 
-	return 0;
+	return (ret == 0) ? 0 : -1;
 }
 
 int
@@ -459,12 +465,14 @@ cmd_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*dest, *passfile, passphr[128];
-	int		 c, format, ret;
+	const char	*errstr;
+	int		 c, format, ret, thread;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
+	thread = -1;
 
-	while ((c = getopt(argc, argv, "f:p:")) != -1)
+	while ((c = getopt(argc, argv, "f:p:t:")) != -1)
 		switch (c) {
 		case 'f':
 			if (strcmp(optarg, "maildir") == 0)
@@ -476,6 +484,13 @@ cmd_messages(int argc, char **argv)
 			break;
 		case 'p':
 			passfile = optarg;
+			break;
+		case 't':
+			errstr = NULL;
+			thread = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "%s: thread id is %s", optarg,
+				    errstr);
 			break;
 		default:
 			goto usage;
@@ -539,10 +554,10 @@ cmd_messages(int argc, char **argv)
 
 	switch (format) {
 	case FORMAT_MAILDIR:
-		ret = maildir_write_messages(ctx, dest);
+		ret = maildir_write_messages(ctx, dest, thread);
 		break;
 	case FORMAT_TEXT:
-		ret = text_write_messages(ctx, dest);
+		ret = text_write_messages(ctx, dest, thread);
 		break;
 	}
 
@@ -551,5 +566,5 @@ cmd_messages(int argc, char **argv)
 	return (ret == 0) ? 0 : 1;
 
 usage:
-	usage("messages", "[-f format] [-p passfile] backup dest");
+	usage("messages", "[-f format] [-p passfile] [-t thread] backup dest");
 }
