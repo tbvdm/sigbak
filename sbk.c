@@ -1071,30 +1071,40 @@ error:
 }
 
 static void
-sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
+sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 {
-	char		*contact, *name;
-	const char	*fmt;
+	char		*name;
+	const char	*contact, *fmt;
 
 	fmt = NULL;
 
-	if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(sms->type))
+	if (type & SBK_GROUP_UPDATE_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(type))
+			fmt = "You updated the group";
+		else
+			fmt = "%s updated the group";
+	} else if (type & SBK_GROUP_QUIT_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(type))
+			fmt = "You have left the group";
+		else
+			fmt = "%s has left the group";
+	} else if (type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(type))
 			fmt = "You marked your safety number with %s verified";
 		else
 			fmt = "You marked your safety number with %s verified "
 			    "from another device";
-	} else if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(sms->type))
+	} else if (type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(type))
 			fmt = "You marked your safety number with %s "
 			    "unverified";
 		else
 			fmt = "You marked your safety number with %s "
 			    "unverified from another device";
-	} else if (sms->type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
+	} else if (type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
 		fmt = "Your safety number with %s has changed";
 	else
-		switch (sms->type & SBK_BASE_TYPE_MASK) {
+		switch (type & SBK_BASE_TYPE_MASK) {
 		case SBK_INCOMING_CALL_TYPE:
 			fmt = "%s called you";
 			break;
@@ -1112,18 +1122,24 @@ sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
 	if (fmt == NULL)
 		return;
 
-	if (sbk_get_contact(ctx, sms->address, &name, NULL) == -1 ||
+	if (sbk_get_contact(ctx, address, &name, NULL) == -1 ||
 	    name == NULL)
-		contact = sms->address;
+		contact = address;
 	else
 		contact = name;
 
-	freezero_string(sms->body);
+	freezero_string(*body);
 
-	if (asprintf(&sms->body, fmt, contact) == -1)
-		sms->body = NULL;
+	if (asprintf(body, fmt, contact) == -1)
+		*body = NULL;
 
 	free(name);
+}
+
+static void
+sbk_get_sms_body(struct sbk_ctx *ctx, struct sbk_sms *sms)
+{
+	sbk_get_body(ctx, &sms->body, sms->type, sms->address);
 }
 
 static void
@@ -1207,10 +1223,7 @@ sbk_get_smses(struct sbk_ctx *ctx, int thread)
 		sms->date_sent = sqlite3_column_int64(stm, 4);
 		sms->thread = sqlite3_column_int(stm, 5);
 		sms->type = sqlite3_column_int(stm, 6);
-
-		if (sms->body == NULL || sms->body[0] == '\0')
-			sbk_get_sms_body(ctx, sms);
-
+		sbk_get_sms_body(ctx, sms);
 		SIMPLEQ_INSERT_TAIL(lst, sms, entries);
 	}
 
@@ -1334,6 +1347,12 @@ error:
 }
 
 static void
+sbk_get_mms_body(struct sbk_ctx *ctx, struct sbk_mms *mms)
+{
+	sbk_get_body(ctx, &mms->body, mms->type, mms->address);
+}
+
+static void
 sbk_free_mms(struct sbk_mms *mms)
 {
 	freezero_string(mms->address);
@@ -1417,6 +1436,7 @@ sbk_get_mmses(struct sbk_ctx *ctx, int thread)
 		mms->thread = sqlite3_column_int(stm, 5);
 		mms->type = sqlite3_column_int(stm, 6);
 		mms->nattachments = sqlite3_column_int(stm, 7);
+		sbk_get_mms_body(ctx, mms);
 		SIMPLEQ_INSERT_TAIL(lst, mms, entries);
 	}
 
