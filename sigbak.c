@@ -94,7 +94,7 @@ unveil_dirname(const char *path, const char *perms)
 	}
 
 	if ((dir = dirname(tmp)) == NULL) {
-		warn("dirname");
+		warnx("dirname() failed");
 		free(tmp);
 		return -1;
 	}
