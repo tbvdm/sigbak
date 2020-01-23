@@ -1078,7 +1078,17 @@ sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 
 	fmt = NULL;
 
-	if (type & SBK_GROUP_UPDATE_BIT) {
+	if (type & SBK_ENCRYPTION_REMOTE_FAILED_BIT)
+		fmt = "Bad encrypted message";
+	else if (type & SBK_ENCRYPTION_REMOTE_NO_SESSION_BIT)
+		fmt = "Message encrypted for non-existing session";
+	else if (type & SBK_ENCRYPTION_REMOTE_DUPLICATE_BIT)
+		fmt = "Duplicate message";
+	else if ((type & SBK_ENCRYPTION_REMOTE_LEGACY_BIT) ||
+	    (type & SBK_ENCRYPTION_REMOTE_BIT))
+		fmt = "Encrypted message sent from an older version of Signal "
+		    "that is no longer supported";
+	else if (type & SBK_GROUP_UPDATE_BIT) {
 		if (SBK_IS_OUTGOING_MESSAGE(type))
 			fmt = "You updated the group";
 		else
@@ -1088,6 +1098,11 @@ sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 			fmt = "You have left the group";
 		else
 			fmt = "%s has left the group";
+	} else if (type & SBK_END_SESSION_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(type))
+			fmt = "You reset the secure session";
+		else
+			fmt = "%s reset the secure session";
 	} else if (type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
 		if (SBK_IS_OUTGOING_MESSAGE(type))
 			fmt = "You marked your safety number with %s verified";
@@ -1101,8 +1116,16 @@ sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 		else
 			fmt = "You marked your safety number with %s "
 			    "unverified from another device";
-	} else if (type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
+	} else if (type & SBK_KEY_EXCHANGE_CORRUPTED_BIT)
+		fmt = "Corrupt key exchange message";
+	else if (type & SBK_KEY_EXCHANGE_INVALID_VERSION_BIT)
+		fmt = "Key exchange message for invalid protocol version";
+	else if (type & SBK_KEY_EXCHANGE_BUNDLE_BIT)
+		fmt = "Message with new safety number";
+	else if (type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
 		fmt = "Your safety number with %s has changed";
+	else if (type & SBK_KEY_EXCHANGE_BIT)
+		fmt = "Key exchange message";
 	else
 		switch (type & SBK_BASE_TYPE_MASK) {
 		case SBK_INCOMING_CALL_TYPE:
@@ -1116,6 +1139,13 @@ sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 			break;
 		case SBK_JOINED_TYPE:
 			fmt = "%s is on Signal";
+			break;
+		case SBK_UNSUPPORTED_MESSAGE_TYPE:
+			fmt = "Unsupported message sent from a newer version "
+			    "of Signal";
+			break;
+		case SBK_INVALID_MESSAGE_TYPE:
+			fmt = "Invalid message";
 			break;
 		}
 

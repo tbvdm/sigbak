@@ -14,6 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/*
+ * A memory allocator for protobuf-c and SQLite that internally uses
+ * freezero(3) and recallocarray(3) to release memory securely
+ */
+
 #include "config.h"
 
 #include <errno.h>
