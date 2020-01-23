@@ -1,7 +1,6 @@
-/*	$OpenBSD: explicit_bzero.c,v 1.4 2015/08/31 02:53:57 guenther Exp $ */
 /*
+ * Written by Tim van der Molen.
  * Public domain.
- * Written by Matthew Dempsky.
  */
 
 #include "../config.h"
@@ -32,18 +31,12 @@ explicit_bzero(void *buf, size_t len)
 
 #else
 
-#include <string.h>
-
-__attribute__((weak)) void
-__explicit_bzero_hook(void *buf, size_t len)
-{
-}
+#include <openssl/crypto.h>
 
 void
 explicit_bzero(void *buf, size_t len)
 {
-	memset(buf, 0, len);
-	__explicit_bzero_hook(buf, len);
+	OPENSSL_cleanse(buf, len);
 }
 
 #endif
