@@ -57,7 +57,8 @@ xfopen(const char *path, const char *extmode)
 			flags |= O_CLOEXEC;
 			continue;
 		case 'x':
-			flags |= O_EXCL;
+			if (flags & O_CREAT)
+				flags |= O_EXCL;
 			continue;
 		default:
 			errno = EINVAL;
