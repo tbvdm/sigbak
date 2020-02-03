@@ -132,6 +132,8 @@ main(int argc, char **argv)
 		return cmd_messages(argc, argv);
 	if (strcmp(argv[0], "sqlite") == 0)
 		return cmd_sqlite(argc, argv);
+	if (strcmp(argv[0], "stickers") == 0)
+		return cmd_stickers(argc, argv);
 	if (strcmp(argv[0], "threads") == 0)
 		return cmd_threads(argc, argv);
 

@@ -31,6 +31,7 @@
 enum type {
 	ATTACHMENT,
 	AVATAR,
+	STICKER
 };
 
 static int
@@ -75,6 +76,19 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 			warnx("Invalid avatar filename");
 			return 1;
 		}
+		break;
+	case STICKER:
+		if (frm->sticker == NULL)
+			return 0;
+		if (!frm->sticker->has_rowid) {
+			warnx("Invalid sticker frame");
+			return 1;
+		}
+		if (asprintf(&tmp, "%" PRIu64, frm->sticker->rowid) == -1) {
+			warnx("asprintf() failed");
+			return 1;
+		}
+		fname = tmp;
 		break;
 	default:
 		return 0;
@@ -207,4 +221,10 @@ int
 cmd_avatars(int argc, char **argv)
 {
 	return write_files(argc, argv, AVATAR);
+}
+
+int
+cmd_stickers(int argc, char **argv)
+{
+	return write_files(argc, argv, STICKER);
 }

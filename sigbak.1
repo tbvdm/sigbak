@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd December 22, 2019
+.Dd February 3, 2020
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -29,7 +29,8 @@ It can be used to extract messages and other data.
 .Pp
 A Signal backup consists primarily of an SQLite database.
 This database contains the backed-up messages, amongst other things.
-Attachments and avatars, however, are stored as separate files in the backup.
+Attachments, avatars and stickers, however, are stored as separate files in the
+backup.
 .Pp
 Every Signal backup is encrypted with a 30-digit passphrase.
 By default,
@@ -116,12 +117,19 @@ argument should be a number.
 The
 .Ic threads
 command can be used to view a list of conversation threads.
-.Pp
 .It Ic sqlite Oo Fl p Ar passfile Oc Ar backup Ar database
 Export the SQLite database in the file
 .Ar backup
 to the file
 .Ar database .
+.It Ic stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+Export all stickers in the file
+.Ar backup
+to
+.Ar directory ,
+or to the current directory if
+.Ar directory
+is not specified.
 .It Ic threads Oo Fl p Ar passfile Oc Ar backup
 Print a list of all conversation threads.
 .El

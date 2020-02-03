@@ -212,6 +212,7 @@ int		 cmd_check(int, char **);
 int		 cmd_dump(int, char **);
 int		 cmd_messages(int, char **);
 int		 cmd_sqlite(int, char **);
+int		 cmd_stickers(int, char **);
 int		 cmd_threads(int, char **);
 
 #endif
