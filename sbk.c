@@ -1328,6 +1328,7 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 		att->filename = NULL;
 		att->content_type = NULL;
+		att->file = NULL;
 
 		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
 		    == -1)
