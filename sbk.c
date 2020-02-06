@@ -1314,31 +1314,28 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
 	    "unique_id, pending_push, data_size FROM part WHERE mid = ? "
 	    "ORDER BY unique_id, _id") == -1)
-		goto error;
+		goto error1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms->id) == -1)
-		goto error;
+		goto error1;
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((att = malloc(sizeof *att)) == NULL) {
 			sbk_error_set(ctx, NULL);
-			goto error;
+			goto error1;
 		}
 
 		att->filename = NULL;
 		att->content_type = NULL;
+		att->file = NULL;
 
 		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
-		    == -1) {
-			sbk_free_attachment(att);
-			goto error;
-		}
+		    == -1)
+			goto error2;
 
 		if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
-		    1) == -1) {
-			sbk_free_attachment(att);
-			goto error;
-		}
+		    1) == -1)
+			goto error2;
 
 		att->rowid = sqlite3_column_int64(stm, 2);
 		att->attachmentid = sqlite3_column_int64(stm, 3);
@@ -1350,13 +1347,13 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 			    att->rowid, att->attachmentid)) == NULL) {
 				sbk_error_setx(ctx, "Cannot find attachment "
 				    "file");
-				goto error;
+				goto error2;
 			}
 
 			if (att->size != att->file->len) {
 				sbk_error_setx(ctx, "Inconsistent attachment "
 				    "size");
-				goto error;
+				goto error2;
 			}
 		}
 
@@ -1364,12 +1361,15 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 	}
 
 	if (ret != SQLITE_DONE)
-		goto error;
+		goto error1;
 
 	sqlite3_finalize(stm);
 	return 0;
 
-error:
+error2:
+	sbk_free_attachment(att);
+	
+error1:
 	sqlite3_finalize(stm);
 	sbk_free_attachment_list(mms->attachments);
 	mms->attachments = NULL;
@@ -1494,13 +1494,19 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 	found = 0;
 	SIMPLEQ_FOREACH(att, mms->attachments, entries)
-		if (strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
+		if (att->content_type != NULL &&
+		    strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
 			found = 1;
 			break;
 		}
 
 	if (!found)
 		return 0;
+
+	if (att->file == NULL) {
+		sbk_error_setx(ctx, "Long-message attachment not available");
+		return -1;
+	}
 
 	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
 		return -1;
