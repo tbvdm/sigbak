@@ -1494,7 +1494,8 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 	found = 0;
 	SIMPLEQ_FOREACH(att, mms->attachments, entries)
-		if (strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
+		if (att->content_type != NULL &&
+		    strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
 			found = 1;
 			break;
 		}
