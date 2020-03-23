@@ -38,10 +38,8 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
     struct sbk_file *file, enum type type)
 {
 	FILE	*fp;
-	char	*fname, *tmp;
+	char	*base, *fname;
 	int	 ret;
-
-	tmp = NULL;
 
 	switch (type) {
 	case ATTACHMENT:
@@ -52,27 +50,30 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 			warnx("Invalid attachment frame");
 			return 1;
 		}
-		if (asprintf(&tmp, "%" PRIu64 "-%" PRIu64,
+		if (asprintf(&fname, "%" PRIu64 "-%" PRIu64,
 		    frm->attachment->rowid, frm->attachment->attachmentid)
 		    == -1) {
 			warnx("asprintf() failed");
 			return 1;
 		}
-		fname = tmp;
 		break;
 	case AVATAR:
 		if (frm->avatar == NULL)
 			return 0;
 		if (frm->avatar->recipientid != NULL)
-			fname = frm->avatar->recipientid;
+			base = frm->avatar->recipientid;
 		else if (frm->avatar->name != NULL)
-			fname = frm->avatar->name;
+			base = frm->avatar->name;
 		else {
 			warnx("Invalid avatar frame");
 			return 1;
 		}
-		if (fname[0] == '\0' || strchr(fname, '/') != NULL) {
+		if (base[0] == '\0' || strchr(base, '/') != NULL) {
 			warnx("Invalid avatar filename");
+			return 1;
+		}
+		if (asprintf(&fname, "%s.jpg", base) == -1) {
+			warnx("asprintf() failed");
 			return 1;
 		}
 		break;
@@ -83,11 +84,11 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 			warnx("Invalid sticker frame");
 			return 1;
 		}
-		if (asprintf(&tmp, "%" PRIu64, frm->sticker->rowid) == -1) {
+		if (asprintf(&fname, "%" PRIu64 ".webp", frm->sticker->rowid)
+		    == -1) {
 			warnx("asprintf() failed");
 			return 1;
 		}
-		fname = tmp;
 		break;
 	default:
 		return 0;
@@ -106,7 +107,7 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		fclose(fp);
 	}
 
-	freezero_string(tmp);
+	freezero_string(fname);
 	return ret;
 }
 
