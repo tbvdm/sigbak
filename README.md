@@ -7,20 +7,39 @@ data.
 
 Documentation is available in the [manual page][3].
 
-sigbak depends on [libcrypto][4], [protobuf-c][5] and [SQLite][6]. In addition,
-it uses several OpenBSD extensions such as [explicit\_bzero(3)][7] and
-[readpassphrase(3)][8].
+Dependencies
+------------
 
-sigbak currently builds on OpenBSD only. A portable version of sigbak is
-maintained in a [separate repository][9] ([GitHub mirror][10]).
+sigbak depends on libcrypto (from either [LibreSSL][4] >= 2.6.0 or
+[OpenSSL][5] >= 1.1.0), [protobuf-c][6] and [SQLite][7]. A C compiler, make and
+pkg-config are also needed.
+
+On Debian-based distros it should suffice to install the following packages:
+build-essential libprotobuf-c-dev libsqlite3-dev libssl-dev pkg-config
+protobuf-c-compiler.
+
+Building on OpenBSD
+-------------------
+
+To build sigbak on OpenBSD, run `make` and optionally `make install`.
+
+Building on other systems
+-------------------------
+
+To build sigbak on other systems, first check out the `portable` branch:
+
+	$ git checkout portable
+
+Then check if config.h is suited to your system. Edit it if necessary. config.h
+already has support for several systems. On those systems, no editing should be
+necessary.
+
+Finally, run `make` and optionally `make install`.
 
 [1]: https://www.kariliq.nl/sigbak/
 [2]: https://www.signal.org/
 [3]: https://www.kariliq.nl/sigbak/manual.html
-[4]: https://man.openbsd.org/crypto.3
-[5]: https://github.com/protobuf-c/protobuf-c
-[6]: https://www.sqlite.org/
-[7]: https://man.openbsd.org/explicit_bzero.3
-[8]: https://man.openbsd.org/readpassphrase.3
-[9]: https://www.kariliq.nl/git/sigbak-portable/
-[10]: https://github.com/tbvdm/sigbak-portable
+[4]: https://www.libressl.org/
+[5]: https://www.openssl.org/
+[6]: https://github.com/protobuf-c/protobuf-c
+[7]: https://www.sqlite.org/
