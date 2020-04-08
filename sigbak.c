@@ -18,6 +18,7 @@
 
 #include <sys/stat.h>
 
+#include <fcntl.h>
 #include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,8 +44,12 @@ freezero_string(char *s)
 int
 get_passphrase(const char *passfile, char *buf, size_t bufsize)
 {
-	FILE	*fp;
+	int	 fd;
+	ssize_t	 len;
 	char	*c, *d;
+
+	if (bufsize == 0)
+		return -1;
 
 	if (passfile == NULL) {
 		if (readpassphrase("Enter 30-digit passphrase (spaces are "
@@ -54,24 +59,27 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 			return -1;
 		}
 	} else {
-		if ((fp = fopen(passfile, "r")) == NULL) {
+		if ((fd = open(passfile, O_RDONLY)) == -1) {
 			warn("%s", passfile);
 			return -1;
 		}
 
-		if (fgets(buf, bufsize, fp) == NULL) {
-			if (ferror(fp))
+		if ((len = read(fd, buf, bufsize - 1)) <= 0) {
+			if (len == -1)
 				warn("%s", passfile);
 			else
 				warnx("%s: Empty file", passfile);
 
 			explicit_bzero(buf, bufsize);
-			fclose(fp);
+			close(fd);
 			return -1;
 		}
 
-		fclose(fp);
-		buf[strcspn(buf, "\n")] = '\0';
+		if ((c = memchr(buf, '\n', len)) != NULL)
+			len = c - buf;
+
+		buf[len] = '\0';
+		close(fd);
 	}
 
 	/* Remove spaces */

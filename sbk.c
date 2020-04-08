@@ -43,6 +43,9 @@
 
 #define SBK_GROUP_PREFIX	"__textsecure_group__!"
 
+/* Based on SQLCipherOpenHelper.java in the Signal-Android repository */
+#define SBK_DB_VERSION_RECIPIENT_IDS	24
+
 struct sbk_file {
 	long		 pos;
 	uint32_t	 len;
@@ -61,6 +64,7 @@ RB_HEAD(sbk_attachment_tree, sbk_attachment_entry);
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
+	unsigned int	 db_version;
 	struct sbk_attachment_tree attachments;
 	int		(*get_contact)(struct sbk_ctx *, const char *, char **,
 			    char **);
@@ -83,7 +87,6 @@ struct sbk_ctx {
 
 static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
 		    struct sbk_attachment_entry *);
-static void	sbk_set_function_pointers(struct sbk_ctx *);
 
 RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
     sbk_cmp_attachment_entries)
@@ -817,25 +820,6 @@ sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
 }
 
 static int
-sbk_sqlite_table_exists(struct sbk_ctx *ctx, const char *table)
-{
-	sqlite3_stmt	*stm;
-	int		 ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT name FROM sqlite_master "
-	    "WHERE type = 'table' AND NAME = ?") == -1)
-		return 0;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, table) == -1)
-		ret = 0;
-	else
-		ret = sbk_sqlite_step(ctx, stm) == SQLITE_ROW;
-
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
@@ -969,6 +953,8 @@ sbk_set_database_version(struct sbk_ctx *ctx, Signal__DatabaseVersion *ver)
 		sbk_error_setx(ctx, "Invalid version frame");
 		return -1;
 	}
+
+	ctx->db_version = ver->version;
 
 	if (asprintf(&sql, "PRAGMA user_version = %" PRIu32, ver->version) ==
 	    -1) {
@@ -1680,8 +1666,12 @@ sbk_get_contact(struct sbk_ctx *ctx, const char *id, char **name, char **phone)
 	if (phone != NULL)
 		*phone = NULL;
 
-	if (ctx->get_contact == NULL)
-		sbk_set_function_pointers(ctx);
+	if (ctx->get_contact == NULL) {
+		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
+			ctx->get_contact = sbk_get_contact_1;
+		else
+			ctx->get_contact = sbk_get_contact_2;
+	}
 
 	return ctx->get_contact(ctx, id, name, phone);
 }
@@ -1758,8 +1748,12 @@ sbk_get_group(struct sbk_ctx *ctx, const char *id, char **name)
 	if (name != NULL)
 		*name = NULL;
 
-	if (ctx->get_group == NULL)
-		sbk_set_function_pointers(ctx);
+	if (ctx->get_group == NULL) {
+		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
+			ctx->get_group = sbk_get_group_1;
+		else
+			ctx->get_group = sbk_get_group_2;
+	}
 
 	return ctx->get_group(ctx, id, name);
 }
@@ -1798,24 +1792,14 @@ out:
 int
 sbk_is_group(struct sbk_ctx *ctx, const char *id)
 {
-	if (ctx->is_group == NULL)
-		sbk_set_function_pointers(ctx);
+	if (ctx->is_group == NULL) {
+		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
+			ctx->is_group = sbk_is_group_1;
+		else
+			ctx->is_group = sbk_is_group_2;
+	}
 
 	return ctx->is_group(ctx, id);
-}
-
-static void
-sbk_set_function_pointers(struct sbk_ctx *ctx)
-{
-	if (sbk_sqlite_table_exists(ctx, "recipient_preferences")) {
-		ctx->get_contact = sbk_get_contact_1;
-		ctx->get_group = sbk_get_group_1;
-		ctx->is_group = sbk_is_group_1;
-	} else {
-		ctx->get_contact = sbk_get_contact_2;
-		ctx->get_group = sbk_get_group_2;
-		ctx->is_group = sbk_is_group_2;
-	}
 }
 
 static int
@@ -1972,6 +1956,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	sbk_free_frame(frm);
 	ctx->db = NULL;
+	ctx->db_version = 0;
 	ctx->get_contact = NULL;
 	ctx->get_group = NULL;
 	ctx->is_group = NULL;
