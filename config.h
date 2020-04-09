@@ -109,8 +109,6 @@
 
 #elif defined(__linux__)
 
-/* Tested on Debian 9.11 and 10.1 */
-
 #define _GNU_SOURCE
 
 #define HAVE_ASPRINTF
@@ -118,10 +116,7 @@
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPAGESIZE
 
-/*
- * Indirectly include features.h (for __GLIBC_PREREQ) or sys/cdefs.h (for
- * __ANDROID_API__)
- */
+/* Include features.h (__GLIBC_PREREQ) or sys/cdefs.h (__ANDROID_API__) */
 #include <stdio.h>
 
 #ifdef __GLIBC_PREREQ
