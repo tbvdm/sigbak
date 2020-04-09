@@ -43,7 +43,7 @@ backup.pb-c.c backup.pb-c.h: backup.proto
 clean:
 	rm -f sigbak sigbak.core core backup.pb-c.c backup.pb-c.h ${OBJS}
 
-install: sigbak
+install: all
 	${INSTALL} -dm 755 ${DESTDIR}${BINDIR}
 	${INSTALL} -dm 755 ${DESTDIR}${MANDIR}
 	${INSTALL} -m 555 sigbak ${DESTDIR}${BINDIR}
