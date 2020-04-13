@@ -1773,9 +1773,9 @@ sbk_is_group_2(struct sbk_ctx *ctx, const char *id)
 
 	if (sbk_sqlite_prepare(ctx, &stm, "SELECT group_id FROM recipient "
 	    "WHERE _id = ?") == -1)
-		return -1;
+		return 0;
 
-	ret = -1;
+	ret = 0;
 
 	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
 		goto out;
