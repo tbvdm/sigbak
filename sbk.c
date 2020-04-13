@@ -1677,7 +1677,7 @@ sbk_get_contact(struct sbk_ctx *ctx, const char *id, char **name, char **phone)
 	return ctx->get_contact(ctx, id, name, phone);
 }
 
-int
+static int
 sbk_get_group_1(struct sbk_ctx *ctx, const char *id, char **name)
 {
 	sqlite3_stmt	*stm;
@@ -1710,7 +1710,7 @@ out:
 	return ret;
 }
 
-int
+static int
 sbk_get_group_2(struct sbk_ctx *ctx, const char *id, char **name)
 {
 	sqlite3_stmt	*stm;
@@ -1759,13 +1759,13 @@ sbk_get_group(struct sbk_ctx *ctx, const char *id, char **name)
 	return ctx->get_group(ctx, id, name);
 }
 
-int
+static int
 sbk_is_group_1(__unused struct sbk_ctx *ctx, const char *id)
 {
 	return strncmp(id, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1) == 0;
 }
 
-int
+static int
 sbk_is_group_2(struct sbk_ctx *ctx, const char *id)
 {
 	sqlite3_stmt	*stm;
