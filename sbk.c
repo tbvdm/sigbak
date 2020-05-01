@@ -1355,7 +1355,7 @@ sbk_get_attachments(struct sbk_ctx *ctx, struct sbk_mms *mms)
 
 error2:
 	sbk_free_attachment(att);
-	
+
 error1:
 	sqlite3_finalize(stm);
 	sbk_free_attachment_list(mms->attachments);
