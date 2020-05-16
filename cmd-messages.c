@@ -326,7 +326,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	fprintf(fp, "Thread: %d\n", mms->thread);
 
 	if (mms->nattachments > 0) {
-		if (sbk_get_attachments(ctx, mms) == -1) {
+		if (sbk_get_mms_attachments(ctx, mms) == -1) {
 			warnx("%s", sbk_error(ctx));
 			return -1;
 		}
