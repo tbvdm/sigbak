@@ -1264,7 +1264,7 @@ sbk_free_attachment(struct sbk_attachment *att)
 	freezero(att, sizeof *att);
 }
 
-static void
+void
 sbk_free_attachment_list(struct sbk_attachment_list *lst)
 {
 	struct sbk_attachment *att;
@@ -1345,6 +1345,24 @@ error:
 }
 
 struct sbk_attachment_list *
+sbk_get_all_attachments(struct sbk_ctx *ctx)
+{
+	sqlite3_stmt *stm;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
+	    "unique_id, pending_push, data_size FROM part "
+	    "ORDER BY unique_id, _id") == -1) {
+		sqlite3_finalize(stm);
+		return NULL;
+	}
+
+	return sbk_get_attachments(ctx, stm);
+}
+
+struct sbk_attachment_list *
 sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
 {
 	sqlite3_stmt *stm;
@@ -1360,6 +1378,30 @@ sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
 	}
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
+		sqlite3_finalize(stm);
+		return NULL;
+	}
+
+	return sbk_get_attachments(ctx, stm);
+}
+
+struct sbk_attachment_list *
+sbk_get_attachments_for_thread(struct sbk_ctx *ctx, uint64_t thread_id)
+{
+	sqlite3_stmt *stm;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
+	    "unique_id, pending_push, data_size FROM part "
+	    "WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
+	    "ORDER BY unique_id, _id") == -1) {
+		sqlite3_finalize(stm);
+		return NULL;
+	}
+
+	if (sbk_sqlite_bind_int64(ctx, stm, 1, thread_id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}

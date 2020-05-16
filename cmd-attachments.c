@@ -28,7 +28,6 @@
 #include "sigbak.h"
 
 enum type {
-	ATTACHMENT,
 	AVATAR,
 	STICKER
 };
@@ -42,21 +41,6 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 	int	 ret;
 
 	switch (type) {
-	case ATTACHMENT:
-		if (frm->attachment == NULL)
-			return 0;
-		if (!frm->attachment->has_rowid ||
-		    !frm->attachment->has_attachmentid) {
-			warnx("Invalid attachment frame");
-			return 1;
-		}
-		if (asprintf(&fname, "%" PRIu64 "-%" PRIu64,
-		    frm->attachment->rowid, frm->attachment->attachmentid)
-		    == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
 	case AVATAR:
 		if (frm->avatar == NULL)
 			return 0;
@@ -211,10 +195,158 @@ usage:
 	usage(cmd, "[-p passfile] backup [directory]");
 }
 
+static int
+write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
+{
+	struct sbk_attachment	*att;
+	FILE			*fp;
+	char			*fname;
+	int			 ret;
+
+	ret = 0;
+
+	SIMPLEQ_FOREACH(att, lst, entries) {
+		if (att->file == NULL)
+			continue;
+
+		if (asprintf(&fname, "%" PRId64 "-%" PRId64, att->rowid,
+		    att->attachmentid) == -1) {
+			warnx("asprintf() failed");
+			ret = 1;
+			continue;
+		}
+
+		if ((fp = fopen(fname, "wx")) == NULL) {
+			warn("%s", fname);
+			ret = 1;
+		} else {
+			if (sbk_write_file(ctx, att->file, fp) == -1) {
+				warnx("%s: %s", fname, sbk_error(ctx));
+				ret = 1;
+			}
+			fclose(fp);
+		}
+
+		freezero_string(fname);
+	}
+
+	return ret;
+}
+
 int
 cmd_attachments(int argc, char **argv)
 {
-	return write_files(argc, argv, ATTACHMENT);
+	struct sbk_ctx			*ctx;
+	struct sbk_attachment_list	*lst;
+	char				*passfile, passphr[128];
+	const char			*errstr, *outdir;
+	int				 c, ret, thread;
+
+	passfile = NULL;
+	thread = -1;
+
+	while ((c = getopt(argc, argv, "p:t:")) != -1)
+		switch (c) {
+		case 'p':
+			passfile = optarg;
+			break;
+		case 't':
+			errstr = NULL;
+			thread = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "%s: thread id is %s", optarg, errstr);
+			break;
+		default:
+			goto usage;
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	switch (argc) {
+	case 1:
+		outdir = ".";
+		break;
+	case 2:
+		outdir = argv[1];
+		if (mkdir(outdir, 0777) == -1 && errno != EEXIST)
+			err(1, "mkdir: %s", outdir);
+		break;
+	default:
+		goto usage;
+	}
+
+	if (unveil(argv[0], "r") == -1)
+		err(1, "unveil");
+
+	if (unveil(outdir, "rwc") == -1)
+		err(1, "unveil");
+
+	/* For SQLite */
+	if (unveil("/dev/urandom", "r") == -1)
+		err(1, "unveil");
+
+	/* For SQLite */
+	if (unveil("/tmp", "rwc") == -1)
+		err(1, "unveil");
+
+	if (passfile == NULL) {
+		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (unveil(passfile, "r") == -1)
+			err(1, "unveil");
+
+		if (pledge("stdio rpath wpath cpath", NULL) == -1)
+			err(1, "pledge");
+	}
+
+	if ((ctx = sbk_ctx_new()) == NULL)
+		errx(1, "Cannot create backup context");
+
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
+		sbk_ctx_free(ctx);
+		return 1;
+	}
+
+	if (sbk_open(ctx, argv[0], passphr) == -1) {
+		warnx("%s: %s", argv[0], sbk_error(ctx));
+		explicit_bzero(passphr, sizeof passphr);
+		sbk_ctx_free(ctx);
+		return 1;
+	}
+
+	explicit_bzero(passphr, sizeof passphr);
+
+	if (chdir(outdir) == -1) {
+		warn("chdir: %s", outdir);
+		sbk_close(ctx);
+		sbk_ctx_free(ctx);
+		return 1;
+	}
+
+	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
+		err(1, "pledge");
+
+	if (thread == -1)
+		lst = sbk_get_all_attachments(ctx);
+	else
+		lst = sbk_get_attachments_for_thread(ctx, thread);
+
+	if (lst == NULL) {
+		warnx("%s", sbk_error(ctx));
+		ret = 1;
+	} else {
+		ret = write_attachments(ctx, lst);
+		sbk_free_attachment_list(lst);
+	}
+
+	sbk_close(ctx);
+	sbk_ctx_free(ctx);
+	return ret;
+
+usage:
+	usage("attachments", "[-p passfile] [-t thread] backup [directory]");
 }
 
 int

@@ -171,6 +171,12 @@ char		*sbk_get_file_as_string(struct sbk_ctx *, struct sbk_file *);
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
+struct sbk_attachment_list *sbk_get_all_attachments(struct sbk_ctx *);
+struct sbk_attachment_list *sbk_get_attachments_for_mms(struct sbk_ctx *, int);
+struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
+		    uint64_t);
+void		 sbk_free_attachment_list(struct sbk_attachment_list *);
+
 struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *, int);
 void		 sbk_free_sms_list(struct sbk_sms_list *);
 
