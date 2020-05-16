@@ -485,8 +485,7 @@ cmd_messages(int argc, char **argv)
 			errstr = NULL;
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg,
-				    errstr);
+				errx(1, "%s: thread id is %s", optarg, errstr);
 			break;
 		default:
 			goto usage;
