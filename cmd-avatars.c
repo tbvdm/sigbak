@@ -27,66 +27,91 @@
 
 #include "sigbak.h"
 
+enum type {
+	AVATAR,
+	STICKER
+};
+
 static int
-write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
+write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
+    struct sbk_file *file, enum type type)
 {
-	struct sbk_attachment	*att;
-	FILE			*fp;
-	char			*fname;
-	int			 ret;
+	FILE	*fp;
+	char	*base, *fname;
+	int	 ret;
+
+	switch (type) {
+	case AVATAR:
+		if (frm->avatar == NULL)
+			return 0;
+		if (frm->avatar->recipientid != NULL)
+			base = frm->avatar->recipientid;
+		else if (frm->avatar->name != NULL)
+			base = frm->avatar->name;
+		else {
+			warnx("Invalid avatar frame");
+			return 1;
+		}
+		if (base[0] == '\0' || strchr(base, '/') != NULL) {
+			warnx("Invalid avatar filename");
+			return 1;
+		}
+		if (asprintf(&fname, "%s.jpg", base) == -1) {
+			warnx("asprintf() failed");
+			return 1;
+		}
+		break;
+	case STICKER:
+		if (frm->sticker == NULL)
+			return 0;
+		if (!frm->sticker->has_rowid) {
+			warnx("Invalid sticker frame");
+			return 1;
+		}
+		if (asprintf(&fname, "%" PRIu64 ".webp", frm->sticker->rowid)
+		    == -1) {
+			warnx("asprintf() failed");
+			return 1;
+		}
+		break;
+	default:
+		return 0;
+	}
 
 	ret = 0;
 
-	SIMPLEQ_FOREACH(att, lst, entries) {
-		if (att->file == NULL)
-			continue;
-
-		if (asprintf(&fname, "%" PRId64 "-%" PRId64, att->rowid,
-		    att->attachmentid) == -1) {
-			warnx("asprintf() failed");
+	if ((fp = fopen(fname, "wx")) == NULL) {
+		warn("%s", fname);
+		ret = 1;
+	} else {
+		if (sbk_write_file(ctx, file, fp) == -1) {
+			warnx("%s: %s", fname, sbk_error(ctx));
 			ret = 1;
-			continue;
 		}
-
-		if ((fp = fopen(fname, "wx")) == NULL) {
-			warn("%s", fname);
-			ret = 1;
-		} else {
-			if (sbk_write_file(ctx, att->file, fp) == -1) {
-				warnx("%s: %s", fname, sbk_error(ctx));
-				ret = 1;
-			}
-			fclose(fp);
-		}
-
-		freezero_string(fname);
+		fclose(fp);
 	}
 
+	freezero_string(fname);
 	return ret;
 }
 
-int
-cmd_attachments(int argc, char **argv)
+static int
+write_files(int argc, char **argv, enum type type)
 {
-	struct sbk_ctx			*ctx;
-	struct sbk_attachment_list	*lst;
-	char				*passfile, passphr[128];
-	const char			*errstr, *outdir;
-	int				 c, ret, thread;
+	struct sbk_ctx		*ctx;
+	struct sbk_file		*file;
+	Signal__BackupFrame	*frm;
+	char			*cmd, *passfile, passphr[128];
+	const char		*outdir;
+	int			 c, ret;
 
+	cmd = argv[0];
 	passfile = NULL;
-	thread = -1;
 
-	while ((c = getopt(argc, argv, "p:t:")) != -1)
+	while ((c = getopt(argc, argv, "p:")) != -1)
 		switch (c) {
 		case 'p':
 			passfile = optarg;
-			break;
-		case 't':
-			errstr = NULL;
-			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg, errstr);
 			break;
 		default:
 			goto usage;
@@ -108,18 +133,7 @@ cmd_attachments(int argc, char **argv)
 		goto usage;
 	}
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil");
-
-	if (unveil(outdir, "rwc") == -1)
-		err(1, "unveil");
-
-	/* For SQLite */
-	if (unveil("/dev/urandom", "r") == -1)
-		err(1, "unveil");
-
-	/* For SQLite */
-	if (unveil("/tmp", "rwc") == -1)
+	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1)
 		err(1, "unveil");
 
 	if (passfile == NULL) {
@@ -157,20 +171,20 @@ cmd_attachments(int argc, char **argv)
 		return 1;
 	}
 
-	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
+	if (pledge("stdio wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	if (thread == -1)
-		lst = sbk_get_all_attachments(ctx);
-	else
-		lst = sbk_get_attachments_for_thread(ctx, thread);
+	ret = 0;
 
-	if (lst == NULL) {
-		warnx("%s", sbk_error(ctx));
+	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
+		ret |= write_file(ctx, frm, file, type);
+		sbk_free_frame(frm);
+		sbk_free_file(file);
+	}
+
+	if (!sbk_eof(ctx)) {
+		warnx("%s: %s", argv[0], sbk_error(ctx));
 		ret = 1;
-	} else {
-		ret = write_attachments(ctx, lst);
-		sbk_free_attachment_list(lst);
 	}
 
 	sbk_close(ctx);
@@ -178,5 +192,17 @@ cmd_attachments(int argc, char **argv)
 	return ret;
 
 usage:
-	usage("attachments", "[-p passfile] [-t thread] backup [directory]");
+	usage(cmd, "[-p passfile] backup [directory]");
+}
+
+int
+cmd_avatars(int argc, char **argv)
+{
+	return write_files(argc, argv, AVATAR);
+}
+
+int
+cmd_stickers(int argc, char **argv)
+{
+	return write_files(argc, argv, STICKER);
 }
