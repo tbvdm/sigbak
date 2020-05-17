@@ -102,6 +102,10 @@
 /* Content type of the long-text attachment of a long message */
 #define SBK_LONG_TEXT_TYPE	"text/x-signal-plain"
 
+#ifndef nitems
+#define nitems(a) (sizeof (a) / sizeof (a)[0])
+#endif
+
 struct sbk_ctx;
 
 struct sbk_file;
