@@ -55,6 +55,10 @@ cmd_threads(int argc, char **argv)
 	if (unveil("/dev/urandom", "r") == -1)
 		err(1, "unveil");
 
+	/* For SQLite */
+	if (unveil("/tmp", "rwc") == -1)
+		err(1, "unveil");
+
 	if (passfile == NULL) {
 		if (pledge("stdio rpath tty", NULL) == -1)
 			err(1, "pledge");

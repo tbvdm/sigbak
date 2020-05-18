@@ -326,7 +326,7 @@ text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
 	fprintf(fp, "Thread: %d\n", mms->thread);
 
 	if (mms->nattachments > 0) {
-		if (sbk_get_attachments(ctx, mms) == -1) {
+		if (sbk_get_mms_attachments(ctx, mms) == -1) {
 			warnx("%s", sbk_error(ctx));
 			return -1;
 		}
@@ -485,8 +485,7 @@ cmd_messages(int argc, char **argv)
 			errstr = NULL;
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg,
-				    errstr);
+				errx(1, "%s: thread id is %s", optarg, errstr);
 			break;
 		default:
 			goto usage;
@@ -517,6 +516,10 @@ cmd_messages(int argc, char **argv)
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
+		err(1, "unveil");
+
+	/* For SQLite */
+	if (unveil("/tmp", "rwc") == -1)
 		err(1, "unveil");
 
 	if (passfile == NULL) {
