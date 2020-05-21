@@ -2002,8 +2002,10 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error;
 
 	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL, NULL,
-	    NULL) == 0)
+	    NULL) == 0) {
+		sbk_error_setx(ctx, "Cannot initialise cipher");
 		goto error;
+	}
 
 	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
 	    NULL) == 0) {
