@@ -1872,15 +1872,16 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 	int		i, ret;
 
 	passphrlen = strlen(passphr);
-	SHA512_Init(&sha);
 
+	/* The first round */
+	SHA512_Init(&sha);
 	if (salt != NULL)
 		SHA512_Update(&sha, salt, saltlen);
-
 	SHA512_Update(&sha, passphr, passphrlen);
 	SHA512_Update(&sha, passphr, passphrlen);
 	SHA512_Final(key, &sha);
 
+	/* The remaining rounds */
 	for (i = 0; i < SBK_ROUNDS - 1; i++) {
 		SHA512_Init(&sha);
 		SHA512_Update(&sha, key, sizeof key);
