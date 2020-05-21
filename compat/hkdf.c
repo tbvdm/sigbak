@@ -21,6 +21,10 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 
+/*
+ * The HKDF() function was introduced in LibreSSL 2.6.0. This is an
+ * implementation for OpenSSL >= 1.1.0.
+ */
 int
 HKDF(unsigned char *key, size_t keylen, const EVP_MD *md,
     const unsigned char *secret, size_t secretlen, const unsigned char *salt,
