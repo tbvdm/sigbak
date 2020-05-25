@@ -87,11 +87,14 @@ void	 freezero(void *, size_t);
 #ifdef LIBRESSL_VERSION_NUMBER
 #include <openssl/hkdf.h>
 #else
-#include <openssl/evp.h>
+#include "compat/hkdf.h"
+#endif
 
-int	 HKDF(unsigned char *, size_t, const EVP_MD *, const unsigned char *,
-	    size_t, const unsigned char *, size_t, const unsigned char *,
-	    size_t);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#include <openssl/hmac.h>
+
+HMAC_CTX	*HMAC_CTX_new(void);
+void		 HMAC_CTX_free(HMAC_CTX *);
 #endif
 
 #ifndef HAVE_PLEDGE

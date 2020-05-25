@@ -1,65 +1,121 @@
-/*
- * Copyright (c) 2018 Tim van der Molen <tim@kariliq.nl>
+/* $OpenBSD: hkdf.c,v 1.4 2019/11/21 20:02:20 tim Exp $ */
+/* Copyright (c) 2014, Google Inc.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <openssl/opensslv.h>
 
 #ifndef LIBRESSL_VERSION_NUMBER
 
-#include <openssl/evp.h>
-#include <openssl/kdf.h>
+#include <assert.h>
+#include <string.h>
 
-/*
- * The HKDF() function was introduced in LibreSSL 2.6.0. This is an
- * implementation for OpenSSL >= 1.1.0.
- */
+#include <openssl/err.h>
+#include <openssl/hmac.h>
+
+#include "../compat.h"
+
+/* https://tools.ietf.org/html/rfc5869#section-2 */
 int
-HKDF(unsigned char *key, size_t keylen, const EVP_MD *md,
-    const unsigned char *secret, size_t secretlen, const unsigned char *salt,
-    size_t saltlen, const unsigned char *info, size_t infolen)
+HKDF(uint8_t *out_key, size_t out_len, const EVP_MD *digest,
+    const uint8_t *secret, size_t secret_len, const uint8_t *salt,
+    size_t salt_len, const uint8_t *info, size_t info_len)
 {
-	EVP_PKEY_CTX	*pkey;
-	int		 ret;
+	uint8_t prk[EVP_MAX_MD_SIZE];
+	size_t prk_len;
 
-	ret = 0;
+	if (!HKDF_extract(prk, &prk_len, digest, secret, secret_len, salt,
+	    salt_len))
+		return 0;
+	if (!HKDF_expand(out_key, out_len, digest, prk, prk_len, info,
+	    info_len))
+		return 0;
 
-	if ((pkey = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL)) == NULL)
+	return 1;
+}
+
+/* https://tools.ietf.org/html/rfc5869#section-2.2 */
+int
+HKDF_extract(uint8_t *out_key, size_t *out_len,
+    const EVP_MD *digest, const uint8_t *secret, size_t secret_len,
+    const uint8_t *salt, size_t salt_len)
+{
+	unsigned int len;
+
+	/*
+	 * If salt is not given, HashLength zeros are used. However, HMAC does
+	 * that internally already so we can ignore it.
+	 */
+	if (HMAC(digest, salt, salt_len, secret, secret_len, out_key, &len) ==
+	    NULL) {
+		return 0;
+	}
+	*out_len = len;
+	return 1;
+}
+
+/* https://tools.ietf.org/html/rfc5869#section-2.3 */
+int
+HKDF_expand(uint8_t *out_key, size_t out_len,
+    const EVP_MD *digest, const uint8_t *prk, size_t prk_len,
+    const uint8_t *info, size_t info_len)
+{
+	const size_t digest_len = EVP_MD_size(digest);
+	uint8_t previous[EVP_MAX_MD_SIZE];
+	size_t n, done = 0;
+	unsigned int i;
+	int ret = 0;
+	HMAC_CTX *hmac;
+
+	/* Expand key material to desired length. */
+	n = (out_len + digest_len - 1) / digest_len;
+	if (out_len + digest_len < out_len || n > 255) {
+		return 0;
+	}
+
+	if ((hmac = HMAC_CTX_new()) == NULL)
 		goto out;
 
-	if (EVP_PKEY_derive_init(pkey) <= 0)
+	if (!HMAC_Init_ex(hmac, prk, prk_len, digest, NULL))
 		goto out;
 
-	if (EVP_PKEY_CTX_set_hkdf_md(pkey, md) <= 0)
-		goto out;
+	for (i = 0; i < n; i++) {
+		uint8_t ctr = i + 1;
+		size_t todo;
 
-	if (EVP_PKEY_CTX_set1_hkdf_key(pkey, secret, secretlen) <= 0)
-		goto out;
+		if (i != 0 && (!HMAC_Init_ex(hmac, NULL, 0, NULL, NULL) ||
+		    !HMAC_Update(hmac, previous, digest_len)))
+			goto out;
 
-	if (EVP_PKEY_CTX_set1_hkdf_salt(pkey, salt, saltlen) <= 0)
-		goto out;
+		if (!HMAC_Update(hmac, info, info_len) ||
+		    !HMAC_Update(hmac, &ctr, 1) ||
+		    !HMAC_Final(hmac, previous, NULL))
+			goto out;
 
-	if (EVP_PKEY_CTX_add1_hkdf_info(pkey, info, infolen) <= 0)
-		goto out;
+		todo = digest_len;
+		if (done + todo > out_len)
+			todo = out_len - done;
 
-	if (EVP_PKEY_derive(pkey, key, &keylen) <= 0)
-		goto out;
+		memcpy(out_key + done, previous, todo);
+		done += todo;
+	}
 
 	ret = 1;
 
-out:
-	EVP_PKEY_CTX_free(pkey);
+ out:
+	HMAC_CTX_free(hmac);
+	explicit_bzero(previous, sizeof(previous));
 	return ret;
 }
 
