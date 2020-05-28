@@ -14,9 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <openssl/opensslv.h>
+#include "../config.h"
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#ifndef HAVE_HMAC_CTX_NEW
 
 #include <stdlib.h>
 

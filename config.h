@@ -138,3 +138,18 @@
 #endif
 
 #endif
+
+#include <openssl/opensslv.h>
+
+#ifdef LIBRESSL_VERSION_NUMBER
+#if LIBRESSL_VERSION_NUMBER >= 0x2060000fL
+#define HAVE_HKDF
+#endif
+#if LIBRESSL_VERSION_NUMBER >= 0x2070200fL
+#define HAVE_HMAC_CTX_NEW
+#endif
+#else
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#define HAVE_HMAC_CTX_NEW
+#endif
+#endif

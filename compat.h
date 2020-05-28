@@ -32,8 +32,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include <openssl/opensslv.h>
-
 #ifdef __OpenBSD__
 #include <sys/queue.h>
 #include <sys/tree.h>
@@ -84,13 +82,13 @@ void	 freezero(void *, size_t);
 #define getprogname() "sigbak"
 #endif
 
-#ifdef LIBRESSL_VERSION_NUMBER
+#ifdef HAVE_HKDF
 #include <openssl/hkdf.h>
 #else
 #include "compat/hkdf.h"
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#ifndef HAVE_HMAC_CTX_NEW
 #include <openssl/hmac.h>
 
 HMAC_CTX	*HMAC_CTX_new(void);

@@ -14,9 +14,9 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <openssl/opensslv.h>
+#include "../config.h"
 
-#ifndef LIBRESSL_VERSION_NUMBER
+#ifndef HAVE_HKDF
 
 #include <assert.h>
 #include <string.h>
