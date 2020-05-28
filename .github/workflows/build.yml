@@ -14,6 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: install dependencies
-      run: sudo apt-get install libprotobuf-c-dev libsqlite3-dev libssl-dev protobuf-c-compiler
+      run: >
+        sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev
+        libssl-dev pkg-config protobuf-c-compiler
     - name: build
       run: make
