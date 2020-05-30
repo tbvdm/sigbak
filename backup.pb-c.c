@@ -251,7 +251,7 @@ signal__header__unpack(ProtobufCAllocator *alloc, size_t buflen,
 
 		switch (tag.fieldnum) {
 		case HEADER_IV_FIELD:
-			if (hdr->has_iv == 1)
+			if (hdr->has_iv)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
 				goto error;
@@ -273,7 +273,7 @@ signal__header__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			break;
 
 		case HEADER_SALT_FIELD:
-			if (hdr->has_salt == 1)
+			if (hdr->has_salt)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
 				goto error;
