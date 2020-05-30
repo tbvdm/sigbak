@@ -161,19 +161,32 @@ uint64_unpack(uint64_t *val, size_t buflen, const uint8_t *buf)
 }
 
 static size_t
-double_unpack(double *val, size_t buflen, const uint8_t *buf)
+fixed64_unpack(uint64_t *fixed64, size_t buflen, const uint8_t *buf)
 {
-	unsigned int i;
-
-	if (buflen < 8)
+	if (buflen < sizeof *fixed64)
 		return 0;
 
-	*(uint64_t *)val = 0;
+	*fixed64 =
+	    (uint64_t)buf[0]       | (uint64_t)buf[1] <<  8 |
+	    (uint64_t)buf[2] << 16 | (uint64_t)buf[3] << 24 |
+	    (uint64_t)buf[4] << 32 | (uint64_t)buf[5] << 40 |
+	    (uint64_t)buf[6] << 48 | (uint64_t)buf[7] << 56;
 
-	for (i = 0; i < 8; i++)
-		*(uint64_t *)val |= (uint64_t)buf[i] << (i * 8);
+	return sizeof *fixed64;
+}
 
-	return 8;
+static size_t
+double_unpack(double *val, size_t buflen, const uint8_t *buf)
+{
+	uint64_t	fixed64;
+	size_t		n;
+
+	n = fixed64_unpack(&fixed64, buflen, buf);
+	if (n == 0)
+		return 0;
+
+	*val = *(double *)&fixed64;
+	return sizeof fixed64;
 }
 
 static char *
