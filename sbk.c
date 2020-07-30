@@ -1134,6 +1134,9 @@ sbk_get_body(struct sbk_ctx *ctx, char **body, int type, const char *address)
 		case SBK_INVALID_MESSAGE_TYPE:
 			fmt = "Invalid message";
 			break;
+		case SBK_PROFILE_CHANGE_TYPE:
+			fmt = "%s changed their profile";
+			break;
 		}
 
 	if (fmt == NULL)
