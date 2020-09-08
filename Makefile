@@ -1,6 +1,6 @@
 PREFIX?=	/usr/local
 BINDIR?=	${PREFIX}/bin
-MANDIR?=	${PREFIX}/man/man1
+MANDIR?=	${PREFIX}/man
 
 CC?=		cc
 INSTALL?=	install
@@ -46,6 +46,6 @@ clean:
 
 install: all
 	${INSTALL} -dm 755 ${DESTDIR}${BINDIR}
-	${INSTALL} -dm 755 ${DESTDIR}${MANDIR}
+	${INSTALL} -dm 755 ${DESTDIR}${MANDIR}/man1
 	${INSTALL} -m 555 sigbak ${DESTDIR}${BINDIR}
-	${INSTALL} -m 444 sigbak.1 ${DESTDIR}${MANDIR}
+	${INSTALL} -m 444 sigbak.1 ${DESTDIR}${MANDIR}/man1
