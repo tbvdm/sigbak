@@ -79,7 +79,8 @@ void	 freezero(void *, size_t);
 #endif
 
 #ifndef HAVE_GETPROGNAME
-#define getprogname() "sigbak"
+const char	*getprogname(void);
+void		 setprogname(const char *);
 #endif
 
 #ifdef HAVE_HKDF

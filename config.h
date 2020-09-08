@@ -26,7 +26,7 @@
 /* Define if you have getpagesize(). */
 /* #define HAVE_GETPAGESIZE */
 
-/* Define if you have getprogname(). */
+/* Define if you have getprogname() and setprogname(). */
 /* #define HAVE_GETPROGNAME */
 
 /* Define if you have memset_s(). */
