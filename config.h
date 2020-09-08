@@ -14,9 +14,6 @@
 /* Define if you have explicit_bzero(). */
 /* #define HAVE_EXPLICIT_BZERO */
 
-/* Define if you have explicit_memset(). */
-/* #define HAVE_EXPLICIT_MEMSET */
-
 /* Define if your fopen() supports the "x" mode extension. */
 /* #define HAVE_FOPEN_X_MODE */
 
@@ -28,9 +25,6 @@
 
 /* Define if you have getprogname() and setprogname(). */
 /* #define HAVE_GETPROGNAME */
-
-/* Define if you have memset_s(). */
-/* #define HAVE_MEMSET_S */
 
 /* Define if you have pledge(). */
 /* #define HAVE_PLEDGE */
@@ -84,7 +78,6 @@
 
 #define HAVE_ASPRINTF
 #define HAVE_ERR
-#define HAVE_EXPLICIT_MEMSET
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
