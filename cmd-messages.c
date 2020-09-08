@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -482,7 +483,6 @@ cmd_messages(int argc, char **argv)
 			passfile = optarg;
 			break;
 		case 't':
-			errstr = NULL;
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL)
 				errx(1, "%s: thread id is %s", optarg, errstr);

@@ -16,8 +16,6 @@
 
 #include "config.h"
 
-#include <sys/stat.h>
-
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdio.h>
