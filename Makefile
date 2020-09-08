@@ -21,7 +21,7 @@ OBJS=		backup.pb-c.o cmd-attachments.o cmd-avatars.o cmd-check.o \
 
 OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/freezero.o compat/getprogname.o \
-		compat/hkdf.o compat/hmac.o compat/pledge.o \
+		compat/hkdf.o compat/hmac_ctx_new.o compat/pledge.o \
 		compat/readpassphrase.o compat/reallocarray.o \
 		compat/recallocarray.o compat/strtonum.o compat/unveil.o
 
