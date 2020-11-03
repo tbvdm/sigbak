@@ -111,19 +111,6 @@ struct sbk_ctx;
 
 struct sbk_file;
 
-struct sbk_sms {
-	int		 id;
-	char		*address;
-	uint64_t	 date_recv;
-	uint64_t	 date_sent;
-	int		 thread;
-	int		 type;
-	char		*body;
-	SIMPLEQ_ENTRY(sbk_sms) entries;
-};
-
-SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
-
 struct sbk_attachment {
 	int64_t		 rowid;
 	int64_t		 attachmentid;
@@ -137,20 +124,18 @@ struct sbk_attachment {
 
 SIMPLEQ_HEAD(sbk_attachment_list, sbk_attachment);
 
-struct sbk_mms {
-	int		 id;
+struct sbk_message {
 	char		*address;
-	uint64_t	 date_recv;
-	uint64_t	 date_sent;
-	int		 thread;
+	uint64_t	 time_sent;
+	uint64_t	 time_recv;
 	int		 type;
-	char		*body;
-	int		 nattachments;
+	int		 thread;
+	char		*text;
 	struct sbk_attachment_list *attachments;
-	SIMPLEQ_ENTRY(sbk_mms) entries;
+	SIMPLEQ_ENTRY(sbk_message) entries;
 };
 
-SIMPLEQ_HEAD(sbk_mms_list, sbk_mms);
+SIMPLEQ_HEAD(sbk_message_list, sbk_message);
 
 struct sbk_thread {
 	uint64_t	 id;
@@ -177,18 +162,13 @@ void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
 struct sbk_attachment_list *sbk_get_all_attachments(struct sbk_ctx *);
-struct sbk_attachment_list *sbk_get_attachments_for_mms(struct sbk_ctx *, int);
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
 		    int);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
-struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *, int);
-void		 sbk_free_sms_list(struct sbk_sms_list *);
-
-struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *, int);
-int		 sbk_get_mms_attachments(struct sbk_ctx *, struct sbk_mms *);
-int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
-void		 sbk_free_mms_list(struct sbk_mms_list *);
+struct sbk_message_list *sbk_get_all_messages(struct sbk_ctx *);
+struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
+void		 sbk_free_message_list(struct sbk_message_list *);
 
 int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
 		    char **);
