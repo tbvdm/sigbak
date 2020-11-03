@@ -248,7 +248,7 @@ text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
 	fprintf(fp, "Thread: %d\n", msg->thread);
 
 	if (msg->attachments != NULL)
-		SIMPLEQ_FOREACH(att, msg->attachments, entries) {
+		TAILQ_FOREACH(att, msg->attachments, entries) {
 			fputs("Attachment: ", fp);
 
 			if (att->filename == NULL)

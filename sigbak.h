@@ -119,10 +119,10 @@ struct sbk_attachment {
 	char		*content_type;
 	uint64_t	 size;
 	struct sbk_file	*file;
-	SIMPLEQ_ENTRY(sbk_attachment) entries;
+	TAILQ_ENTRY(sbk_attachment) entries;
 };
 
-SIMPLEQ_HEAD(sbk_attachment_list, sbk_attachment);
+TAILQ_HEAD(sbk_attachment_list, sbk_attachment);
 
 struct sbk_message {
 	char		*address;

@@ -1071,8 +1071,8 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	struct sbk_attachment *att;
 
 	if (lst != NULL) {
-		while ((att = SIMPLEQ_FIRST(lst)) != NULL) {
-			SIMPLEQ_REMOVE_HEAD(lst, entries);
+		while ((att = TAILQ_FIRST(lst)) != NULL) {
+			TAILQ_REMOVE(lst, att, entries);
 			sbk_free_attachment(att);
 		}
 		free(lst);
@@ -1158,12 +1158,12 @@ sbk_get_attachments(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		goto error;
 	}
 
-	SIMPLEQ_INIT(lst);
+	TAILQ_INIT(lst);
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((att = sbk_get_attachment(ctx, stm)) == NULL)
 			goto error;
-		SIMPLEQ_INSERT_TAIL(lst, att, entries);
+		TAILQ_INSERT_TAIL(lst, att, entries);
 	}
 
 	if (ret != SQLITE_DONE)
@@ -1349,8 +1349,9 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	char			*longmsg;
 	int			 found;
 
+	/* Look for a long-message attachment */
 	found = 0;
-	SIMPLEQ_FOREACH(att, msg->attachments, entries)
+	TAILQ_FOREACH(att, msg->attachments, entries)
 		if (att->content_type != NULL &&
 		    strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
 			found = 1;
@@ -1370,6 +1371,11 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 
 	freezero_string(msg->text);
 	msg->text = longmsg;
+
+	/* Do not expose the long-message attachment */
+	TAILQ_REMOVE(msg->attachments, att, entries);
+	sbk_free_attachment(att);
+
 	return 0;
 }
 
