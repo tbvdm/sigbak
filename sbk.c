@@ -1057,109 +1057,6 @@ error:
 	return -1;
 }
 
-static int
-sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
-{
-	char		*name;
-	const char	*contact, *fmt;
-
-	fmt = NULL;
-
-	if (msg->type & SBK_ENCRYPTION_REMOTE_FAILED_BIT)
-		fmt = "Bad encrypted message";
-	else if (msg->type & SBK_ENCRYPTION_REMOTE_NO_SESSION_BIT)
-		fmt = "Message encrypted for non-existing session";
-	else if (msg->type & SBK_ENCRYPTION_REMOTE_DUPLICATE_BIT)
-		fmt = "Duplicate message";
-	else if ((msg->type & SBK_ENCRYPTION_REMOTE_LEGACY_BIT) ||
-	    (msg->type & SBK_ENCRYPTION_REMOTE_BIT))
-		fmt = "Encrypted message sent from an older version of Signal "
-		    "that is no longer supported";
-	else if (msg->type & SBK_GROUP_UPDATE_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
-			fmt = "You updated the group";
-		else
-			fmt = "%s updated the group";
-	} else if (msg->type & SBK_GROUP_QUIT_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
-			fmt = "You have left the group";
-		else
-			fmt = "%s has left the group";
-	} else if (msg->type & SBK_END_SESSION_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
-			fmt = "You reset the secure session";
-		else
-			fmt = "%s reset the secure session";
-	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
-			fmt = "You marked your safety number with %s verified";
-		else
-			fmt = "You marked your safety number with %s verified "
-			    "from another device";
-	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
-			fmt = "You marked your safety number with %s "
-			    "unverified";
-		else
-			fmt = "You marked your safety number with %s "
-			    "unverified from another device";
-	} else if (msg->type & SBK_KEY_EXCHANGE_CORRUPTED_BIT)
-		fmt = "Corrupt key exchange message";
-	else if (msg->type & SBK_KEY_EXCHANGE_INVALID_VERSION_BIT)
-		fmt = "Key exchange message for invalid protocol version";
-	else if (msg->type & SBK_KEY_EXCHANGE_BUNDLE_BIT)
-		fmt = "Message with new safety number";
-	else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
-		fmt = "Your safety number with %s has changed";
-	else if (msg->type & SBK_KEY_EXCHANGE_BIT)
-		fmt = "Key exchange message";
-	else
-		switch (msg->type & SBK_BASE_TYPE_MASK) {
-		case SBK_INCOMING_CALL_TYPE:
-			fmt = "%s called you";
-			break;
-		case SBK_OUTGOING_CALL_TYPE:
-			fmt = "Called %s";
-			break;
-		case SBK_MISSED_CALL_TYPE:
-			fmt = "Missed call from %s";
-			break;
-		case SBK_JOINED_TYPE:
-			fmt = "%s is on Signal";
-			break;
-		case SBK_UNSUPPORTED_MESSAGE_TYPE:
-			fmt = "Unsupported message sent from a newer version "
-			    "of Signal";
-			break;
-		case SBK_INVALID_MESSAGE_TYPE:
-			fmt = "Invalid message";
-			break;
-		case SBK_PROFILE_CHANGE_TYPE:
-			fmt = "%s changed their profile";
-			break;
-		}
-
-	if (fmt == NULL)
-		return 0;
-
-	if (sbk_get_contact(ctx, msg->address, &name, NULL) == -1 ||
-	    name == NULL)
-		contact = msg->address;
-	else
-		contact = name;
-
-	freezero_string(msg->text);
-
-	if (asprintf(&msg->text, fmt, contact) == -1) {
-		msg->text = NULL;
-		free(name);
-		return -1;
-	}
-
-	free(name);
-	return 0;
-}
-
 static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
@@ -1339,6 +1236,109 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
 	if ((msg->attachments = sbk_get_attachments(ctx, stm)) == NULL)
 		return -1;
 
+	return 0;
+}
+
+static int
+sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	char		*name;
+	const char	*contact, *fmt;
+
+	fmt = NULL;
+
+	if (msg->type & SBK_ENCRYPTION_REMOTE_FAILED_BIT)
+		fmt = "Bad encrypted message";
+	else if (msg->type & SBK_ENCRYPTION_REMOTE_NO_SESSION_BIT)
+		fmt = "Message encrypted for non-existing session";
+	else if (msg->type & SBK_ENCRYPTION_REMOTE_DUPLICATE_BIT)
+		fmt = "Duplicate message";
+	else if ((msg->type & SBK_ENCRYPTION_REMOTE_LEGACY_BIT) ||
+	    (msg->type & SBK_ENCRYPTION_REMOTE_BIT))
+		fmt = "Encrypted message sent from an older version of Signal "
+		    "that is no longer supported";
+	else if (msg->type & SBK_GROUP_UPDATE_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+			fmt = "You updated the group";
+		else
+			fmt = "%s updated the group";
+	} else if (msg->type & SBK_GROUP_QUIT_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+			fmt = "You have left the group";
+		else
+			fmt = "%s has left the group";
+	} else if (msg->type & SBK_END_SESSION_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+			fmt = "You reset the secure session";
+		else
+			fmt = "%s reset the secure session";
+	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+			fmt = "You marked your safety number with %s verified";
+		else
+			fmt = "You marked your safety number with %s verified "
+			    "from another device";
+	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
+		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+			fmt = "You marked your safety number with %s "
+			    "unverified";
+		else
+			fmt = "You marked your safety number with %s "
+			    "unverified from another device";
+	} else if (msg->type & SBK_KEY_EXCHANGE_CORRUPTED_BIT)
+		fmt = "Corrupt key exchange message";
+	else if (msg->type & SBK_KEY_EXCHANGE_INVALID_VERSION_BIT)
+		fmt = "Key exchange message for invalid protocol version";
+	else if (msg->type & SBK_KEY_EXCHANGE_BUNDLE_BIT)
+		fmt = "Message with new safety number";
+	else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_UPDATE_BIT)
+		fmt = "Your safety number with %s has changed";
+	else if (msg->type & SBK_KEY_EXCHANGE_BIT)
+		fmt = "Key exchange message";
+	else
+		switch (msg->type & SBK_BASE_TYPE_MASK) {
+		case SBK_INCOMING_CALL_TYPE:
+			fmt = "%s called you";
+			break;
+		case SBK_OUTGOING_CALL_TYPE:
+			fmt = "Called %s";
+			break;
+		case SBK_MISSED_CALL_TYPE:
+			fmt = "Missed call from %s";
+			break;
+		case SBK_JOINED_TYPE:
+			fmt = "%s is on Signal";
+			break;
+		case SBK_UNSUPPORTED_MESSAGE_TYPE:
+			fmt = "Unsupported message sent from a newer version "
+			    "of Signal";
+			break;
+		case SBK_INVALID_MESSAGE_TYPE:
+			fmt = "Invalid message";
+			break;
+		case SBK_PROFILE_CHANGE_TYPE:
+			fmt = "%s changed their profile";
+			break;
+		}
+
+	if (fmt == NULL)
+		return 0;
+
+	if (sbk_get_contact(ctx, msg->address, &name, NULL) == -1 ||
+	    name == NULL)
+		contact = msg->address;
+	else
+		contact = name;
+
+	freezero_string(msg->text);
+
+	if (asprintf(&msg->text, fmt, contact) == -1) {
+		msg->text = NULL;
+		free(name);
+		return -1;
+	}
+
+	free(name);
 	return 0;
 }
 
