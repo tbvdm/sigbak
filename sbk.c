@@ -1397,28 +1397,6 @@ sbk_get_all_attachments(struct sbk_ctx *ctx)
 }
 
 struct sbk_attachment_list *
-sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
-{
-	sqlite3_stmt *stm;
-
-	if (sbk_create_database(ctx) == -1)
-		return NULL;
-
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) ==
-	    -1) {
-		sqlite3_finalize(stm);
-		return NULL;
-	}
-
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
-		sqlite3_finalize(stm);
-		return NULL;
-	}
-
-	return sbk_get_attachments(ctx, stm);
-}
-
-struct sbk_attachment_list *
 sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 {
 	sqlite3_stmt *stm;
@@ -1433,6 +1411,28 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 	}
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
+		sqlite3_finalize(stm);
+		return NULL;
+	}
+
+	return sbk_get_attachments(ctx, stm);
+}
+
+struct sbk_attachment_list *
+sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
+{
+	sqlite3_stmt *stm;
+
+	if (sbk_create_database(ctx) == -1)
+		return NULL;
+
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) ==
+	    -1) {
+		sqlite3_finalize(stm);
+		return NULL;
+	}
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
