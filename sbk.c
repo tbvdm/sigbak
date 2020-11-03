@@ -1281,6 +1281,73 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
+#define SBK_ATTACHMENTS_SELECT						\
+	"SELECT file_name, ct, _id, unique_id, pending_push, "		\
+	"data_size FROM part "
+
+#define SBK_ATTACHMENTS_WHERE_THREAD					\
+	"WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
+
+#define SBK_ATTACHMENTS_WHERE_MESSAGE	"WHERE mid = ? "
+
+#define SBK_ATTACHMENTS_ORDER		"ORDER BY unique_id, _id"
+
+#define SBK_ATTACHMENTS_QUERY_ALL					\
+	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_ORDER
+
+#define SBK_ATTACHMENTS_QUERY_THREAD					\
+	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_WHERE_THREAD		\
+	SBK_ATTACHMENTS_ORDER
+
+#define SBK_ATTACHMENTS_QUERY_MESSAGE					\
+	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_WHERE_MESSAGE		\
+	SBK_ATTACHMENTS_ORDER
+
+static struct sbk_attachment *
+sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_attachment *att;
+
+	if ((att = malloc(sizeof *att)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	att->filename = NULL;
+	att->content_type = NULL;
+	att->file = NULL;
+
+	if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0) == -1)
+		goto error;
+
+	if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm, 1) == -1)
+		goto error;
+
+	att->rowid = sqlite3_column_int64(stm, 2);
+	att->attachmentid = sqlite3_column_int64(stm, 3);
+	att->status = sqlite3_column_int(stm, 4);
+	att->size = sqlite3_column_int64(stm, 5);
+
+	if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
+		if ((att->file = sbk_get_attachment_file(ctx, att->rowid,
+		    att->attachmentid)) == NULL) {
+			sbk_error_setx(ctx, "Cannot find attachment file");
+			goto error;
+		}
+
+		if (att->size != att->file->len) {
+			sbk_error_setx(ctx, "Inconsistent attachment size");
+			goto error;
+		}
+	}
+
+	return att;
+
+error:
+	sbk_free_attachment(att);
+	return NULL;
+}
+
 static struct sbk_attachment_list *
 sbk_get_attachments(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
@@ -1296,43 +1363,9 @@ sbk_get_attachments(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	SIMPLEQ_INIT(lst);
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
-		if ((att = malloc(sizeof *att)) == NULL) {
-			sbk_error_set(ctx, NULL);
+		if ((att = sbk_get_attachment(ctx, stm)) == NULL)
 			goto error;
-		}
-
-		att->filename = NULL;
-		att->content_type = NULL;
-		att->file = NULL;
 		SIMPLEQ_INSERT_TAIL(lst, att, entries);
-
-		if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0)
-		    == -1)
-			goto error;
-
-		if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
-		    1) == -1)
-			goto error;
-
-		att->rowid = sqlite3_column_int64(stm, 2);
-		att->attachmentid = sqlite3_column_int64(stm, 3);
-		att->status = sqlite3_column_int(stm, 4);
-		att->size = sqlite3_column_int64(stm, 5);
-
-		if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
-			if ((att->file = sbk_get_attachment_file(ctx,
-			    att->rowid, att->attachmentid)) == NULL) {
-				sbk_error_setx(ctx, "Cannot find attachment "
-				    "file");
-				goto error;
-			}
-
-			if (att->size != att->file->len) {
-				sbk_error_setx(ctx, "Inconsistent attachment "
-				    "size");
-				goto error;
-			}
-		}
 	}
 
 	if (ret != SQLITE_DONE)
@@ -1355,9 +1388,7 @@ sbk_get_all_attachments(struct sbk_ctx *ctx)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
-	    "unique_id, pending_push, data_size FROM part "
-	    "ORDER BY unique_id, _id") == -1) {
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_ALL) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
@@ -1373,9 +1404,8 @@ sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
-	    "unique_id, pending_push, data_size FROM part "
-	    "WHERE mid = ? ORDER BY unique_id, _id") == -1) {
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) ==
+	    -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
@@ -1389,22 +1419,20 @@ sbk_get_attachments_for_mms(struct sbk_ctx *ctx, int mms_id)
 }
 
 struct sbk_attachment_list *
-sbk_get_attachments_for_thread(struct sbk_ctx *ctx, uint64_t thread_id)
+sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 {
 	sqlite3_stmt *stm;
 
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT file_name, ct, _id, "
-	    "unique_id, pending_push, data_size FROM part "
-	    "WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
-	    "ORDER BY unique_id, _id") == -1) {
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_THREAD) ==
+	    -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
 
-	if (sbk_sqlite_bind_int64(ctx, stm, 1, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
