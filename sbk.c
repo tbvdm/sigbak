@@ -1231,6 +1231,23 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
 	return 0;
 }
 
+int
+sbk_is_outgoing_message(const struct sbk_message *msg)
+{
+	switch (msg->type & SBK_BASE_TYPE_MASK) {
+	case SBK_OUTGOING_CALL_TYPE:
+	case SBK_BASE_OUTBOX_TYPE:
+	case SBK_BASE_SENDING_TYPE:
+	case SBK_BASE_SENT_TYPE:
+	case SBK_BASE_SENT_FAILED_TYPE:
+	case SBK_BASE_PENDING_SECURE_SMS_FALLBACK:
+	case SBK_BASE_PENDING_INSECURE_SMS_FALLBACK:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static int
 sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
@@ -1250,28 +1267,28 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 		fmt = "Encrypted message sent from an older version of Signal "
 		    "that is no longer supported";
 	else if (msg->type & SBK_GROUP_UPDATE_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+		if (sbk_is_outgoing_message(msg))
 			fmt = "You updated the group";
 		else
 			fmt = "%s updated the group";
 	} else if (msg->type & SBK_GROUP_QUIT_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+		if (sbk_is_outgoing_message(msg))
 			fmt = "You have left the group";
 		else
 			fmt = "%s has left the group";
 	} else if (msg->type & SBK_END_SESSION_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+		if (sbk_is_outgoing_message(msg))
 			fmt = "You reset the secure session";
 		else
 			fmt = "%s reset the secure session";
 	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_VERIFIED_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+		if (sbk_is_outgoing_message(msg))
 			fmt = "You marked your safety number with %s verified";
 		else
 			fmt = "You marked your safety number with %s verified "
 			    "from another device";
 	} else if (msg->type & SBK_KEY_EXCHANGE_IDENTITY_DEFAULT_BIT) {
-		if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+		if (sbk_is_outgoing_message(msg))
 			fmt = "You marked your safety number with %s "
 			    "unverified";
 		else

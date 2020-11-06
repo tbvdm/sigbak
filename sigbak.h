@@ -86,15 +86,7 @@
 #define SBK_ENCRYPTION_REMOTE_DUPLICATE_BIT	0x4000000
 #define SBK_ENCRYPTION_REMOTE_LEGACY_BIT	0x2000000
 
-#define SBK_IS_OUTGOING_MESSAGE(type)					\
-    (((type) & SBK_BASE_TYPE_MASK) == SBK_OUTGOING_CALL_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_OUTBOX_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENDING_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENT_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENT_FAILED_TYPE ||	\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
-
+/* Attachment transfer states */
 #define SBK_ATTACHMENT_TRANSFER_DONE	0
 #define SBK_ATTACHMENT_TRANSFER_STARTED	1
 #define SBK_ATTACHMENT_TRANSFER_PENDING	2
@@ -169,6 +161,7 @@ void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 struct sbk_message_list *sbk_get_all_messages(struct sbk_ctx *);
 struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
 void		 sbk_free_message_list(struct sbk_message_list *);
+int		 sbk_is_outgoing_message(const struct sbk_message *);
 
 int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
 		    char **);

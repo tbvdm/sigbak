@@ -151,7 +151,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 	    == NULL)
 		goto out;
 
-	if (SBK_IS_OUTGOING_MESSAGE(msg->type)) {
+	if (sbk_is_outgoing_message(msg)) {
 		maildir_write_address_header(fp, "From", "you", "You");
 		maildir_write_address_header(fp, "To",
 		    isgroup ? "group" : phone, name);
@@ -162,7 +162,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 
 	maildir_write_date_header(fp, "Date", msg->time_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(msg->type))
+	if (!sbk_is_outgoing_message(msg))
 		maildir_write_date_header(fp, "X-Received", msg->time_recv);
 
 	fprintf(fp, "X-Thread: %d\n", msg->thread);
@@ -231,7 +231,7 @@ text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
 		}
 	}
 
-	if (SBK_IS_OUTGOING_MESSAGE(msg->type))
+	if (sbk_is_outgoing_message(msg))
 		fputs("To: ", fp);
 	else
 		fputs("From: ", fp);
@@ -242,7 +242,7 @@ text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
 
 	maildir_write_date_header(fp, "Sent", msg->time_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(msg->type))
+	if (!sbk_is_outgoing_message(msg))
 		maildir_write_date_header(fp, "Received", msg->time_recv);
 
 	fprintf(fp, "Thread: %d\n", msg->thread);
