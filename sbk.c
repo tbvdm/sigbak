@@ -1026,10 +1026,10 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	sqlite3		*db;
 	sqlite3_backup	*bak;
 
-	if (sbk_sqlite_open(ctx, &db, path) == -1)
-		goto error;
-
 	if (sbk_create_database(ctx) == -1)
+		return -1;
+
+	if (sbk_sqlite_open(ctx, &db, path) == -1)
 		goto error;
 
 	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL) {
