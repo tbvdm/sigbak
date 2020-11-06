@@ -1312,8 +1312,8 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 		case SBK_OUTGOING_CALL_TYPE:
 			fmt = "Called %s";
 			break;
-		case SBK_MISSED_CALL_TYPE:
-			fmt = "Missed call from %s";
+		case SBK_MISSED_AUDIO_CALL_TYPE:
+			fmt = "Missed audio call from %s";
 			break;
 		case SBK_JOINED_TYPE:
 			fmt = "%s is on Signal";
@@ -1327,6 +1327,9 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 			break;
 		case SBK_PROFILE_CHANGE_TYPE:
 			fmt = "%s changed their profile";
+			break;
+		case SBK_MISSED_VIDEO_CALL_TYPE:
+			fmt = "Missed video call from %s";
 			break;
 		}
 
