@@ -1235,13 +1235,14 @@ int
 sbk_is_outgoing_message(const struct sbk_message *msg)
 {
 	switch (msg->type & SBK_BASE_TYPE_MASK) {
-	case SBK_OUTGOING_CALL_TYPE:
+	case SBK_OUTGOING_AUDIO_CALL_TYPE:
 	case SBK_BASE_OUTBOX_TYPE:
 	case SBK_BASE_SENDING_TYPE:
 	case SBK_BASE_SENT_TYPE:
 	case SBK_BASE_SENT_FAILED_TYPE:
 	case SBK_BASE_PENDING_SECURE_SMS_FALLBACK:
 	case SBK_BASE_PENDING_INSECURE_SMS_FALLBACK:
+	case SBK_OUTGOING_VIDEO_CALL_TYPE:
 		return 1;
 	default:
 		return 0;
@@ -1306,10 +1307,12 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 		fmt = "Key exchange message";
 	else
 		switch (msg->type & SBK_BASE_TYPE_MASK) {
-		case SBK_INCOMING_CALL_TYPE:
+		case SBK_INCOMING_AUDIO_CALL_TYPE:
+		case SBK_INCOMING_VIDEO_CALL_TYPE:
 			fmt = "%s called you";
 			break;
-		case SBK_OUTGOING_CALL_TYPE:
+		case SBK_OUTGOING_AUDIO_CALL_TYPE:
+		case SBK_OUTGOING_VIDEO_CALL_TYPE:
 			fmt = "Called %s";
 			break;
 		case SBK_MISSED_AUDIO_CALL_TYPE:
