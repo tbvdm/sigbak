@@ -1331,6 +1331,9 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 		case SBK_MISSED_VIDEO_CALL_TYPE:
 			fmt = "Missed video call from %s";
 			break;
+		case SBK_GV1_MIGRATION_TYPE:
+			fmt = "This group was updated to a new group";
+			break;
 		}
 
 	if (fmt == NULL)
