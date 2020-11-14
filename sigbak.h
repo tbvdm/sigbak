@@ -33,13 +33,17 @@
 /* Base types */
 #define SBK_BASE_TYPE_MASK			0x1f
 
-#define SBK_INCOMING_CALL_TYPE			1
-#define SBK_OUTGOING_CALL_TYPE			2
-#define SBK_MISSED_CALL_TYPE			3
+#define SBK_INCOMING_AUDIO_CALL_TYPE		1
+#define SBK_OUTGOING_AUDIO_CALL_TYPE		2
+#define SBK_MISSED_AUDIO_CALL_TYPE		3
 #define SBK_JOINED_TYPE				4
 #define SBK_UNSUPPORTED_MESSAGE_TYPE		5
 #define SBK_INVALID_MESSAGE_TYPE		6
 #define SBK_PROFILE_CHANGE_TYPE			7
+#define SBK_MISSED_VIDEO_CALL_TYPE		8
+#define SBK_GV1_MIGRATION_TYPE			9
+#define SBK_INCOMING_VIDEO_CALL_TYPE		10
+#define SBK_OUTGOING_VIDEO_CALL_TYPE		11
 
 #define SBK_BASE_INBOX_TYPE			20
 #define SBK_BASE_OUTBOX_TYPE			21
@@ -85,15 +89,7 @@
 #define SBK_ENCRYPTION_REMOTE_DUPLICATE_BIT	0x4000000
 #define SBK_ENCRYPTION_REMOTE_LEGACY_BIT	0x2000000
 
-#define SBK_IS_OUTGOING_MESSAGE(type)					\
-    (((type) & SBK_BASE_TYPE_MASK) == SBK_OUTGOING_CALL_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_OUTBOX_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENDING_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENT_TYPE ||		\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_SENT_FAILED_TYPE ||	\
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_SECURE_SMS_FALLBACK || \
-    ((type) & SBK_BASE_TYPE_MASK) == SBK_BASE_PENDING_INSECURE_SMS_FALLBACK)
-
+/* Attachment transfer states */
 #define SBK_ATTACHMENT_TRANSFER_DONE	0
 #define SBK_ATTACHMENT_TRANSFER_STARTED	1
 #define SBK_ATTACHMENT_TRANSFER_PENDING	2
@@ -110,19 +106,6 @@ struct sbk_ctx;
 
 struct sbk_file;
 
-struct sbk_sms {
-	int		 id;
-	char		*address;
-	uint64_t	 date_recv;
-	uint64_t	 date_sent;
-	int		 thread;
-	int		 type;
-	char		*body;
-	SIMPLEQ_ENTRY(sbk_sms) entries;
-};
-
-SIMPLEQ_HEAD(sbk_sms_list, sbk_sms);
-
 struct sbk_attachment {
 	int64_t		 rowid;
 	int64_t		 attachmentid;
@@ -131,25 +114,23 @@ struct sbk_attachment {
 	char		*content_type;
 	uint64_t	 size;
 	struct sbk_file	*file;
-	SIMPLEQ_ENTRY(sbk_attachment) entries;
+	TAILQ_ENTRY(sbk_attachment) entries;
 };
 
-SIMPLEQ_HEAD(sbk_attachment_list, sbk_attachment);
+TAILQ_HEAD(sbk_attachment_list, sbk_attachment);
 
-struct sbk_mms {
-	int		 id;
+struct sbk_message {
 	char		*address;
-	uint64_t	 date_recv;
-	uint64_t	 date_sent;
-	int		 thread;
+	uint64_t	 time_sent;
+	uint64_t	 time_recv;
 	int		 type;
-	char		*body;
-	int		 nattachments;
+	int		 thread;
+	char		*text;
 	struct sbk_attachment_list *attachments;
-	SIMPLEQ_ENTRY(sbk_mms) entries;
+	SIMPLEQ_ENTRY(sbk_message) entries;
 };
 
-SIMPLEQ_HEAD(sbk_mms_list, sbk_mms);
+SIMPLEQ_HEAD(sbk_message_list, sbk_message);
 
 struct sbk_thread {
 	uint64_t	 id;
@@ -176,18 +157,14 @@ void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
 struct sbk_attachment_list *sbk_get_all_attachments(struct sbk_ctx *);
-struct sbk_attachment_list *sbk_get_attachments_for_mms(struct sbk_ctx *, int);
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
-		    uint64_t);
+		    int);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
-struct sbk_sms_list *sbk_get_smses(struct sbk_ctx *, int);
-void		 sbk_free_sms_list(struct sbk_sms_list *);
-
-struct sbk_mms_list *sbk_get_mmses(struct sbk_ctx *, int);
-int		 sbk_get_mms_attachments(struct sbk_ctx *, struct sbk_mms *);
-int		 sbk_get_long_message(struct sbk_ctx *, struct sbk_mms *);
-void		 sbk_free_mms_list(struct sbk_mms_list *);
+struct sbk_message_list *sbk_get_all_messages(struct sbk_ctx *);
+struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
+void		 sbk_free_message_list(struct sbk_message_list *);
+int		 sbk_is_outgoing_message(const struct sbk_message *);
 
 int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
 		    char **);

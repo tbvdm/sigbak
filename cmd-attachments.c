@@ -114,7 +114,7 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 
 	ret = 0;
 
-	SIMPLEQ_FOREACH(att, lst, entries) {
+	TAILQ_FOREACH(att, lst, entries) {
 		if (att->file == NULL)
 			continue;
 
