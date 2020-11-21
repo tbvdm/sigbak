@@ -270,6 +270,8 @@ text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
 	else
 		fputs("\n", fp);
 
+	freezero_string(name);
+	freezero_string(phone);
 	return 0;
 }
 
