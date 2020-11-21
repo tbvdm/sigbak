@@ -1570,6 +1570,7 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	if (lst != NULL) {
 		while ((thd = SIMPLEQ_FIRST(lst)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			freezero_string(thd->recipient);
 			freezero(thd, sizeof *thd);
 		}
 		free(lst);
