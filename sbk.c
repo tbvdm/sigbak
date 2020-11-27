@@ -1492,7 +1492,7 @@ error:
 	return NULL;
 }
 
-struct sbk_message_list *
+static struct sbk_message_list *
 sbk_get_messages(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_message_list	*lst;
