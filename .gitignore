@@ -1,6 +1,6 @@
 *.d
 *.o
+*.pb-c.[ch]
 *.swp
-backup.pb-c.[ch]
 sigbak
 tags
