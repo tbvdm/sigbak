@@ -1408,25 +1408,36 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 }
 
 #define SBK_ATTACHMENTS_SELECT						\
-	"SELECT file_name, ct, _id, unique_id, pending_push, "		\
-	"data_size FROM part "
+	"SELECT "							\
+	"file_name, "							\
+	"ct, "								\
+	"_id, "								\
+	"unique_id, "							\
+	"pending_push, "						\
+	"data_size "							\
+	"FROM part "
 
 #define SBK_ATTACHMENTS_WHERE_THREAD					\
 	"WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
 
-#define SBK_ATTACHMENTS_WHERE_MESSAGE	"WHERE mid = ? "
+#define SBK_ATTACHMENTS_WHERE_MESSAGE					\
+	"WHERE mid = ? "
 
-#define SBK_ATTACHMENTS_ORDER		"ORDER BY unique_id, _id"
+#define SBK_ATTACHMENTS_ORDER						\
+	"ORDER BY unique_id, _id"
 
 #define SBK_ATTACHMENTS_QUERY_ALL					\
-	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_ORDER
+	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_ORDER
 
 #define SBK_ATTACHMENTS_QUERY_THREAD					\
-	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_WHERE_THREAD		\
+	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_WHERE_THREAD					\
 	SBK_ATTACHMENTS_ORDER
 
 #define SBK_ATTACHMENTS_QUERY_MESSAGE					\
-	SBK_ATTACHMENTS_SELECT SBK_ATTACHMENTS_WHERE_MESSAGE		\
+	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
 static struct sbk_attachment *
@@ -1740,16 +1751,34 @@ sbk_free_message_list(struct sbk_message_list *lst)
 }
 
 #define SBK_MESSAGES_SELECT_SMS						\
-	"SELECT address, body, date_sent, date AS date_received, "	\
-	"type, thread_id, 0 AS part_count, _id FROM sms "
+	"SELECT "							\
+	"address, "							\
+	"body, "							\
+	"date_sent, "							\
+	"date AS date_received, "					\
+	"type, "							\
+	"thread_id, "							\
+	"0, "				/* part_count */		\
+	"_id "								\
+	"FROM sms "
 
 #define SBK_MESSAGES_SELECT_MMS						\
-	"SELECT address, body, date AS date_sent, date_received, "	\
-	"msg_box AS type, thread_id, part_count, _id FROM mms "
+	"SELECT "							\
+	"address, "							\
+	"body, "							\
+	"date, "			/* date_sent */			\
+	"date_received, "						\
+	"msg_box, "			/* type */			\
+	"thread_id, "							\
+	"part_count, "							\
+	"_id "								\
+	"FROM mms "
 
-#define SBK_MESSAGES_WHERE_THREAD	"WHERE thread_id = ? "
+#define SBK_MESSAGES_WHERE_THREAD					\
+	"WHERE thread_id = ? "
 
-#define SBK_MESSAGES_ORDER		"ORDER BY date_received"
+#define SBK_MESSAGES_ORDER						\
+	"ORDER BY date_received"
 
 #define SBK_MESSAGES_QUERY_ALL						\
 	SBK_MESSAGES_SELECT_SMS						\
@@ -1758,9 +1787,11 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_ORDER
 
 #define SBK_MESSAGES_QUERY_THREAD					\
-	SBK_MESSAGES_SELECT_SMS	SBK_MESSAGES_WHERE_THREAD		\
+	SBK_MESSAGES_SELECT_SMS						\
+	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS SBK_MESSAGES_WHERE_THREAD		\
+	SBK_MESSAGES_SELECT_MMS						\
+	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
 static struct sbk_message *
@@ -1896,6 +1927,15 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	}
 }
 
+#define SBK_THREADS_QUERY						\
+	"SELECT "							\
+	"recipient_ids, "						\
+	"_id, "								\
+	"date, "							\
+	"message_count "						\
+	"FROM thread "							\
+	"ORDER BY _id"
+
 struct sbk_thread_list *
 sbk_get_threads(struct sbk_ctx *ctx)
 {
@@ -1914,8 +1954,7 @@ sbk_get_threads(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT recipient_ids, _id, date, "
-	    "message_count FROM thread ORDER BY _id") == -1)
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_THREADS_QUERY) == -1)
 		goto error;
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
