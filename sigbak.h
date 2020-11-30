@@ -107,6 +107,29 @@ struct sbk_ctx;
 
 struct sbk_file;
 
+struct sbk_contact {
+	char		*phone;
+	char		*email;
+	char		*system_display_name;
+	char		*system_phone_label;
+	char		*profile_name;
+	char		*profile_family_name;
+	char		*profile_joined_name;
+};
+
+struct sbk_group {
+	char		*name;
+};
+
+struct sbk_recipient {
+	enum {
+		SBK_CONTACT,
+		SBK_GROUP
+	} type;
+	struct sbk_contact	*contact;
+	struct sbk_group	*group;
+};
+
 struct sbk_attachment {
 	int64_t		 rowid;
 	int64_t		 attachmentid;
@@ -121,7 +144,7 @@ struct sbk_attachment {
 TAILQ_HEAD(sbk_attachment_list, sbk_attachment);
 
 struct sbk_message {
-	char		*address;
+	struct sbk_recipient *recipient;
 	uint64_t	 time_sent;
 	uint64_t	 time_recv;
 	int		 type;
@@ -134,8 +157,8 @@ struct sbk_message {
 SIMPLEQ_HEAD(sbk_message_list, sbk_message);
 
 struct sbk_thread {
+	struct sbk_recipient *recipient;
 	uint64_t	 id;
-	char		*recipient;
 	uint64_t	 date;
 	uint64_t	 nmessages;
 	SIMPLEQ_ENTRY(sbk_thread) entries;
@@ -167,13 +190,10 @@ struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
 void		 sbk_free_message_list(struct sbk_message_list *);
 int		 sbk_is_outgoing_message(const struct sbk_message *);
 
-int		 sbk_get_contact(struct sbk_ctx *, const char *, char **,
-		    char **);
-int		 sbk_get_group(struct sbk_ctx *, const char *, char **);
-int		 sbk_is_group(struct sbk_ctx *, const char *);
-
 struct sbk_thread_list *sbk_get_threads(struct sbk_ctx *);
 void		 sbk_free_thread_list(struct sbk_thread_list *);
+
+const char	*sbk_get_recipient_display_name(const struct sbk_recipient *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 

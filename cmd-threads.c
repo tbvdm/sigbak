@@ -28,7 +28,7 @@ cmd_threads(int argc, char **argv)
 	struct sbk_ctx		*ctx;
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
-	char			*name, *passfile, passphr[128];
+	char			*passfile, passphr[128];
 	int			 c, ret;
 
 	passfile = NULL;
@@ -97,21 +97,9 @@ cmd_threads(int argc, char **argv)
 		goto out;
 	}
 
-	SIMPLEQ_FOREACH(thd, lst, entries) {
-		if (sbk_is_group(ctx, thd->recipient))
-			ret = sbk_get_group(ctx, thd->recipient, &name);
-		else
-			ret = sbk_get_contact(ctx, thd->recipient, &name,
-			    NULL);
-
-		if (ret == -1) {
-			warnx("%s", sbk_error(ctx));
-			continue;
-		}
-
-		printf("%4" PRIu64 ": %s\n", thd->id, name);
-		freezero_string(name);
-	}
+	SIMPLEQ_FOREACH(thd, lst, entries)
+		printf("%4" PRIu64 ": %s\n", thd->id,
+		    sbk_get_recipient_display_name(thd->recipient));
 
 	sbk_free_thread_list(lst);
 	ret = 0;

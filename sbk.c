@@ -42,10 +42,9 @@
 #define SBK_ROUNDS		250000
 #define SBK_HKDF_INFO		"Backup Export"
 
-#define SBK_GROUP_PREFIX	"__textsecure_group__!"
-
 /* Based on SQLCipherOpenHelper.java in the Signal-Android repository */
-#define SBK_DB_VERSION_RECIPIENT_IDS	24
+#define SBK_DB_VERSION_RECIPIENT_IDS		24
+#define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
 
 struct sbk_file {
 	long		 pos;
@@ -62,15 +61,25 @@ struct sbk_attachment_entry {
 
 RB_HEAD(sbk_attachment_tree, sbk_attachment_entry);
 
+struct sbk_recipient_id {
+	char		*old;	/* For older databases */
+	int		 new;	/* For newer databases */
+};
+
+struct sbk_recipient_entry {
+	struct sbk_recipient_id id;
+	struct sbk_recipient recipient;
+	RB_ENTRY(sbk_recipient_entry) entries;
+};
+
+RB_HEAD(sbk_recipient_tree, sbk_recipient_entry);
+
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
 	unsigned int	 db_version;
 	struct sbk_attachment_tree attachments;
-	int		(*get_contact)(struct sbk_ctx *, const char *, char **,
-			    char **);
-	int		(*get_group)(struct sbk_ctx *, const char *, char **);
-	int		(*is_group)(struct sbk_ctx *, const char *);
+	struct sbk_recipient_tree recipients;
 	EVP_CIPHER_CTX	*cipher;
 	HMAC_CTX	*hmac;
 	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
@@ -88,9 +97,14 @@ struct sbk_ctx {
 
 static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
 		    struct sbk_attachment_entry *);
+static int	sbk_cmp_recipient_entries(struct sbk_recipient_entry *,
+		    struct sbk_recipient_entry *);
 
 RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
     sbk_cmp_attachment_entries)
+
+RB_GENERATE_STATIC(sbk_recipient_tree, sbk_recipient_entry, entries,
+    sbk_cmp_recipient_entries)
 
 static ProtobufCAllocator sbk_protobuf_alloc = {
 	mem_protobuf_malloc,
@@ -1057,6 +1071,320 @@ error:
 	return -1;
 }
 
+static int
+sbk_cmp_recipient_entries(struct sbk_recipient_entry *e,
+    struct sbk_recipient_entry *f)
+{
+	if (e->id.old != NULL)
+		return strcmp(e->id.old, f->id.old);
+	else
+		return (e->id.new < f->id.new) ? -1 : (e->id.new > f->id.new);
+}
+
+static int
+sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
+    struct sbk_recipient_id *id, sqlite3_stmt *stm, int idx)
+{
+	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
+		id->new = -1;
+		if (sbk_sqlite_column_text_copy(ctx, &id->old, stm, idx) == -1)
+			return -1;
+		if (id->old == NULL) {
+			sbk_error_setx(ctx, "Invalid recipient id");
+			return -1;
+		}
+	} else {
+		id->new = sqlite3_column_int(stm, idx);
+		id->old = NULL;
+	}
+
+	return 0;
+}
+
+static void
+sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
+{
+	if (ent == NULL)
+		return;
+
+	switch (ent->recipient.type) {
+	case SBK_CONTACT:
+		freezero_string(ent->recipient.contact->phone);
+		freezero_string(ent->recipient.contact->email);
+		freezero_string(ent->recipient.contact->system_display_name);
+		freezero_string(ent->recipient.contact->system_phone_label);
+		freezero_string(ent->recipient.contact->profile_name);
+		freezero_string(ent->recipient.contact->profile_family_name);
+		freezero_string(ent->recipient.contact->profile_joined_name);
+		free(ent->recipient.contact);
+		break;
+	case SBK_GROUP:
+		freezero_string(ent->recipient.group->name);
+		free(ent->recipient.group);
+		break;
+	}
+
+	freezero_string(ent->id.old);
+	freezero(ent, sizeof *ent);
+}
+
+static void
+sbk_free_recipient_tree(struct sbk_ctx *ctx)
+{
+	struct sbk_recipient_entry *ent;
+
+	while ((ent = RB_ROOT(&ctx->recipients)) != NULL) {
+		RB_REMOVE(sbk_recipient_tree, &ctx->recipients, ent);
+		sbk_free_recipient_entry(ent);
+	}
+}
+
+/* For database versions < SBK_DB_VERSION_RECIPIENT_IDS */
+#define SBK_RECIPIENTS_QUERY_1						\
+	"SELECT "							\
+	"r.recipient_ids, "						\
+	"NULL, "			/* phone */			\
+	"NULL, "			/* email */			\
+	"r.system_display_name, "					\
+	"r.system_phone_label, "					\
+	"r.signal_profile_name, "					\
+	"NULL, "			/* profile_family_name */	\
+	"NULL, "			/* profile_joined_name */	\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient_preferences AS r "				\
+	"LEFT JOIN groups AS g "					\
+	"ON r.recipient_ids = g.group_id"
+
+/* For database versions < SBK_DB_VERSION_SPLIT_PROFILE_NAMES */
+#define SBK_RECIPIENTS_QUERY_2						\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "							\
+	"r.email, "							\
+	"r.system_display_name, "					\
+	"r.system_phone_label, "					\
+	"r.signal_profile_name, "					\
+	"NULL, "			/* profile_family_name */	\
+	"NULL, "			/* profile_joined_name */	\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions >= SBK_DB_VERSION_SPLIT_PROFILE_NAMES */
+#define SBK_RECIPIENTS_QUERY_3						\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "							\
+	"r.email, "							\
+	"r.system_display_name, "					\
+	"r.system_phone_label, "					\
+	"r.signal_profile_name, "					\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+static struct sbk_recipient_entry *
+sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_recipient_entry	*ent;
+	struct sbk_contact		*con;
+	struct sbk_group		*grp;
+
+	if ((ent = calloc(1, sizeof *ent)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	if (sbk_get_recipient_id_from_column(ctx, &ent->id, stm, 0) == -1)
+		goto error;
+
+	if (sqlite3_column_type(stm, 8) == SQLITE_NULL)
+		ent->recipient.type = SBK_CONTACT;
+	else
+		ent->recipient.type = SBK_GROUP;
+
+	switch (ent->recipient.type) {
+	case SBK_CONTACT:
+		con = ent->recipient.contact = calloc(1, sizeof *con);
+		if (con == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
+			if (strchr(ent->id.old, '@') != NULL) {
+				con->email = strdup(ent->id.old);
+				if (con->email == NULL) {
+					sbk_error_set(ctx, NULL);
+					goto error;
+				}
+			} else {
+				con->phone = strdup(ent->id.old);
+				if (con->phone == NULL) {
+					sbk_error_set(ctx, NULL);
+					goto error;
+				}
+			}
+		} else {
+			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
+			    stm, 1) == -1)
+				goto error;
+
+			if (sbk_sqlite_column_text_copy(ctx, &con->email,
+			    stm, 2) == -1)
+				goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
+		    stm, 3) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->system_phone_label,
+		    stm, 4) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->profile_name,
+		    stm, 5) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->profile_family_name,
+		    stm, 6) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->profile_joined_name,
+		    stm, 7) == -1)
+			goto error;
+
+		break;
+
+	case SBK_GROUP:
+		grp = ent->recipient.group = calloc(1, sizeof *grp);
+		if (grp == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &grp->name, stm, 9) == -1)
+			goto error;
+
+		break;
+	}
+
+	return ent;
+
+error:
+	sbk_free_recipient_entry(ent);
+	return NULL;
+}
+
+static int
+sbk_build_recipient_tree(struct sbk_ctx *ctx)
+{
+	struct sbk_recipient_entry	*ent;
+	sqlite3_stmt			*stm;
+	const char			*query;
+	int				 ret;
+
+	if (!RB_EMPTY(&ctx->recipients))
+		return 0;
+
+	if (sbk_create_database(ctx) == -1)
+		return -1;
+
+	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
+		query = SBK_RECIPIENTS_QUERY_1;
+	else if (ctx->db_version < SBK_DB_VERSION_SPLIT_PROFILE_NAMES)
+		query = SBK_RECIPIENTS_QUERY_2;
+	else
+		query = SBK_RECIPIENTS_QUERY_3;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
+		return -1;
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((ent = sbk_get_recipient_entry(ctx, stm)) == NULL)
+			goto error;
+		RB_INSERT(sbk_recipient_tree, &ctx->recipients, ent);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return 0;
+
+error:
+	sbk_free_recipient_tree(ctx);
+	sqlite3_finalize(stm);
+	return -1;
+}
+
+static struct sbk_recipient *
+sbk_get_recipient(struct sbk_ctx *ctx, struct sbk_recipient_id *id)
+{
+	struct sbk_recipient_entry find, *result;
+
+	if (sbk_build_recipient_tree(ctx) == -1)
+		return NULL;
+
+	find.id = *id;
+	result = RB_FIND(sbk_recipient_tree, &ctx->recipients, &find);
+
+	if (result == NULL) {
+		sbk_error_setx(ctx, "Cannot find recipient");
+		return NULL;
+	}
+
+	return &result->recipient;
+}
+
+static struct sbk_recipient *
+sbk_get_recipient_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
+    int idx)
+{
+	struct sbk_recipient	*rcp;
+	struct sbk_recipient_id	 id;
+
+	if (sbk_get_recipient_id_from_column(ctx, &id, stm, idx) == -1)
+		return NULL;
+
+	rcp = sbk_get_recipient(ctx, &id);
+	free(id.old);
+	return rcp;
+}
+
+const char *
+sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
+{
+	switch (rcp->type) {
+	case SBK_CONTACT:
+		if (rcp->contact->system_display_name != NULL)
+			return rcp->contact->system_display_name;
+		if (rcp->contact->profile_joined_name != NULL)
+			return rcp->contact->profile_joined_name;
+		if (rcp->contact->profile_name != NULL)
+			return rcp->contact->profile_name;
+		if (rcp->contact->phone != NULL)
+			return rcp->contact->phone;
+		if (rcp->contact->email != NULL)
+			return rcp->contact->email;
+		break;
+	case SBK_GROUP:
+		if (rcp->group->name != NULL)
+			return rcp->group->name;
+		break;
+	}
+
+	return "Unknown";
+}
+
 static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
@@ -1250,10 +1578,9 @@ sbk_is_outgoing_message(const struct sbk_message *msg)
 }
 
 static int
-sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
+sbk_get_body(struct sbk_message *msg)
 {
-	char		*name;
-	const char	*contact, *fmt;
+	const char *fmt;
 
 	fmt = NULL;
 
@@ -1342,21 +1669,14 @@ sbk_get_body(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (fmt == NULL)
 		return 0;
 
-	if (sbk_get_contact(ctx, msg->address, &name, NULL) == -1 ||
-	    name == NULL)
-		contact = msg->address;
-	else
-		contact = name;
-
 	freezero_string(msg->text);
 
-	if (asprintf(&msg->text, fmt, contact) == -1) {
+	if (asprintf(&msg->text, fmt,
+	    sbk_get_recipient_display_name(msg->recipient)) == -1) {
 		msg->text = NULL;
-		free(name);
 		return -1;
 	}
 
-	free(name);
 	return 0;
 }
 
@@ -1400,7 +1720,6 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 static void
 sbk_free_message(struct sbk_message *msg)
 {
-	freezero_string(msg->address);
 	freezero_string(msg->text);
 	sbk_free_attachment_list(msg->attachments);
 	freezero(msg, sizeof *msg);
@@ -1448,18 +1767,19 @@ static struct sbk_message *
 sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_message	*msg;
-	int			 id, nattachments;
+	int			 mms_id, nattachments;
 
 	if ((msg = malloc(sizeof *msg)) == NULL) {
 		sbk_error_set(ctx, NULL);
 		return NULL;
 	}
 
-	msg->address = NULL;
+	msg->recipient = NULL;
 	msg->text = NULL;
 	msg->attachments = NULL;
 
-	if (sbk_sqlite_column_text_copy(ctx, &msg->address, stm, 0) == -1)
+	msg->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+	if (msg->recipient == NULL)
 		goto error;
 
 	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm, 1) == -1)
@@ -1470,15 +1790,15 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	msg->type = sqlite3_column_int(stm, 4);
 	msg->thread = sqlite3_column_int(stm, 5);
 
-	if (sbk_get_body(ctx, msg) == -1)
+	if (sbk_get_body(msg) == -1)
 		goto error;
 
 	nattachments = sqlite3_column_int(stm, 6);
 
 	if (nattachments > 0) {
-		id = sqlite3_column_int(stm, 7);
+		mms_id = sqlite3_column_int(stm, 7);
 
-		if (sbk_get_attachments_for_message(ctx, msg, id) == -1)
+		if (sbk_get_attachments_for_message(ctx, msg, mms_id) == -1)
 			goto error;
 
 		if (sbk_get_long_message(ctx, msg) == -1)
@@ -1570,7 +1890,6 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	if (lst != NULL) {
 		while ((thd = SIMPLEQ_FIRST(lst)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			freezero_string(thd->recipient);
 			freezero(thd, sizeof *thd);
 		}
 		free(lst);
@@ -1605,9 +1924,9 @@ sbk_get_threads(struct sbk_ctx *ctx)
 			goto error;
 		}
 
-		if (sbk_sqlite_column_text_copy(ctx, &thd->recipient, stm, 0)
-		    == -1) {
-			freezero(thd, sizeof *thd);
+		thd->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+		if (thd->recipient == NULL) {
+			free(thd);
 			goto error;
 		}
 
@@ -1627,240 +1946,6 @@ error:
 	sbk_free_thread_list(lst);
 	sqlite3_finalize(stm);
 	return NULL;
-}
-
-static int
-sbk_get_contact_1(struct sbk_ctx *ctx, const char *id, char **name,
-    char **phone)
-{
-	sqlite3_stmt	*stm;
-	int		 result, ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name FROM "
-	    "recipient_preferences WHERE recipient_ids = ?") == -1)
-		return -1;
-
-	ret = -1;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
-		goto out;
-
-	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
-		if (result == SQLITE_DONE)
-			sbk_error_setx(ctx, "No such contact");
-		goto out;
-	}
-
-	if (name != NULL) {
-		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
-			goto out;
-	}
-
-	if (phone != NULL) {
-		if ((*phone = strdup(id)) == NULL) {
-			sbk_error_set(ctx, NULL);
-			if (name != NULL) {
-				freezero_string(*name);
-				*name = NULL;
-			}
-			goto out;
-		}
-	}
-
-	ret = 0;
-
-out:
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-static int
-sbk_get_contact_2(struct sbk_ctx *ctx, const char *id, char **name,
-    char **phone)
-{
-	sqlite3_stmt	*stm;
-	int		 result, ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT system_display_name, phone "
-	    "FROM recipient WHERE _id = ?") == -1)
-		return -1;
-
-	ret = -1;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
-		goto out;
-
-	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
-		if (result == SQLITE_DONE)
-			sbk_error_setx(ctx, "No such contact");
-		goto out;
-	}
-
-	if (name != NULL) {
-		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
-			goto out;
-	}
-
-	if (phone != NULL) {
-		if (sbk_sqlite_column_text_copy(ctx, phone, stm, 1) == -1) {
-			if (name != NULL) {
-				freezero_string(*name);
-				*name = NULL;
-			}
-			goto out;
-		}
-	}
-
-	ret = 0;
-
-out:
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-int
-sbk_get_contact(struct sbk_ctx *ctx, const char *id, char **name, char **phone)
-{
-	if (name != NULL)
-		*name = NULL;
-
-	if (phone != NULL)
-		*phone = NULL;
-
-	if (ctx->get_contact == NULL) {
-		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
-			ctx->get_contact = sbk_get_contact_1;
-		else
-			ctx->get_contact = sbk_get_contact_2;
-	}
-
-	return ctx->get_contact(ctx, id, name, phone);
-}
-
-static int
-sbk_get_group_1(struct sbk_ctx *ctx, const char *id, char **name)
-{
-	sqlite3_stmt	*stm;
-	int		 result, ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
-	    "group_id = ?") == -1)
-		return -1;
-
-	ret = -1;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
-		goto out;
-
-	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
-		if (result == SQLITE_DONE)
-			sbk_error_setx(ctx, "No such group");
-		goto out;
-	}
-
-	if (name != NULL) {
-		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
-			goto out;
-	}
-
-	ret = 0;
-
-out:
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-static int
-sbk_get_group_2(struct sbk_ctx *ctx, const char *id, char **name)
-{
-	sqlite3_stmt	*stm;
-	int		 result, ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT title FROM groups WHERE "
-		"recipient_id = ?") == -1)
-		return -1;
-
-	ret = -1;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
-		goto out;
-
-	if ((result = sbk_sqlite_step(ctx, stm)) != SQLITE_ROW) {
-		if (result == SQLITE_DONE)
-			sbk_error_setx(ctx, "No such group");
-		goto out;
-	}
-
-	if (name != NULL) {
-		if (sbk_sqlite_column_text_copy(ctx, name, stm, 0) == -1)
-			goto out;
-	}
-
-	ret = 0;
-
-out:
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-int
-sbk_get_group(struct sbk_ctx *ctx, const char *id, char **name)
-{
-	if (name != NULL)
-		*name = NULL;
-
-	if (ctx->get_group == NULL) {
-		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
-			ctx->get_group = sbk_get_group_1;
-		else
-			ctx->get_group = sbk_get_group_2;
-	}
-
-	return ctx->get_group(ctx, id, name);
-}
-
-static int
-sbk_is_group_1(__unused struct sbk_ctx *ctx, const char *id)
-{
-	return strncmp(id, SBK_GROUP_PREFIX, sizeof SBK_GROUP_PREFIX - 1) == 0;
-}
-
-static int
-sbk_is_group_2(struct sbk_ctx *ctx, const char *id)
-{
-	sqlite3_stmt	*stm;
-	int		 ret;
-
-	if (sbk_sqlite_prepare(ctx, &stm, "SELECT group_id FROM recipient "
-	    "WHERE _id = ?") == -1)
-		return 0;
-
-	ret = 0;
-
-	if (sbk_sqlite_bind_text(ctx, stm, 1, id) == -1)
-		goto out;
-
-	if (sbk_sqlite_step(ctx, stm) != SQLITE_ROW)
-		goto out;
-
-	ret = sqlite3_column_type(stm, 0) != SQLITE_NULL;
-
-out:
-	sqlite3_finalize(stm);
-	return ret;
-}
-
-int
-sbk_is_group(struct sbk_ctx *ctx, const char *id)
-{
-	if (ctx->is_group == NULL) {
-		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
-			ctx->is_group = sbk_is_group_1;
-		else
-			ctx->is_group = sbk_is_group_2;
-	}
-
-	return ctx->is_group(ctx, id);
 }
 
 static int
@@ -2021,10 +2106,8 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	sbk_free_frame(frm);
 	ctx->db = NULL;
 	ctx->db_version = 0;
-	ctx->get_contact = NULL;
-	ctx->get_group = NULL;
-	ctx->is_group = NULL;
 	RB_INIT(&ctx->attachments);
+	RB_INIT(&ctx->recipients);
 	return 0;
 
 error:
@@ -2038,6 +2121,7 @@ error:
 void
 sbk_close(struct sbk_ctx *ctx)
 {
+	sbk_free_recipient_tree(ctx);
 	sbk_free_attachment_tree(ctx);
 	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
 	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
