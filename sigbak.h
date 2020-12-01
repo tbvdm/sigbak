@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include "backup.pb-c.h"
+#include "database.pb-c.h"
 
 /*
  * Types for sms and mms messages
@@ -143,6 +144,16 @@ struct sbk_attachment {
 
 TAILQ_HEAD(sbk_attachment_list, sbk_attachment);
 
+struct sbk_reaction {
+	struct sbk_recipient *recipient;
+	uint64_t	 time_sent;
+	uint64_t	 time_recv;
+	char		*emoji;
+	SIMPLEQ_ENTRY(sbk_reaction) entries;
+};
+
+SIMPLEQ_HEAD(sbk_reaction_list, sbk_reaction);
+
 struct sbk_message {
 	struct sbk_recipient *recipient;
 	uint64_t	 time_sent;
@@ -151,6 +162,7 @@ struct sbk_message {
 	int		 thread;
 	char		*text;
 	struct sbk_attachment_list *attachments;
+	struct sbk_reaction_list *reactions;
 	SIMPLEQ_ENTRY(sbk_message) entries;
 };
 

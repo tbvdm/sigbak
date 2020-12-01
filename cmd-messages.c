@@ -193,6 +193,7 @@ static int
 text_write_message(FILE *fp, struct sbk_message *msg)
 {
 	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
 	const char		*addr, *name;
 
 	name = sbk_get_recipient_display_name(msg->recipient);
@@ -230,6 +231,12 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 			    att->rowid,
 			    att->attachmentid);
 		}
+
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
+			fprintf(fp, "Reaction: %s from %s\n",
+			    rct->emoji,
+			    sbk_get_recipient_display_name(rct->recipient));
 
 	if (msg->text != NULL)
 		fprintf(fp, "\n%s\n\n", msg->text);
