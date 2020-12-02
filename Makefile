@@ -15,9 +15,14 @@ PKGS_LDFLAGS!=	${PKG_CONFIG} --libs ${PKGS}
 CFLAGS+=	${PKGS_CFLAGS}
 LDFLAGS+=	${PKGS_LDFLAGS}
 
-OBJS=		backup.pb-c.o cmd-attachments.o cmd-avatars.o cmd-check.o \
-		cmd-dump.o cmd-messages.o cmd-sqlite.o cmd-threads.o mem.o \
-		sbk.o sigbak.o
+PROTOS=		backup.proto
+PROTO_HDRS=	${PROTOS:.proto=.pb-c.h}
+PROTO_SRCS=	${PROTOS:.proto=.pb-c.c}
+PROTO_OBJS=	${PROTO_SRCS:.c=.o}
+
+OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
+		cmd-messages.o cmd-sqlite.o cmd-threads.o mem.o sbk.o \
+		sigbak.o ${PROTO_OBJS}
 
 OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/freezero.o compat/getprogname.o \
@@ -27,23 +32,23 @@ OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 
 .PHONY: all clean install
 
-.SUFFIXES: .c .o
+.SUFFIXES: .c .o .pb-c.c .pb-c.h .pb-c.o .proto
+
+.c.o .pb-c.c.pb-c.o:
+	${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
+
+.proto.pb-c.c .proto.pb-c.h:
+	${PROTOC} --c_out=. $<
 
 all: sigbak
 
 sigbak: ${OBJS}
 	${CC} -o $@ ${OBJS} ${LDFLAGS}
 
-${OBJS}: backup.pb-c.h config.h
-
-backup.pb-c.c backup.pb-c.h: backup.proto
-	${PROTOC} --c_out=. backup.proto
-
-.c.o:
-	${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
+${OBJS}: config.h ${PROTO_HDRS}
 
 clean:
-	rm -f sigbak sigbak.core core backup.pb-c.c backup.pb-c.h ${OBJS}
+	rm -f sigbak sigbak.core core ${PROTO_SRCS} ${PROTO_HDRS} ${OBJS}
 
 install: all
 	${INSTALL} -dm 755 ${DESTDIR}${BINDIR}
