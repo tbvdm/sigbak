@@ -15,7 +15,7 @@ PKGS_LDFLAGS!=	${PKG_CONFIG} --libs ${PKGS}
 CFLAGS+=	${PKGS_CFLAGS}
 LDFLAGS+=	${PKGS_LDFLAGS}
 
-PROTOS=		backup.proto
+PROTOS=		backup.proto database.proto
 PROTO_HDRS=	${PROTOS:.proto=.pb-c.h}
 PROTO_SRCS=	${PROTOS:.proto=.pb-c.c}
 PROTO_OBJS=	${PROTO_SRCS:.c=.o}

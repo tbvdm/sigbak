@@ -124,39 +124,24 @@ maildir_write_date_header(FILE *fp, const char *hdr, int64_t date)
 }
 
 static int
-maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
-    struct sbk_message *msg)
+maildir_write_message(const char *maildir, struct sbk_message *msg)
 {
-	FILE	*fp;
-	char	*name, *phone;
-	int	 isgroup, ret;
-
-	ret = -1;
-	isgroup = sbk_is_group(ctx, msg->address);
-
-	if (isgroup) {
-		if (sbk_get_group(ctx, msg->address, &name) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-		phone = NULL;
-	} else {
-		if (sbk_get_contact(ctx, msg->address, &name, &phone) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-	}
+	FILE		*fp;
+	const char	*addr, *name;
 
 	if ((fp = maildir_open_file(maildir, msg->time_recv, msg->time_sent))
 	    == NULL)
-		goto out;
+		return -1;
+
+	name = sbk_get_recipient_display_name(msg->recipient);
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
 
 	if (sbk_is_outgoing_message(msg)) {
 		maildir_write_address_header(fp, "From", "you", "You");
-		maildir_write_address_header(fp, "To",
-		    isgroup ? "group" : phone, name);
+		maildir_write_address_header(fp, "To", addr, name);
 	} else {
-		maildir_write_address_header(fp, "From", phone, name);
+		maildir_write_address_header(fp, "From", addr, name);
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
@@ -174,12 +159,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 		fprintf(fp, "\n%s\n", msg->text);
 
 	fclose(fp);
-	ret = 0;
-
-out:
-	freezero_string(name);
-	freezero_string(phone);
-	return ret;
+	return 0;
 }
 
 static int
@@ -202,7 +182,7 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	ret = 0;
 
 	SIMPLEQ_FOREACH(msg, lst, entries)
-		if (maildir_write_message(ctx, maildir, msg) == -1)
+		if (maildir_write_message(maildir, msg) == -1)
 			ret = -1;
 
 	sbk_free_message_list(lst);
@@ -210,35 +190,22 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 }
 
 static int
-text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
+text_write_message(FILE *fp, struct sbk_message *msg)
 {
 	struct sbk_attachment	*att;
-	char			*name, *phone;
-	int			 isgroup;
+	struct sbk_reaction	*rct;
+	const char		*addr, *name;
 
-	isgroup = sbk_is_group(ctx, msg->address);
-
-	if (isgroup) {
-		if (sbk_get_group(ctx, msg->address, &name) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-		phone = NULL;
-	} else {
-		if (sbk_get_contact(ctx, msg->address, &name, &phone) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-	}
+	name = sbk_get_recipient_display_name(msg->recipient);
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
 
 	if (sbk_is_outgoing_message(msg))
 		fputs("To: ", fp);
 	else
 		fputs("From: ", fp);
 
-	fprintf(fp, "%s (%s)\n",
-	    (name != NULL) ? name : "unknown",
-	    isgroup ? "group" : ((phone != NULL) ? phone : "unknown"));
+	fprintf(fp, "%s (%s)\n", name, addr);
 
 	maildir_write_date_header(fp, "Sent", msg->time_sent);
 
@@ -265,13 +232,17 @@ text_write_message(struct sbk_ctx *ctx, FILE *fp, struct sbk_message *msg)
 			    att->attachmentid);
 		}
 
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
+			fprintf(fp, "Reaction: %s from %s\n",
+			    rct->emoji,
+			    sbk_get_recipient_display_name(rct->recipient));
+
 	if (msg->text != NULL)
 		fprintf(fp, "\n%s\n\n", msg->text);
 	else
 		fputs("\n", fp);
 
-	freezero_string(name);
-	freezero_string(phone);
 	return 0;
 }
 
@@ -304,7 +275,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 	ret = 0;
 
 	SIMPLEQ_FOREACH(msg, lst, entries)
-		if (text_write_message(ctx, fp, msg) == -1)
+		if (text_write_message(fp, msg) == -1)
 			ret = -1;
 
 	sbk_free_message_list(lst);
