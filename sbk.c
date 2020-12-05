@@ -1693,6 +1693,7 @@ error2:
 error1:
 	sbk_free_reaction_list(*lst);
 	sbk_free_reaction_list_message(msg);
+	*lst = NULL;
 	return -1;
 }
 
