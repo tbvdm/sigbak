@@ -1,6 +1,6 @@
 PROG=		sigbak
 SRCS=		cmd-attachments.c cmd-avatars.c cmd-check.c cmd-dump.c \
-		cmd-messages.c cmd-sqlite.c cmd-threads.c mem.c sbk.c sigbak.c
+		cmd-messages.c cmd-sqlite.c cmd-threads.c sbk.c sigbak.c
 PROTOS=		backup.proto database.proto
 
 SRCS+=		${PROTOS:.proto=.pb-c.c}

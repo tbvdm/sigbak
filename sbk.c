@@ -107,12 +107,6 @@ RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
 RB_GENERATE_STATIC(sbk_recipient_tree, sbk_recipient_entry, entries,
     sbk_cmp_recipient_entries)
 
-static ProtobufCAllocator sbk_protobuf_alloc = {
-	mem_protobuf_malloc,
-	mem_protobuf_free,
-	NULL
-};
-
 static void
 sbk_error_clear(struct sbk_ctx *ctx)
 {
@@ -196,34 +190,6 @@ sbk_error_sqlite_set(struct sbk_ctx *ctx, const char *fmt, ...)
 }
 
 static int
-sbk_init(void)
-{
-	static int		done;
-	sqlite3_mem_methods	methods;
-
-	if (done)
-		return 0;
-
-	methods.xMalloc = mem_sqlite_malloc;
-	methods.xFree = mem_sqlite_free;
-	methods.xRealloc = mem_sqlite_realloc;
-	methods.xSize = mem_sqlite_size;
-	methods.xRoundup = mem_sqlite_roundup;
-	methods.xInit = mem_sqlite_init;
-	methods.xShutdown = mem_sqlite_shutdown;
-	methods.pAppData = NULL;
-
-	if (sqlite3_config(SQLITE_CONFIG_MALLOC, &methods) != SQLITE_OK)
-		return -1;
-
-	if (sqlite3_initialize() != SQLITE_OK)
-		return -1;
-
-	done = 1;
-	return 0;
-}
-
-static int
 sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 {
 	unsigned char *buf;
@@ -245,8 +211,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 	size += EVP_MAX_BLOCK_LENGTH;
 
 	if (ctx->obufsize < size) {
-		if ((buf = recallocarray(ctx->obuf, ctx->obufsize, size, 1)) ==
-		    NULL) {
+		if ((buf = realloc(ctx->obuf, size)) == NULL) {
 			sbk_error_set(ctx, NULL);
 			return -1;
 		}
@@ -406,8 +371,7 @@ sbk_unpack_frame(struct sbk_ctx *ctx, unsigned char *buf, size_t len)
 {
 	Signal__BackupFrame *frm;
 
-	if ((frm = signal__backup_frame__unpack(&sbk_protobuf_alloc, len, buf))
-	    == NULL)
+	if ((frm = signal__backup_frame__unpack(NULL, len, buf)) == NULL)
 		sbk_error_setx(ctx, "Cannot unpack frame");
 
 	return frm;
@@ -529,13 +493,13 @@ void
 sbk_free_frame(Signal__BackupFrame *frm)
 {
 	if (frm != NULL)
-		signal__backup_frame__free_unpacked(frm, &sbk_protobuf_alloc);
+		signal__backup_frame__free_unpacked(frm, NULL);
 }
 
 void
 sbk_free_file(struct sbk_file *file)
 {
-	freezero(file, sizeof *file);
+	free(file);
 }
 
 int
@@ -659,7 +623,7 @@ sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 	return obuf;
 
 error:
-	freezero(obuf, obufsize);
+	free(obuf);
 	return NULL;
 }
 
@@ -895,7 +859,7 @@ sbk_free_attachment_tree(struct sbk_ctx *ctx)
 	while ((entry = RB_ROOT(&ctx->attachments)) != NULL) {
 		RB_REMOVE(sbk_attachment_tree, &ctx->attachments, entry);
 		sbk_free_file(entry->file);
-		freezero(entry, sizeof *entry);
+		free(entry);
 	}
 }
 
@@ -1110,23 +1074,23 @@ sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
 
 	switch (ent->recipient.type) {
 	case SBK_CONTACT:
-		freezero_string(ent->recipient.contact->phone);
-		freezero_string(ent->recipient.contact->email);
-		freezero_string(ent->recipient.contact->system_display_name);
-		freezero_string(ent->recipient.contact->system_phone_label);
-		freezero_string(ent->recipient.contact->profile_name);
-		freezero_string(ent->recipient.contact->profile_family_name);
-		freezero_string(ent->recipient.contact->profile_joined_name);
+		free(ent->recipient.contact->phone);
+		free(ent->recipient.contact->email);
+		free(ent->recipient.contact->system_display_name);
+		free(ent->recipient.contact->system_phone_label);
+		free(ent->recipient.contact->profile_name);
+		free(ent->recipient.contact->profile_family_name);
+		free(ent->recipient.contact->profile_joined_name);
 		free(ent->recipient.contact);
 		break;
 	case SBK_GROUP:
-		freezero_string(ent->recipient.group->name);
+		free(ent->recipient.group->name);
 		free(ent->recipient.group);
 		break;
 	}
 
-	freezero_string(ent->id.old);
-	freezero(ent, sizeof *ent);
+	free(ent->id.old);
+	free(ent);
 }
 
 static void
@@ -1389,9 +1353,9 @@ sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 static void
 sbk_free_attachment(struct sbk_attachment *att)
 {
-	freezero_string(att->filename);
-	freezero_string(att->content_type);
-	freezero(att, sizeof *att);
+	free(att->filename);
+	free(att->content_type);
+	free(att);
 }
 
 void
@@ -1595,8 +1559,7 @@ sbk_unpack_reaction_list_message(struct sbk_ctx *ctx, const void *buf,
 {
 	Signal__ReactionList *msg;
 
-	msg = signal__reaction_list__unpack(&sbk_protobuf_alloc, len, buf);
-	if (msg == NULL)
+	if ((msg = signal__reaction_list__unpack(NULL, len, buf)) == NULL)
 		sbk_error_setx(ctx, "Cannot unpack reaction list");
 
 	return msg;
@@ -1606,7 +1569,7 @@ static void
 sbk_free_reaction_list_message(Signal__ReactionList *msg)
 {
 	if (msg != NULL)
-		signal__reaction_list__free_unpacked(msg, &sbk_protobuf_alloc);
+		signal__reaction_list__free_unpacked(msg, NULL);
 }
 
 static void
@@ -1617,8 +1580,8 @@ sbk_free_reaction_list(struct sbk_reaction_list *lst)
 	if (lst != NULL) {
 		while ((rct = SIMPLEQ_FIRST(lst)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			freezero_string(rct->emoji);
-			freezero(rct, sizeof *rct);
+			free(rct->emoji);
+			free(rct);
 		}
 		free(lst);
 	}
@@ -1789,7 +1752,7 @@ sbk_get_body(struct sbk_message *msg)
 	if (fmt == NULL)
 		return 0;
 
-	freezero_string(msg->text);
+	free(msg->text);
 
 	if (asprintf(&msg->text, fmt,
 	    sbk_get_recipient_display_name(msg->recipient)) == -1) {
@@ -1827,7 +1790,7 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
 		return -1;
 
-	freezero_string(msg->text);
+	free(msg->text);
 	msg->text = longmsg;
 
 	/* Do not expose the long-message attachment */
@@ -1840,10 +1803,10 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 static void
 sbk_free_message(struct sbk_message *msg)
 {
-	freezero_string(msg->text);
+	free(msg->text);
 	sbk_free_attachment_list(msg->attachments);
 	sbk_free_reaction_list(msg->reactions);
-	freezero(msg, sizeof *msg);
+	free(msg);
 }
 
 void
@@ -2097,7 +2060,7 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	if (lst != NULL) {
 		while ((thd = SIMPLEQ_FIRST(lst)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			freezero(thd, sizeof *thd);
+			free(thd);
 		}
 		free(lst);
 	}
@@ -2213,9 +2176,6 @@ sbk_ctx_new(void)
 {
 	struct sbk_ctx *ctx;
 
-	if (sbk_init() == -1)
-		return NULL;
-
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
@@ -2250,8 +2210,8 @@ sbk_ctx_free(struct sbk_ctx *ctx)
 		EVP_CIPHER_CTX_free(ctx->cipher);
 		HMAC_CTX_free(ctx->hmac);
 		free(ctx->ibuf);
-		freezero(ctx->obuf, ctx->obufsize);
-		freezero(ctx, sizeof *ctx);
+		free(ctx->obuf);
+		free(ctx);
 	}
 }
 

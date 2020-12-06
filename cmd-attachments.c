@@ -133,7 +133,7 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 			fclose(fp);
 		}
 
-		freezero_string(fname);
+		free(fname);
 	}
 
 	return ret;

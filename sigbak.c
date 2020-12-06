@@ -32,13 +32,6 @@ usage(const char *cmd, const char *args)
 	exit(1);
 }
 
-void
-freezero_string(char *s)
-{
-	if (s != NULL)
-		freezero(s, strlen(s));
-}
-
 int
 get_passphrase(const char *passfile, char *buf, size_t bufsize)
 {

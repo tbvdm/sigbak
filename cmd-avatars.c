@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -89,7 +90,7 @@ write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		fclose(fp);
 	}
 
-	freezero_string(fname);
+	free(fname);
 	return ret;
 }
 
