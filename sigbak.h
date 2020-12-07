@@ -211,18 +211,6 @@ int		 sbk_write_database(struct sbk_ctx *, const char *);
 
 const char	*sbk_error(struct sbk_ctx *);
 
-void		*mem_protobuf_malloc(void *, size_t);
-void		 mem_protobuf_free(void *, void *);
-
-int		 mem_sqlite_init(void *);
-void		 mem_sqlite_shutdown(void *);
-void		*mem_sqlite_malloc(int);
-void		*mem_sqlite_realloc(void *, int);
-void		 mem_sqlite_free(void *);
-int		 mem_sqlite_size(void *);
-int		 mem_sqlite_roundup(int);
-
-void		 freezero_string(char *);
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 usage(const char *, const char *) __dead;
