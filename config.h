@@ -17,12 +17,6 @@
 /* Define if your fopen() supports the "x" mode extension. */
 /* #define HAVE_FOPEN_X_MODE */
 
-/* Define if you have freezero(). */
-/* #define HAVE_FREEZERO */
-
-/* Define if you have getpagesize(). */
-/* #define HAVE_GETPAGESIZE */
-
 /* Define if you have getprogname() and setprogname(). */
 /* #define HAVE_GETPROGNAME */
 
@@ -34,9 +28,6 @@
 
 /* Define if you have reallocarray(). */
 /* #define HAVE_REALLOCARRAY */
-
-/* Define if you have recallocarray(). */
-/* #define HAVE_RECALLOCARRAY */
 
 /* Define if you have strtonum(). */
 /* #define HAVE_STRTONUM */
@@ -52,12 +43,9 @@
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
-#define HAVE_FREEZERO
-#define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE_RECALLOCARRAY
 #define HAVE_STRTONUM
 
 #elif defined(__FreeBSD__)
@@ -66,7 +54,6 @@
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
-#define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
@@ -79,7 +66,6 @@
 #define HAVE_ASPRINTF
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
-#define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_REALLOCARRAY
 #define HAVE_STRTONUM
@@ -90,13 +76,10 @@
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
-#define HAVE_FREEZERO
-#define HAVE_GETPAGESIZE
 #define HAVE_GETPROGNAME
 #define HAVE_PLEDGE
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE_RECALLOCARRAY
 #define HAVE_STRTONUM
 #define HAVE_UNVEIL
 
@@ -107,7 +90,6 @@
 #define HAVE_ASPRINTF
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
-#define HAVE_GETPAGESIZE
 
 /* Include features.h (__GLIBC_PREREQ) or sys/cdefs.h (__ANDROID_API__) */
 #include <stdio.h>

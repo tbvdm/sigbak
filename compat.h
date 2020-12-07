@@ -74,10 +74,6 @@ FILE	*xfopen(const char *, const char *);
 #define fopen xfopen
 #endif
 
-#ifndef HAVE_FREEZERO
-void	 freezero(void *, size_t);
-#endif
-
 #ifndef HAVE_GETPROGNAME
 const char	*getprogname(void);
 void		 setprogname(const char *);
@@ -108,10 +104,6 @@ int	 pledge(const char *, const char *);
 
 #ifndef HAVE_REALLOCARRAY
 void	*reallocarray(void *, size_t, size_t);
-#endif
-
-#ifndef HAVE_RECALLOCARRAY
-void	*recallocarray(void *, size_t, size_t, size_t);
 #endif
 
 #ifndef HAVE_STRTONUM

@@ -25,10 +25,9 @@ OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
 		${PROTO_OBJS}
 
 OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
-		compat/fopen.o compat/freezero.o compat/getprogname.o \
-		compat/hkdf.o compat/hmac_ctx_new.o compat/pledge.o \
-		compat/readpassphrase.o compat/reallocarray.o \
-		compat/recallocarray.o compat/strtonum.o compat/unveil.o
+		compat/fopen.o compat/getprogname.o compat/hkdf.o \
+		compat/hmac_ctx_new.o compat/pledge.o compat/readpassphrase.o \
+		compat/reallocarray.o compat/strtonum.o compat/unveil.o
 
 .PHONY: all clean install
 
