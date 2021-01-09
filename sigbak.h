@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include "backup.pb-c.h"
+#include "database.pb-c.h"
 
 /*
  * Types for sms and mms messages
