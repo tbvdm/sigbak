@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "sigbak.h"
+#include "backup.pb-c.h"
 
 #define VARINT_CONTINUE_BIT			0x80
 #define VARINT_VALUE_MASK			0x7f
@@ -1131,7 +1131,7 @@ error:
 static void
 binarydata_free(ProtobufCBinaryData *bin, __unused ProtobufCAllocator *alloc)
 {
-	freezero(bin->data, bin->len);
+	free(bin->data);
 }
 
 void
@@ -1143,7 +1143,7 @@ signal__header__free_unpacked(Signal__Header *hdr, ProtobufCAllocator *alloc)
 		binarydata_free(&hdr->iv, alloc);
 	if (hdr->has_salt)
 		binarydata_free(&hdr->salt, alloc);
-	freezero(hdr, sizeof *hdr);
+	free(hdr);
 }
 
 void
@@ -1152,10 +1152,10 @@ signal__sql_statement__sql_parameter__free_unpacked(
 {
 	if (par == NULL)
 		return;
-	freezero_string(par->stringparamter);
+	free(par->stringparamter);
 	if (par->has_blobparameter)
 		binarydata_free(&par->blobparameter, alloc);
-	freezero(par, sizeof *par);
+	free(par);
 }
 
 void
@@ -1166,12 +1166,12 @@ signal__sql_statement__free_unpacked(Signal__SqlStatement *sql,
 
 	if (sql == NULL)
 		return;
-	freezero_string(sql->statement);
+	free(sql->statement);
 	for (i = 0; i < sql->n_parameters; i++)
 		signal__sql_statement__sql_parameter__free_unpacked(
 		    sql->parameters[i], alloc);
 	free(sql->parameters);
-	freezero(sql, sizeof *sql);
+	free(sql);
 }
 
 void
@@ -1180,10 +1180,10 @@ signal__shared_preference__free_unpacked(Signal__SharedPreference *prf,
 {
 	if (prf == NULL)
 		return;
-	freezero_string(prf->file);
-	freezero_string(prf->key);
-	freezero_string(prf->value);
-	freezero(prf, sizeof *prf);
+	free(prf->file);
+	free(prf->key);
+	free(prf->value);
+	free(prf);
 }
 
 void
@@ -1192,7 +1192,7 @@ signal__attachment__free_unpacked(Signal__Attachment *att,
 {
 	if (att == NULL)
 		return;
-	freezero(att, sizeof *att);
+	free(att);
 }
 
 void
@@ -1201,7 +1201,7 @@ signal__database_version__free_unpacked(Signal__DatabaseVersion *ver,
 {
 	if (ver == NULL)
 		return;
-	freezero(ver, sizeof *ver);
+	free(ver);
 }
 
 void
@@ -1210,9 +1210,9 @@ signal__avatar__free_unpacked(Signal__Avatar *avt,
 {
 	if (avt == NULL)
 		return;
-	freezero_string(avt->name);
-	freezero_string(avt->recipientid);
-	freezero(avt, sizeof *avt);
+	free(avt->name);
+	free(avt->recipientid);
+	free(avt);
 }
 
 void
@@ -1221,7 +1221,7 @@ signal__sticker__free_unpacked(Signal__Sticker *stk,
 {
 	if (stk == NULL)
 		return;
-	freezero(stk, sizeof *stk);
+	free(stk);
 }
 
 void
@@ -1237,5 +1237,5 @@ signal__backup_frame__free_unpacked(Signal__BackupFrame *frm,
 	signal__database_version__free_unpacked(frm->version, alloc);
 	signal__avatar__free_unpacked(frm->avatar, alloc);
 	signal__sticker__free_unpacked(frm->sticker, alloc);
-	freezero(frm, sizeof *frm);
+	free(frm);
 }
