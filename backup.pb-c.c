@@ -30,43 +30,43 @@
 #define WIRETYPE_LENGTH_DELIM			2
 #define WIRETYPE_32BIT				5
 
-#define HEADER_IV_FIELD				1
-#define HEADER_SALT_FIELD			2
+#define FIELDNUM_HEADER_IV			1
+#define FIELDNUM_HEADER_SALT			2
 
-#define SQLSTATEMENT_STATEMENT_FIELD		1
-#define SQLSTATEMENT_PARAMETERS_FIELD		2
+#define FIELDNUM_SQLSTATEMENT_STATEMENT		1
+#define FIELDNUM_SQLSTATEMENT_PARAMETERS	2
 
-#define SQLPARAMETER_STRINGPARAMTER_FIELD	1
-#define SQLPARAMETER_INTEGERPARAMETER_FIELD	2
-#define SQLPARAMETER_DOUBLEPARAMETER_FIELD	3
-#define SQLPARAMETER_BLOBPARAMETER_FIELD	4
-#define SQLPARAMETER_NULLPARAMETER_FIELD	5
+#define FIELDNUM_SQLPARAMETER_STRINGPARAMTER	1
+#define FIELDNUM_SQLPARAMETER_INTEGERPARAMETER	2
+#define FIELDNUM_SQLPARAMETER_DOUBLEPARAMETER	3
+#define FIELDNUM_SQLPARAMETER_BLOBPARAMETER	4
+#define FIELDNUM_SQLPARAMETER_NULLPARAMETER	5
 
-#define SHAREDPREFERENCE_FILE_FIELD		1
-#define SHAREDPREFERENCE_KEY_FIELD		2
-#define SHAREDPREFERENCE_VALUE_FIELD		3
+#define FIELDNUM_SHAREDPREFERENCE_FILE		1
+#define FIELDNUM_SHAREDPREFERENCE_KEY		2
+#define FIELDNUM_SHAREDPREFERENCE_VALUE		3
 
-#define ATTACHMENT_ROWID_FIELD			1
-#define ATTACHMENT_ATTACHMENTID_FIELD		2
-#define ATTACHMENT_LENGTH_FIELD			3
+#define FIELDNUM_ATTACHMENT_ROWID		1
+#define FIELDNUM_ATTACHMENT_ATTACHMENTID	2
+#define FIELDNUM_ATTACHMENT_LENGTH		3
 
-#define DATABASEVERSION_VERSION_FIELD		1
+#define FIELDNUM_DATABASEVERSION_VERSION	1
 
-#define AVATAR_NAME_FIELD			1
-#define AVATAR_LENGTH_FIELD			2
-#define AVATAR_RECIPIENTID_FIELD		3
+#define FIELDNUM_AVATAR_NAME			1
+#define FIELDNUM_AVATAR_LENGTH			2
+#define FIELDNUM_AVATAR_RECIPIENTID		3
 
-#define STICKER_ROWID_FIELD			1
-#define STICKER_LENGTH_FIELD			2
+#define FIELDNUM_STICKER_ROWID			1
+#define FIELDNUM_STICKER_LENGTH			2
 
-#define BACKUPFRAME_HEADER_FIELD		1
-#define BACKUPFRAME_STATEMENT_FIELD		2
-#define BACKUPFRAME_PREFERENCE_FIELD		3
-#define BACKUPFRAME_ATTACHMENT_FIELD		4
-#define BACKUPFRAME_VERSION_FIELD		5
-#define BACKUPFRAME_END_FIELD			6
-#define BACKUPFRAME_AVATAR_FIELD		7
-#define BACKUPFRAME_STICKER_FIELD		8
+#define FIELDNUM_BACKUPFRAME_HEADER		1
+#define FIELDNUM_BACKUPFRAME_STATEMENT		2
+#define FIELDNUM_BACKUPFRAME_PREFERENCE		3
+#define FIELDNUM_BACKUPFRAME_ATTACHMENT		4
+#define FIELDNUM_BACKUPFRAME_VERSION		5
+#define FIELDNUM_BACKUPFRAME_END		6
+#define FIELDNUM_BACKUPFRAME_AVATAR		7
+#define FIELDNUM_BACKUPFRAME_STICKER		8
 
 struct tag {
 	uint32_t	fieldnum;
@@ -250,7 +250,7 @@ signal__header__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case HEADER_IV_FIELD:
+		case FIELDNUM_HEADER_IV:
 			if (hdr->has_iv)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -272,7 +272,7 @@ signal__header__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			hdr->has_iv = 1;
 			break;
 
-		case HEADER_SALT_FIELD:
+		case FIELDNUM_HEADER_SALT:
 			if (hdr->has_salt)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -333,7 +333,7 @@ signal__sql_statement__sql_parameter__unpack(ProtobufCAllocator *alloc,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case SQLPARAMETER_STRINGPARAMTER_FIELD:
+		case FIELDNUM_SQLPARAMETER_STRINGPARAMTER:
 			if (par->stringparamter != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -355,7 +355,7 @@ signal__sql_statement__sql_parameter__unpack(ProtobufCAllocator *alloc,
 			buflen -= fieldlen;
 			break;
 
-		case SQLPARAMETER_INTEGERPARAMETER_FIELD:
+		case FIELDNUM_SQLPARAMETER_INTEGERPARAMETER:
 			if (par->has_integerparameter)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -370,7 +370,7 @@ signal__sql_statement__sql_parameter__unpack(ProtobufCAllocator *alloc,
 			par->has_integerparameter = 1;
 			break;
 
-		case SQLPARAMETER_DOUBLEPARAMETER_FIELD:
+		case FIELDNUM_SQLPARAMETER_DOUBLEPARAMETER:
 			if (par->has_doubleparameter)
 				goto error;
 			if (tag.wiretype != WIRETYPE_64BIT)
@@ -385,7 +385,7 @@ signal__sql_statement__sql_parameter__unpack(ProtobufCAllocator *alloc,
 			par->has_doubleparameter = 1;
 			break;
 
-		case SQLPARAMETER_BLOBPARAMETER_FIELD:
+		case FIELDNUM_SQLPARAMETER_BLOBPARAMETER:
 			if (par->has_blobparameter)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -407,7 +407,7 @@ signal__sql_statement__sql_parameter__unpack(ProtobufCAllocator *alloc,
 			par->has_blobparameter = 1;
 			break;
 
-		case SQLPARAMETER_NULLPARAMETER_FIELD:
+		case FIELDNUM_SQLPARAMETER_NULLPARAMETER:
 			if (par->has_nullparameter)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -460,7 +460,7 @@ signal__sql_statement__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case SQLSTATEMENT_STATEMENT_FIELD:
+		case FIELDNUM_SQLSTATEMENT_STATEMENT:
 			if (sql->statement != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -481,7 +481,7 @@ signal__sql_statement__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case SQLSTATEMENT_PARAMETERS_FIELD:
+		case FIELDNUM_SQLSTATEMENT_PARAMETERS:
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
 				goto error;
 
@@ -549,7 +549,7 @@ signal__shared_preference__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case SHAREDPREFERENCE_FILE_FIELD:
+		case FIELDNUM_SHAREDPREFERENCE_FILE:
 			if (prf->file != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -570,7 +570,7 @@ signal__shared_preference__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case SHAREDPREFERENCE_KEY_FIELD:
+		case FIELDNUM_SHAREDPREFERENCE_KEY:
 			if (prf->key != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -591,7 +591,7 @@ signal__shared_preference__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case SHAREDPREFERENCE_VALUE_FIELD:
+		case FIELDNUM_SHAREDPREFERENCE_VALUE:
 			if (prf->value != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -649,7 +649,7 @@ signal__attachment__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case ATTACHMENT_ROWID_FIELD:
+		case FIELDNUM_ATTACHMENT_ROWID:
 			if (att->has_rowid)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -664,7 +664,7 @@ signal__attachment__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			att->has_rowid = 1;
 			break;
 
-		case ATTACHMENT_ATTACHMENTID_FIELD:
+		case FIELDNUM_ATTACHMENT_ATTACHMENTID:
 			if (att->has_attachmentid)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -679,7 +679,7 @@ signal__attachment__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			att->has_attachmentid = 1;
 			break;
 
-		case ATTACHMENT_LENGTH_FIELD:
+		case FIELDNUM_ATTACHMENT_LENGTH:
 			if (att->has_length)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -729,7 +729,7 @@ signal__database_version__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case DATABASEVERSION_VERSION_FIELD:
+		case FIELDNUM_DATABASEVERSION_VERSION:
 			if (ver->has_version)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -781,7 +781,7 @@ signal__avatar__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case AVATAR_NAME_FIELD:
+		case FIELDNUM_AVATAR_NAME:
 			if (ava->name != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -802,7 +802,7 @@ signal__avatar__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case AVATAR_LENGTH_FIELD:
+		case FIELDNUM_AVATAR_LENGTH:
 			if (ava->has_length)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -817,7 +817,7 @@ signal__avatar__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			ava->has_length = 1;
 			break;
 
-		case AVATAR_RECIPIENTID_FIELD:
+		case FIELDNUM_AVATAR_RECIPIENTID:
 			if (ava->recipientid != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -874,7 +874,7 @@ signal__sticker__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case STICKER_ROWID_FIELD:
+		case FIELDNUM_STICKER_ROWID:
 			if (sti->has_rowid)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -889,7 +889,7 @@ signal__sticker__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			sti->has_rowid = 1;
 			break;
 
-		case STICKER_LENGTH_FIELD:
+		case FIELDNUM_STICKER_LENGTH:
 			if (sti->has_length)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -946,7 +946,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 		buflen -= n;
 
 		switch (tag.fieldnum) {
-		case BACKUPFRAME_HEADER_FIELD:
+		case FIELDNUM_BACKUPFRAME_HEADER:
 			if (frm->header != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -968,7 +968,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_STATEMENT_FIELD:
+		case FIELDNUM_BACKUPFRAME_STATEMENT:
 			if (frm->statement != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -990,7 +990,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_PREFERENCE_FIELD:
+		case FIELDNUM_BACKUPFRAME_PREFERENCE:
 			if (frm->preference != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -1012,7 +1012,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_ATTACHMENT_FIELD:
+		case FIELDNUM_BACKUPFRAME_ATTACHMENT:
 			if (frm->attachment != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -1034,7 +1034,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_VERSION_FIELD:
+		case FIELDNUM_BACKUPFRAME_VERSION:
 			if (frm->version != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -1056,7 +1056,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_END_FIELD:
+		case FIELDNUM_BACKUPFRAME_END:
 			if (frm->has_end)
 				goto error;
 			if (tag.wiretype != WIRETYPE_VARINT)
@@ -1071,7 +1071,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			frm->has_end = 1;
 			break;
 
-		case BACKUPFRAME_AVATAR_FIELD:
+		case FIELDNUM_BACKUPFRAME_AVATAR:
 			if (frm->avatar != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
@@ -1093,7 +1093,7 @@ signal__backup_frame__unpack(ProtobufCAllocator *alloc, size_t buflen,
 			buflen -= fieldlen;
 			break;
 
-		case BACKUPFRAME_STICKER_FIELD:
+		case FIELDNUM_BACKUPFRAME_STICKER:
 			if (frm->sticker != NULL)
 				goto error;
 			if (tag.wiretype != WIRETYPE_LENGTH_DELIM)
