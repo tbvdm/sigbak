@@ -14,13 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#ifndef BACKUP_PB_C_H
+#define BACKUP_PB_C_H
 
-typedef struct ProtobufCAllocator	 ProtobufCAllocator;
-
-typedef int				 protobuf_c_boolean;
-typedef struct ProtobufCBinaryData	 ProtobufCBinaryData;
+#include "protobuf.h"
 
 typedef struct Signal__Header		 Signal__Header;
 typedef struct Signal__SqlStatement__SqlParameter Signal__SqlStatement__SqlParameter;
@@ -31,17 +28,6 @@ typedef struct Signal__DatabaseVersion	 Signal__DatabaseVersion;
 typedef struct Signal__Avatar		 Signal__Avatar;
 typedef struct Signal__Sticker		 Signal__Sticker;
 typedef struct Signal__BackupFrame	 Signal__BackupFrame;
-
-struct ProtobufCAllocator {
-	void				*(*alloc)(void *, size_t);
-	void				 (*free)(void *, void *);
-	void				*allocator_data;
-};
-
-struct ProtobufCBinaryData {
-	size_t				 len;
-	uint8_t				*data;
-};
 
 struct Signal__Header {
 	protobuf_c_boolean		 has_iv;
@@ -133,3 +119,5 @@ void					 signal__database_version__free_unpacked(Signal__DatabaseVersion *, Pro
 void					 signal__avatar__free_unpacked(Signal__Avatar *, ProtobufCAllocator *);
 void					 signal__sticker__free_unpacked(Signal__Sticker *, ProtobufCAllocator *);
 void					 signal__backup_frame__free_unpacked(Signal__BackupFrame *, ProtobufCAllocator *);
+
+#endif
