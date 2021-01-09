@@ -14,8 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/stat.h>
-
 #include <err.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -32,13 +30,6 @@ usage(const char *cmd, const char *args)
 {
 	fprintf(stderr, "usage: %s %s %s\n", getprogname(), cmd, args);
 	exit(1);
-}
-
-void
-freezero_string(char *s)
-{
-	if (s != NULL)
-		freezero(s, strlen(s));
 }
 
 int

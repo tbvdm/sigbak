@@ -1,7 +1,7 @@
 PROG=		sigbak
-SRCS=		backup.pb-c.c cmd-attachments.c cmd-check.c cmd-dump.c \
-		cmd-messages.c cmd-sqlite.c cmd-threads.c database.pb-c.c \
-		mem.c protobuf.c sbk.c sigbak.c
+SRCS=		backup.pb-c.c cmd-attachments.c cmd-avatars.c cmd-check.c \
+		cmd-dump.c cmd-messages.c cmd-sqlite.c cmd-threads.c \
+		database.pb-c.c protobuf.c sbk.c sigbak.c
 
 LDADD+=		-lcrypto
 

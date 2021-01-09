@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd February 3, 2020
+.Dd May 17, 2020
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -43,7 +43,12 @@ Spaces in the passphrase are ignored.
 .Pp
 The commands are as follows.
 .Bl -tag -width Ds
-.It Ic attachments Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+.It Xo
+.Ic attachments
+.Oo Fl p Ar passfile Oc
+.Oo Fl t Ar thread Oc
+.Ar backup Op Ar directory
+.Xc
 Export all attachments in the file
 .Ar backup
 to
@@ -51,6 +56,18 @@ to
 or to the current directory if
 .Ar directory
 is not specified.
+.Pp
+By default, all attachments are exported.
+The
+.Fl t
+option may be used to export only the attachments from a single conversation
+thread.
+The
+.Ar thread
+argument should be a number.
+The
+.Ic threads
+command can be used to view a list of conversation threads.
 .It Ic avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 Export all avatars in the file
 .Ar backup
@@ -150,7 +167,7 @@ $ echo 01234 56789 01234 56789 01234 56789 > passfile
 $ sigbak messages -p passfile signal.backup | fold -s | less
 .Ed
 .Pp
-Export only the messages from the conversation with Charlie:
+Export all messages and attachments from the conversation with Charlie:
 .Bd -literal -offset indent
 $ sigbak threads signal.backup
 [...]
@@ -158,6 +175,7 @@ $ sigbak threads signal.backup
    2: Bob
    3: Charlie
 $ sigbak messages -t 3 signal.backup charlie.txt
+$ sigbak attachments -t 3 signal.backup
 .Ed
 .Pp
 Export the SQLite database and use

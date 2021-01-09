@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,286 +124,133 @@ maildir_write_date_header(FILE *fp, const char *hdr, int64_t date)
 }
 
 static int
-maildir_write_mms(struct sbk_ctx *ctx, const char *maildir,
-    struct sbk_mms *mms)
+maildir_write_message(const char *maildir, struct sbk_message *msg)
 {
-	FILE	*fp;
-	char	*name, *phone;
-	int	 isgroup, ret;
+	FILE		*fp;
+	const char	*addr, *name;
 
-	ret = -1;
-	isgroup = sbk_is_group(ctx, mms->address);
-
-	if (isgroup) {
-		if (sbk_get_group(ctx, mms->address, &name) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-		phone = NULL;
-	} else {
-		if (sbk_get_contact(ctx, mms->address, &name, &phone) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-	}
-
-	if (sbk_get_long_message(ctx, mms) == -1) {
-		warnx("%s", sbk_error(ctx));
-		goto out;
-	}
-
-	if ((fp = maildir_open_file(maildir, mms->date_recv, mms->date_sent))
+	if ((fp = maildir_open_file(maildir, msg->time_recv, msg->time_sent))
 	    == NULL)
-		goto out;
-
-	if (SBK_IS_OUTGOING_MESSAGE(mms->type)) {
-		maildir_write_address_header(fp, "From", "you", "You");
-		maildir_write_address_header(fp, "To",
-		    isgroup ? "group" : phone, name);
-	} else {
-		maildir_write_address_header(fp, "From", phone, name);
-		maildir_write_address_header(fp, "To", "you", "You");
-	}
-
-	maildir_write_date_header(fp, "Date", mms->date_sent);
-
-	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
-		maildir_write_date_header(fp, "X-Received", mms->date_recv);
-
-	fprintf(fp, "X-Thread: %d\n", mms->thread);
-	fputs("MIME-Version: 1.0\n", fp);
-	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
-	fputs("Content-Disposition: inline\n", fp);
-
-	if (mms->body != NULL)
-		fprintf(fp, "\n%s\n", mms->body);
-
-	fclose(fp);
-	ret = 0;
-
-out:
-	freezero_string(name);
-	freezero_string(phone);
-	return ret;
-}
-
-static int
-maildir_write_sms(struct sbk_ctx *ctx, const char *maildir,
-    struct sbk_sms *sms)
-{
-	FILE	*fp;
-	char	*name, *phone;
-	int	 ret;
-
-	ret = -1;
-
-	if (sbk_get_contact(ctx, sms->address, &name, &phone) == -1) {
-		warnx("%s", sbk_error(ctx));
 		return -1;
-	}
 
-	if ((fp = maildir_open_file(maildir, sms->date_recv, sms->date_sent))
-	    == NULL)
-		goto out;
+	name = sbk_get_recipient_display_name(msg->recipient);
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
 
-	if (SBK_IS_OUTGOING_MESSAGE(sms->type)) {
+	if (sbk_is_outgoing_message(msg)) {
 		maildir_write_address_header(fp, "From", "you", "You");
-		maildir_write_address_header(fp, "To",
-		    (phone != NULL) ? phone : "unknown",
-		    (name != NULL) ? name : "unknown");
+		maildir_write_address_header(fp, "To", addr, name);
 	} else {
-		maildir_write_address_header(fp, "From",
-		    (phone != NULL) ? phone : "unknown",
-		    (name != NULL) ? name : "unknown");
+		maildir_write_address_header(fp, "From", addr, name);
 		maildir_write_address_header(fp, "To", "you", "You");
 	}
 
-	maildir_write_date_header(fp, "Date", sms->date_sent);
+	maildir_write_date_header(fp, "Date", msg->time_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
-		maildir_write_date_header(fp, "X-Received", sms->date_recv);
+	if (!sbk_is_outgoing_message(msg))
+		maildir_write_date_header(fp, "X-Received", msg->time_recv);
 
-	fprintf(fp, "X-Thread: %d\n", sms->thread);
+	fprintf(fp, "X-Thread: %d\n", msg->thread);
 	fputs("MIME-Version: 1.0\n", fp);
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
-	if (sms->body != NULL)
-		fprintf(fp, "\n%s\n", sms->body);
+	if (msg->text != NULL)
+		fprintf(fp, "\n%s\n", msg->text);
 
 	fclose(fp);
-	ret = 0;
-
-out:
-	freezero_string(name);
-	freezero_string(phone);
-	return ret;
+	return 0;
 }
 
 static int
 maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 {
-	struct sbk_mms_list	*mmslst;
-	struct sbk_sms_list	*smslst;
-	struct sbk_mms		*mms;
-	struct sbk_sms		*sms;
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
 	int			 ret;
 
-	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
-		warnx("Cannot get mms messages: %s", sbk_error(ctx));
+	if (thread == -1)
+		lst = sbk_get_all_messages(ctx);
+	else
+		lst = sbk_get_messages_for_thread(ctx, thread);
+
+	if (lst == NULL) {
+		warnx("Cannot get messages: %s", sbk_error(ctx));
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
-		warnx("Cannot get sms messages: %s", sbk_error(ctx));
-		sbk_free_mms_list(mmslst);
-		return -1;
-	}
-
-	mms = SIMPLEQ_FIRST(mmslst);
-	sms = SIMPLEQ_FIRST(smslst);
 	ret = 0;
 
-	/* Print mms and sms messages in the order they were received */
-	for (;;)
-		if (mms == NULL) {
-			if (sms == NULL)
-				break; /* Done */
-			else {
-				ret |= maildir_write_sms(ctx, maildir, sms);
-				sms = SIMPLEQ_NEXT(sms, entries);
-			}
-		} else {
-			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				ret |= maildir_write_mms(ctx, maildir, mms);
-				mms = SIMPLEQ_NEXT(mms, entries);
-			} else {
-				ret |= maildir_write_sms(ctx, maildir, sms);
-				sms = SIMPLEQ_NEXT(sms, entries);
-			}
-		}
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (maildir_write_message(maildir, msg) == -1)
+			ret = -1;
 
-	sbk_free_mms_list(mmslst);
-	sbk_free_sms_list(smslst);
-	return (ret == 0) ? 0 : -1;
+	sbk_free_message_list(lst);
+	return ret;
 }
 
 static int
-text_write_mms(struct sbk_ctx *ctx, FILE *fp, struct sbk_mms *mms)
+text_write_message(FILE *fp, struct sbk_message *msg)
 {
-	struct sbk_attachment *att;
-	char	*name, *phone;
-	int	 isgroup;
+	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
+	const char		*addr, *name;
 
-	isgroup = sbk_is_group(ctx, mms->address);
+	name = sbk_get_recipient_display_name(msg->recipient);
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
 
-	if (isgroup) {
-		if (sbk_get_group(ctx, mms->address, &name) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-		phone = NULL;
-	} else {
-		if (sbk_get_contact(ctx, mms->address, &name, &phone) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-	}
-
-	if (SBK_IS_OUTGOING_MESSAGE(mms->type))
+	if (sbk_is_outgoing_message(msg))
 		fputs("To: ", fp);
 	else
 		fputs("From: ", fp);
 
-	fprintf(fp, "%s (%s)\n",
-	    (name != NULL) ? name : "unknown",
-	    isgroup ? "group" : ((phone != NULL) ? phone : "unknown"));
+	fprintf(fp, "%s (%s)\n", name, addr);
 
-	maildir_write_date_header(fp, "Sent", mms->date_sent);
+	maildir_write_date_header(fp, "Sent", msg->time_sent);
 
-	if (!SBK_IS_OUTGOING_MESSAGE(mms->type))
-		maildir_write_date_header(fp, "Received", mms->date_recv);
+	if (!sbk_is_outgoing_message(msg))
+		maildir_write_date_header(fp, "Received", msg->time_recv);
 
-	fprintf(fp, "Thread: %d\n", mms->thread);
+	fprintf(fp, "Thread: %d\n", msg->thread);
 
-	if (mms->nattachments > 0) {
-		if (sbk_get_attachments(ctx, mms) == -1) {
-			warnx("%s", sbk_error(ctx));
-			return -1;
-		}
-
-		SIMPLEQ_FOREACH(att, mms->attachments, entries) {
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries) {
 			fputs("Attachment: ", fp);
+
 			if (att->filename == NULL)
 				fputs("no filename", fp);
 			else
 				fprintf(fp, "\"%s\"", att->filename);
+
 			fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64
-			    "-%" PRId64 ")\n", (att->content_type != NULL) ?
-			    att->content_type : "", att->size, att->rowid,
+			    "-%" PRId64 ")\n",
+			    (att->content_type != NULL) ?
+			    att->content_type : "",
+			    att->size,
+			    att->rowid,
 			    att->attachmentid);
 		}
-	}
 
-	if (sbk_get_long_message(ctx, mms) == -1) {
-		warnx("%s", sbk_error(ctx));
-		return -1;
-	}
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
+			fprintf(fp, "Reaction: %s from %s\n",
+			    rct->emoji,
+			    sbk_get_recipient_display_name(rct->recipient));
 
-	if (mms->body != NULL)
-		fprintf(fp, "\n%s\n\n", mms->body);
+	if (msg->text != NULL)
+		fprintf(fp, "\n%s\n\n", msg->text);
 	else
 		fputs("\n", fp);
 
-	freezero_string(name);
-	freezero_string(phone);
-
-	return 0;
-}
-
-static int
-text_write_sms(struct sbk_ctx *ctx, FILE *fp, struct sbk_sms *sms)
-{
-	char *name, *phone;
-
-	if (sbk_get_contact(ctx, sms->address, &name, &phone) == -1) {
-		warnx("%s", sbk_error(ctx));
-		return -1;
-	}
-
-	if (SBK_IS_OUTGOING_MESSAGE(sms->type))
-		fputs("To: ", fp);
-	else
-		fputs("From: ", fp);
-
-	fprintf(fp, "%s (%s)\n",
-	    (name != NULL) ? name : "unknown",
-	    (phone != NULL) ? phone : "unknown");
-
-	maildir_write_date_header(fp, "Sent", sms->date_sent);
-
-	if (!SBK_IS_OUTGOING_MESSAGE(sms->type))
-		maildir_write_date_header(fp, "Received", sms->date_recv);
-
-	fprintf(fp, "Thread: %d\n", sms->thread);
-
-	if (sms->body != NULL)
-		fprintf(fp, "\n%s\n\n", sms->body);
-	else
-		fputs("\n", fp);
-
-	freezero_string(name);
-	freezero_string(phone);
 	return 0;
 }
 
 static int
 text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 {
-	struct sbk_mms_list	*mmslst;
-	struct sbk_sms_list	*smslst;
-	struct sbk_mms		*mms;
-	struct sbk_sms		*sms;
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
 	FILE			*fp;
 	int			 ret;
 
@@ -413,47 +261,29 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 		return -1;
 	}
 
-	if ((mmslst = sbk_get_mmses(ctx, thread)) == NULL) {
-		warnx("Cannot get mms messages: %s", sbk_error(ctx));
+	if (thread == -1)
+		lst = sbk_get_all_messages(ctx);
+	else
+		lst = sbk_get_messages_for_thread(ctx, thread);
+
+	if (lst == NULL) {
+		warnx("Cannot get messages: %s", sbk_error(ctx));
+		fclose(fp);
 		return -1;
 	}
 
-	if ((smslst = sbk_get_smses(ctx, thread)) == NULL) {
-		warnx("Cannot get sms messages: %s", sbk_error(ctx));
-		sbk_free_mms_list(mmslst);
-		return -1;
-	}
-
-	mms = SIMPLEQ_FIRST(mmslst);
-	sms = SIMPLEQ_FIRST(smslst);
 	ret = 0;
 
-	/* Print mms and sms messages in the order they were received */
-	for (;;)
-		if (mms == NULL) {
-			if (sms == NULL)
-				break; /* Done */
-			else {
-				ret |= text_write_sms(ctx, fp, sms);
-				sms = SIMPLEQ_NEXT(sms, entries);
-			}
-		} else {
-			if (sms == NULL || mms->date_recv < sms->date_recv) {
-				ret |= text_write_mms(ctx, fp, mms);
-				mms = SIMPLEQ_NEXT(mms, entries);
-			} else {
-				ret |= text_write_sms(ctx, fp, sms);
-				sms = SIMPLEQ_NEXT(sms, entries);
-			}
-		}
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (text_write_message(fp, msg) == -1)
+			ret = -1;
 
-	sbk_free_mms_list(mmslst);
-	sbk_free_sms_list(smslst);
+	sbk_free_message_list(lst);
 
 	if (fp != stdout)
 		fclose(fp);
 
-	return (ret == 0) ? 0 : -1;
+	return ret;
 }
 
 int
@@ -482,11 +312,9 @@ cmd_messages(int argc, char **argv)
 			passfile = optarg;
 			break;
 		case 't':
-			errstr = NULL;
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg,
-				    errstr);
+				errx(1, "%s: thread id is %s", optarg, errstr);
 			break;
 		default:
 			goto usage;

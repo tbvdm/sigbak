@@ -17,6 +17,7 @@
 #include <err.h>
 #include <inttypes.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,7 +93,7 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 		snprintf(hex + (i * 2), 3, "%02" PRIx8, bin->data[i]);
 
 	dump_var(ind, name, "bytes", "%s", hex);
-	freezero(hex, (bin->len + 1) * 2);
+	free(hex);
 }
 
 static void

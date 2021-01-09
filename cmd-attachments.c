@@ -18,8 +18,8 @@
 
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,107 +27,139 @@
 
 #include "sigbak.h"
 
-enum type {
-	ATTACHMENT,
-	AVATAR,
-	STICKER
+static struct {
+	const char *type;
+	const char *extension;
+} extensions[] = {
+	{ "application/gzip",					"gz" },
+	{ "application/msword",					"doc" },
+	{ "application/pdf",					"pdf" },
+	{ "application/rtf",					"rtf" },
+	{ "application/vnd.oasis.opendocument.presentation",	"odp" },
+	{ "application/vnd.oasis.opendocument.spreadsheet",	"ods" },
+	{ "application/vnd.oasis.opendocument.text",		"odt" },
+	{ "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx" },
+	{ "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx" },
+	{ "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx" },
+	{ "application/vnd.rar",				"rar" },
+	{ "application/x-7z-compressed",			"7z" },
+	{ "application/x-bzip2",				"bz2" },
+	{ "application/x-tar",					"tar" },
+	{ "application/zip",					"zip" },
+
+	{ "audio/aac",						"aac" },
+	{ "audio/flac",						"flac" },
+	{ "audio/ogg",						"ogg" },
+	{ "audio/mp4",						"mp4" },
+	{ "audio/mpeg",						"mp3" },
+
+	{ "image/gif",						"gif" },
+	{ "image/jpeg",						"jpg" },
+	{ "image/png",						"png" },
+	{ "image/svg+xml",					"svg" },
+	{ "image/tiff",						"tiff" },
+	{ "image/webp",						"webp" },
+
+	{ "text/html",						"html" },
+	{ "text/plain",						"txt" },
+	{ "text/x-signal-plain",				"txt" },
+
+	{ "video/mp4",						"mp4" },
+	{ "video/mpeg",						"mpg" },
 };
 
-static int
-write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
-    struct sbk_file *file, enum type type)
+static const char *
+get_extension(const char *type)
 {
-	FILE	*fp;
-	char	*base, *fname;
-	int	 ret;
+	size_t i;
 
-	switch (type) {
-	case ATTACHMENT:
-		if (frm->attachment == NULL)
-			return 0;
-		if (!frm->attachment->has_rowid ||
-		    !frm->attachment->has_attachmentid) {
-			warnx("Invalid attachment frame");
-			return 1;
-		}
-		if (asprintf(&fname, "%" PRIu64 "-%" PRIu64,
-		    frm->attachment->rowid, frm->attachment->attachmentid)
-		    == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
-	case AVATAR:
-		if (frm->avatar == NULL)
-			return 0;
-		if (frm->avatar->recipientid != NULL)
-			base = frm->avatar->recipientid;
-		else if (frm->avatar->name != NULL)
-			base = frm->avatar->name;
-		else {
-			warnx("Invalid avatar frame");
-			return 1;
-		}
-		if (base[0] == '\0' || strchr(base, '/') != NULL) {
-			warnx("Invalid avatar filename");
-			return 1;
-		}
-		if (asprintf(&fname, "%s.jpg", base) == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
-	case STICKER:
-		if (frm->sticker == NULL)
-			return 0;
-		if (!frm->sticker->has_rowid) {
-			warnx("Invalid sticker frame");
-			return 1;
-		}
-		if (asprintf(&fname, "%" PRIu64 ".webp", frm->sticker->rowid)
-		    == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
-	default:
-		return 0;
+	for (i = 0; i < nitems(extensions); i++)
+		if (strcmp(extensions[i].type, type) == 0)
+			return extensions[i].extension;
+
+	return NULL;
+}
+
+static char *
+get_filename(struct sbk_attachment *att)
+{
+	char		*fname;
+	const char	*ext;
+
+	if (att->content_type == NULL)
+		ext = NULL;
+	else
+		ext = get_extension(att->content_type);
+
+	if (asprintf(&fname, "%" PRId64 "-%" PRId64 "%s%s",
+	    att->rowid,
+	    att->attachmentid,
+	    (ext != NULL) ? "." : "",
+	    (ext != NULL) ? ext : "") == -1) {
+		warnx("asprintf() failed");
+		fname = NULL;
 	}
 
-	ret = 0;
-
-	if ((fp = fopen(fname, "wx")) == NULL) {
-		warn("%s", fname);
-		ret = 1;
-	} else {
-		if (sbk_write_file(ctx, file, fp) == -1) {
-			warnx("%s: %s", fname, sbk_error(ctx));
-			ret = 1;
-		}
-		fclose(fp);
-	}
-
-	freezero_string(fname);
-	return ret;
+	return fname;
 }
 
 static int
-write_files(int argc, char **argv, enum type type)
+write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 {
-	struct sbk_ctx		*ctx;
-	struct sbk_file		*file;
-	Signal__BackupFrame	*frm;
-	char			*cmd, *passfile, passphr[128];
-	const char		*outdir;
-	int			 c, ret;
+	struct sbk_attachment	*att;
+	FILE			*fp;
+	char			*fname;
+	int			 ret;
 
-	cmd = argv[0];
+	ret = 0;
+
+	TAILQ_FOREACH(att, lst, entries) {
+		if (att->file == NULL)
+			continue;
+
+		if ((fname = get_filename(att)) == NULL) {
+			ret = 1;
+			continue;
+		}
+
+		if ((fp = fopen(fname, "wx")) == NULL) {
+			warn("%s", fname);
+			ret = 1;
+		} else {
+			if (sbk_write_file(ctx, att->file, fp) == -1) {
+				warnx("%s: %s", fname, sbk_error(ctx));
+				ret = 1;
+			}
+			fclose(fp);
+		}
+
+		free(fname);
+	}
+
+	return ret;
+}
+
+int
+cmd_attachments(int argc, char **argv)
+{
+	struct sbk_ctx			*ctx;
+	struct sbk_attachment_list	*lst;
+	char				*passfile, passphr[128];
+	const char			*errstr, *outdir;
+	int				 c, ret, thread;
+
 	passfile = NULL;
+	thread = -1;
 
-	while ((c = getopt(argc, argv, "p:")) != -1)
+	while ((c = getopt(argc, argv, "p:t:")) != -1)
 		switch (c) {
 		case 'p':
 			passfile = optarg;
+			break;
+		case 't':
+			thread = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "%s: thread id is %s", optarg, errstr);
 			break;
 		default:
 			goto usage;
@@ -149,7 +181,18 @@ write_files(int argc, char **argv, enum type type)
 		goto usage;
 	}
 
-	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1)
+	if (unveil(argv[0], "r") == -1)
+		err(1, "unveil");
+
+	if (unveil(outdir, "rwc") == -1)
+		err(1, "unveil");
+
+	/* For SQLite */
+	if (unveil("/dev/urandom", "r") == -1)
+		err(1, "unveil");
+
+	/* For SQLite */
+	if (unveil("/tmp", "rwc") == -1)
 		err(1, "unveil");
 
 	if (passfile == NULL) {
@@ -187,20 +230,20 @@ write_files(int argc, char **argv, enum type type)
 		return 1;
 	}
 
-	if (pledge("stdio wpath cpath", NULL) == -1)
+	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = 0;
+	if (thread == -1)
+		lst = sbk_get_all_attachments(ctx);
+	else
+		lst = sbk_get_attachments_for_thread(ctx, thread);
 
-	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
-		ret |= write_file(ctx, frm, file, type);
-		sbk_free_frame(frm);
-		sbk_free_file(file);
-	}
-
-	if (!sbk_eof(ctx)) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
+	if (lst == NULL) {
+		warnx("%s", sbk_error(ctx));
 		ret = 1;
+	} else {
+		ret = write_attachments(ctx, lst);
+		sbk_free_attachment_list(lst);
 	}
 
 	sbk_close(ctx);
@@ -208,23 +251,5 @@ write_files(int argc, char **argv, enum type type)
 	return ret;
 
 usage:
-	usage(cmd, "[-p passfile] backup [directory]");
-}
-
-int
-cmd_attachments(int argc, char **argv)
-{
-	return write_files(argc, argv, ATTACHMENT);
-}
-
-int
-cmd_avatars(int argc, char **argv)
-{
-	return write_files(argc, argv, AVATAR);
-}
-
-int
-cmd_stickers(int argc, char **argv)
-{
-	return write_files(argc, argv, STICKER);
+	usage("attachments", "[-p passfile] [-t thread] backup [directory]");
 }
