@@ -115,6 +115,9 @@ messages are written in CSV (comma-separated values) format to the file
 If
 .Ar dest
 is omitted, messages are written to standard output instead.
+See the
+.Sx CSV FORMAT
+section below for details.
 .Pp
 With the
 .Cm maildir
@@ -160,6 +163,52 @@ is not specified.
 .It Ic threads Oo Fl p Ar passfile Oc Ar backup
 Print a list of all conversation threads.
 .El
+.Sh CSV FORMAT
+The
+.Ic messages
+command can export messages in CSV format.
+In this format, each record describes either a message or a message reaction,
+and consists of the following eight fields.
+.Pp
+The
+.Em first
+field is an integer specifying the time a message or reaction was sent.
+For incoming messages, the
+.Em second
+field is an integer specifying the time a message or reaction was received.
+The times in these two fields are specified in Unix time, with millisecond
+precision.
+.Pp
+The
+.Em third
+field is an integer specifying the thread id.
+.Pp
+The
+.Em fourth
+field is an integer specifying the message type.
+A value of 0 indicates an incoming message, 1 indicates an outgoing message,
+and 2 indicates a reaction.
+Reaction records always immediately follow after the record of the message they
+are reactions to.
+.Pp
+The
+.Em fifth
+field is an integer specifying the number of attachments a message has.
+For reactions, this field is 0.
+.Pp
+The
+.Em sixth
+field is a string containing the phone number of the sender or recipient.
+For outgoing messages sent to a group, this field is the string
+.Sq group .
+.Pp
+The
+.Em seventh
+field is a string containing the name of the sender, recipient or group.
+.Pp
+The
+.Em eighth
+field is a string containing the message text or reaction emoji.
 .Sh EXIT STATUS
 .Ex -std
 .Sh EXAMPLES
