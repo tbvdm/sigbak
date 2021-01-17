@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd May 17, 2020
+.Dd January 17, 2021
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -101,10 +101,20 @@ The
 .Fl f
 option may be used to specify the output format.
 Supported values are
+.Cm csv ,
 .Cm maildir
 and
 .Cm text
 (the default).
+.Pp
+With the
+.Cm csv
+format,
+messages are written in CSV (comma-separated values) format to the file
+.Ar dest .
+If
+.Ar dest
+is omitted, messages are written to standard output instead.
 .Pp
 With the
 .Cm maildir
