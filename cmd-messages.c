@@ -31,8 +31,127 @@
 
 #include "sigbak.h"
 
-#define FORMAT_MAILDIR	0
-#define FORMAT_TEXT	1
+enum {
+	FORMAT_CSV,
+	FORMAT_MAILDIR,
+	FORMAT_TEXT
+};
+
+static void
+csv_print_quoted_string(FILE *fp, const char *str)
+{
+	const char *c;
+
+	if (str == NULL || str[0] == '\0')
+		return;
+
+	putc('"', fp);
+
+	for (c = str; *c != '\0'; c++) {
+		putc(*c, fp);
+		if (*c == '"')
+			putc('"', fp);
+	}
+
+	putc('"', fp);
+}
+
+static void
+csv_write_record(FILE *fp, uint64_t time_sent, uint64_t time_recv,
+    int thread, int type, int nattachments, const char *addr,
+    const char *name, const char *text)
+{
+	fprintf(fp, "%" PRIu64 ",%" PRIu64 ",%d,%d,%d,",
+	    time_sent, time_recv, thread, type, nattachments);
+
+	csv_print_quoted_string(fp, addr);
+	putc(',', fp);
+	csv_print_quoted_string(fp, name);
+	putc(',', fp);
+	csv_print_quoted_string(fp, text);
+	putc('\n', fp);
+}
+
+static int
+csv_write_message(FILE *fp, struct sbk_message *msg)
+{
+	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
+	const char		*addr;
+	int			 nattachments;
+
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
+
+	nattachments = 0;
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries)
+			nattachments++;
+
+	csv_write_record(fp,
+	    msg->time_sent,
+	    msg->time_recv,
+	    msg->thread,
+	    sbk_is_outgoing_message(msg),
+	    nattachments,
+	    addr,
+	    sbk_get_recipient_display_name(msg->recipient),
+	    msg->text);
+
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
+			csv_write_record(fp,
+			    rct->time_sent,
+			    rct->time_recv,
+			    msg->thread,
+			    2,
+			    0,
+			    rct->recipient->contact->phone,
+			    sbk_get_recipient_display_name(rct->recipient),
+			    rct->emoji);
+
+	return 0;
+}
+
+static int
+csv_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
+{
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
+	FILE			*fp;
+	int			 ret;
+
+	if (outfile == NULL)
+		fp = stdout;
+	else if ((fp = fopen(outfile, "wx")) == NULL) {
+		warn("fopen: %s", outfile);
+		return -1;
+	}
+
+	if (thread == -1)
+		lst = sbk_get_all_messages(ctx);
+	else
+		lst = sbk_get_messages_for_thread(ctx, thread);
+
+	if (lst == NULL) {
+		warnx("Cannot get messages: %s", sbk_error(ctx));
+		fclose(fp);
+		return -1;
+	}
+
+	ret = 0;
+
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (csv_write_message(fp, msg) == -1)
+			ret = -1;
+
+	sbk_free_message_list(lst);
+
+	if (fp != stdout)
+		fclose(fp);
+
+	return ret;
+}
 
 static void
 maildir_create(const char *path)
@@ -301,7 +420,9 @@ cmd_messages(int argc, char **argv)
 	while ((c = getopt(argc, argv, "f:p:t:")) != -1)
 		switch (c) {
 		case 'f':
-			if (strcmp(optarg, "maildir") == 0)
+			if (strcmp(optarg, "csv") == 0)
+				format = FORMAT_CSV;
+			else if (strcmp(optarg, "maildir") == 0)
 				format = FORMAT_MAILDIR;
 			else if (strcmp(optarg, "text") == 0)
 				format = FORMAT_TEXT;
@@ -381,6 +502,9 @@ cmd_messages(int argc, char **argv)
 		err(1, "pledge");
 
 	switch (format) {
+	case FORMAT_CSV:
+		ret = csv_write_messages(ctx, dest, thread);
+		break;
 	case FORMAT_MAILDIR:
 		ret = maildir_write_messages(ctx, dest, thread);
 		break;
