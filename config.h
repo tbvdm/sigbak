@@ -87,12 +87,14 @@
 
 #define _GNU_SOURCE
 
+/* All modern versions of glibc, musl and bionic have these. */
 #define HAVE_ASPRINTF
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
 
-/* Include features.h (__GLIBC_PREREQ) or sys/cdefs.h (__ANDROID_API__) */
-#include <stdio.h>
+#include <features.h>
+
+/* glibc */
 
 #ifdef __GLIBC_PREREQ
 #if __GLIBC_PREREQ(2, 25)
@@ -103,6 +105,8 @@
 #endif
 #endif
 
+/* bionic */
+
 #ifdef __ANDROID_API__
 #if __ANDROID_API__ >= 21
 #define HAVE_GETPROGNAME
@@ -111,6 +115,14 @@
 #define HAVE_REALLOCARRAY
 #endif
 #endif
+
+/* musl */
+
+/* Define if you have musl >= 1.1.20. */
+/* #define HAVE_EXPLICIT_BZERO */
+
+/* Define if you have musl >= 1.2.2. */
+/* #define HAVE_REALLOCARRAY */
 
 #endif
 
