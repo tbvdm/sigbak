@@ -5,7 +5,7 @@
 
 #include "../config.h"
 
-#ifndef HAVE_EXPLICIT_BZERO
+#if !defined(HAVE_EXPLICIT_BZERO) && !defined(LIBRESSL_VERSION_NUMBER)
 
 #include <openssl/crypto.h>
 
