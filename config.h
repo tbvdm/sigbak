@@ -97,23 +97,23 @@
 /* glibc */
 
 #ifdef __GLIBC_PREREQ
-#if __GLIBC_PREREQ(2, 25)
-#define HAVE_EXPLICIT_BZERO
-#endif
-#if __GLIBC_PREREQ(2, 26)
-#define HAVE_REALLOCARRAY
-#endif
+#  if __GLIBC_PREREQ(2, 25)
+#    define HAVE_EXPLICIT_BZERO
+#  endif
+#  if __GLIBC_PREREQ(2, 26)
+#    define HAVE_REALLOCARRAY
+#  endif
 #endif
 
 /* bionic */
 
 #ifdef __ANDROID_API__
-#if __ANDROID_API__ >= 21
-#define HAVE_GETPROGNAME
-#endif
-#if __ANDROID_API__ >= 29
-#define HAVE_REALLOCARRAY
-#endif
+#  if __ANDROID_API__ >= 21
+#    define HAVE_GETPROGNAME
+#  endif
+#  if __ANDROID_API__ >= 29
+#    define HAVE_REALLOCARRAY
+#  endif
 #endif
 
 /* musl */
@@ -129,14 +129,14 @@
 #include <openssl/opensslv.h>
 
 #ifdef LIBRESSL_VERSION_NUMBER
-#if LIBRESSL_VERSION_NUMBER >= 0x2060000fL
-#define HAVE_HKDF
-#endif
-#if LIBRESSL_VERSION_NUMBER >= 0x2070200fL
-#define HAVE_HMAC_CTX_NEW
-#endif
+#  if LIBRESSL_VERSION_NUMBER >= 0x2060000fL
+#    define HAVE_HKDF
+#  endif
+#  if LIBRESSL_VERSION_NUMBER >= 0x2070200fL
+#    define HAVE_HMAC_CTX_NEW
+#  endif
 #else
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-#define HAVE_HMAC_CTX_NEW
-#endif
+#  if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#    define HAVE_HMAC_CTX_NEW
+#  endif
 #endif
