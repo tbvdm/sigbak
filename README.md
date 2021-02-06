@@ -37,6 +37,9 @@ editing should be necessary.
 
 Finally, run `make` and optionally `make install`.
 
+If you are unsure what to do with `config.h`, then leave it as is and just run
+`make`. It is likely to work fine.
+
 [1]: https://www.kariliq.nl/sigbak/
 [2]: https://www.signal.org/
 [3]: https://www.kariliq.nl/sigbak/manual.html
