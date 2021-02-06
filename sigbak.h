@@ -144,6 +144,13 @@ struct sbk_attachment {
 
 TAILQ_HEAD(sbk_attachment_list, sbk_attachment);
 
+struct sbk_mention {
+	struct sbk_recipient *recipient;
+	SIMPLEQ_ENTRY(sbk_mention) entries;
+};
+
+SIMPLEQ_HEAD(sbk_mention_list, sbk_mention);
+
 struct sbk_reaction {
 	struct sbk_recipient *recipient;
 	uint64_t	 time_sent;
@@ -162,6 +169,7 @@ struct sbk_message {
 	int		 thread;
 	char		*text;
 	struct sbk_attachment_list *attachments;
+	struct sbk_mention_list *mentions;
 	struct sbk_reaction_list *reactions;
 	SIMPLEQ_ENTRY(sbk_message) entries;
 };
