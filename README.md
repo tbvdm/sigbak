@@ -1,17 +1,18 @@
 sigbak
 ======
 
-[sigbak][1] is a command-line utility to read the encrypted backups created by
-the [Signal messaging app][2]. It can be used to extract messages and other
+[sigbak][1] is a utility to read the encrypted backups created by the [Signal
+messaging app][2]. It can be used to extract messages, attachments and other
 data.
 
-Documentation is available in the [manual page][3].
+Documentation is available in the `sigbak.1` manual page. It is also [available
+online][3].
 
 Dependencies
 ------------
 
 sigbak depends on libcrypto (from either [LibreSSL][4] or [OpenSSL][5]),
-[protobuf-c][6] and [SQLite][7]. A C compiler, make and pkg-config are also
+[protobuf-c][6] and [SQLite][7]. A C compiler, `make` and `pkg-config` are also
 needed.
 
 On Debian-based distros it should suffice to install the following packages:
@@ -30,9 +31,9 @@ To build sigbak on other systems, first check out the `portable` branch:
 
 	$ git checkout portable
 
-Then check if config.h is suited to your system. Edit it if necessary. config.h
-already has support for several systems. On those systems, no editing should be
-necessary.
+Then check if `config.h` is suited to your system. Edit it if necessary.
+`config.h` already has support for several systems. On those systems, no
+editing should be necessary.
 
 Finally, run `make` and optionally `make install`.
 
