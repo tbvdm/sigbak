@@ -41,10 +41,14 @@
 #define SBK_ROUNDS		250000
 #define SBK_HKDF_INFO		"Backup Export"
 
+#define SBK_MENTION_PLACEHOLDER	"\357\277\274"	/* U+FFFC */
+#define SBK_MENTION_PREFIX	"@"
+
 /* Based on SQLCipherOpenHelper.java in the Signal-Android repository */
 #define SBK_DB_VERSION_RECIPIENT_IDS		24
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
+#define SBK_DB_VERSION_MENTIONS			68
 
 struct sbk_file {
 	long		 pos;
@@ -1534,6 +1538,177 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
 	return 0;
 }
 
+static void
+sbk_free_mention_list(struct sbk_mention_list *lst)
+{
+	struct sbk_mention *mnt;
+
+	if (lst != NULL) {
+		while ((mnt = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			free(mnt);
+		}
+		free(lst);
+	}
+}
+
+#define SBK_MENTIONS_QUERY						\
+	"SELECT "							\
+	"recipient_id "							\
+	"FROM mention "							\
+	"WHERE message_id = ?"
+
+static struct sbk_mention *
+sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_mention *mnt;
+
+	if ((mnt = malloc(sizeof *mnt)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	mnt->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+	if (mnt->recipient == NULL) {
+		free(mnt);
+		return NULL;
+	}
+
+	return mnt;
+}
+
+static struct sbk_mention_list *
+sbk_get_mentions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_mention_list	*lst;
+	struct sbk_mention	*mnt;
+	int			 ret;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		goto error;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((mnt = sbk_get_mention(ctx, stm)) == NULL)
+			goto error;
+		SIMPLEQ_INSERT_TAIL(lst, mnt, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_mention_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+static int
+sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
+    int mms_id)
+{
+	sqlite3_stmt *stm;
+
+	if (ctx->db_version < SBK_DB_VERSION_MENTIONS)
+		return 0;
+
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_MENTIONS_QUERY) == -1)
+		return -1;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
+		sqlite3_finalize(stm);
+		return -1;
+	}
+
+	if ((msg->mentions = sbk_get_mentions(ctx, stm)) == NULL)
+		return -1;
+
+	return 0;
+}
+
+static int
+sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg, int mms_id)
+{
+	struct sbk_mention *mnt;
+	char		*newtext, *newtextpos, *placeholderpos, *textpos;
+	const char	*name;
+	size_t		 copylen, newtextlen, placeholderlen, prefixlen;
+
+	if (sbk_get_mentions_for_message(ctx, msg, mms_id) == -1)
+		return -1;
+
+	if (SIMPLEQ_EMPTY(msg->mentions))
+		return 0;
+
+	newtext = NULL;
+	placeholderlen = strlen(SBK_MENTION_PLACEHOLDER);
+	prefixlen = strlen(SBK_MENTION_PREFIX);
+
+	/* Calculate length of new text */
+	newtextlen = strlen(msg->text);
+	SIMPLEQ_FOREACH(mnt, msg->mentions, entries) {
+		if (newtextlen < placeholderlen)
+			goto error;
+		name = sbk_get_recipient_display_name(mnt->recipient);
+		/* Subtract placeholder, add mention */
+		newtextlen = newtextlen - placeholderlen + prefixlen +
+		    strlen(name);
+	}
+
+	if ((newtext = malloc(newtextlen + 1)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return -1;
+	}
+
+	textpos = msg->text;
+	newtextpos = newtext;
+
+	/* Write new text, replacing placeholders with mentions */
+	SIMPLEQ_FOREACH(mnt, msg->mentions, entries) {
+		placeholderpos = strstr(textpos, SBK_MENTION_PLACEHOLDER);
+		if (placeholderpos == NULL)
+			goto error;
+
+		copylen = placeholderpos - textpos;
+		memcpy(newtextpos, textpos, copylen);
+		textpos += copylen + placeholderlen;
+		newtextpos += copylen;
+
+		memcpy(newtextpos, SBK_MENTION_PREFIX, prefixlen);
+		newtextpos += prefixlen;
+
+		name = sbk_get_recipient_display_name(mnt->recipient);
+		copylen = strlen(name);
+		memcpy(newtextpos, name, copylen);
+		newtextpos += copylen;
+	}
+
+	/* Sanity check: there should be no placeholders left */
+	if (strstr(textpos, SBK_MENTION_PLACEHOLDER) != NULL)
+		goto error;
+
+	copylen = strlen(textpos);
+	memcpy(newtextpos, textpos, copylen);
+	newtextpos += copylen;
+	*newtextpos = '\0';
+
+	free(msg->text);
+	msg->text = newtext;
+
+	return 0;
+
+error:
+	sbk_error_setx(ctx, "Invalid mention in message");
+	free(newtext);
+	return -1;
+}
+
 int
 sbk_is_outgoing_message(const struct sbk_message *msg)
 {
@@ -1804,6 +1979,7 @@ sbk_free_message(struct sbk_message *msg)
 {
 	free(msg->text);
 	sbk_free_attachment_list(msg->attachments);
+	sbk_free_mention_list(msg->mentions);
 	sbk_free_reaction_list(msg->reactions);
 	free(msg);
 }
@@ -1832,7 +2008,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"type, "							\
 	"thread_id, "							\
 	"0, "				/* part_count */		\
-	"_id, "								\
+	"-1, "				/* mms _id */			\
 	"NULL "				/* reactions */			\
 	"FROM sms "
 
@@ -1846,7 +2022,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"type, "							\
 	"thread_id, "							\
 	"0, "				/* part_count */		\
-	"_id, "								\
+	"-1, "				/* mms _id */			\
 	"reactions "							\
 	"FROM sms "
 
@@ -1930,6 +2106,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	msg->recipient = NULL;
 	msg->text = NULL;
 	msg->attachments = NULL;
+	msg->mentions = NULL;
 	msg->reactions = NULL;
 
 	msg->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
@@ -1948,14 +2125,18 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		goto error;
 
 	nattachments = sqlite3_column_int(stm, 6);
+	mms_id = sqlite3_column_int(stm, 7);
 
 	if (nattachments > 0) {
-		mms_id = sqlite3_column_int(stm, 7);
-
 		if (sbk_get_attachments_for_message(ctx, msg, mms_id) == -1)
 			goto error;
 
 		if (sbk_get_long_message(ctx, msg) == -1)
+			goto error;
+	}
+
+	if (mms_id != -1) {
+		if (sbk_insert_mentions(ctx, msg, mms_id) == -1)
 			goto error;
 	}
 
