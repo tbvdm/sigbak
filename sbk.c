@@ -1643,7 +1643,7 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg, int mms_id)
 	if (sbk_get_mentions_for_message(ctx, msg, mms_id) == -1)
 		return -1;
 
-	if (SIMPLEQ_EMPTY(msg->mentions))
+	if (msg->mentions == NULL || SIMPLEQ_EMPTY(msg->mentions))
 		return 0;
 
 	newtext = NULL;
