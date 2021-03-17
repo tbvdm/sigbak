@@ -111,10 +111,8 @@ unveil_dirname(const char *path, const char *perms)
 int
 main(int argc, char **argv)
 {
-	if (argc < 2) {
+	if (argc < 2)
 		usage("command", "[argument ...]");
-		return 1;
-	}
 
 	argc--;
 	argv++;
