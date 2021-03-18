@@ -50,15 +50,33 @@ dump_bool(unsigned int ind, const char *name, int val)
 }
 
 static void
+dump_int32(unsigned int ind, const char *name, int32_t val)
+{
+	dump_var(ind, name, "int32", "%" PRId32, val);
+}
+
+static void
 dump_uint32(unsigned int ind, const char *name, uint32_t val)
 {
 	dump_var(ind, name, "uint32", "%" PRIu32, val);
 }
 
 static void
+dump_int64(unsigned int ind, const char *name, int64_t val)
+{
+	dump_var(ind, name, "int64", "%" PRId64, val);
+}
+
+static void
 dump_uint64(unsigned int ind, const char *name, uint64_t val)
 {
 	dump_var(ind, name, "uint64", "%" PRIu64, val);
+}
+
+static void
+dump_float(unsigned int ind, const char *name, float val)
+{
+	dump_var(ind, name, "float", "%g", val);
 }
 
 static void
@@ -134,6 +152,8 @@ static void
 dump_preference(unsigned int ind, const char *name,
     Signal__SharedPreference *prf)
 {
+	size_t i;
+
 	dump_var(ind++, name, "SharedPreference", NULL);
 	if (prf->file != NULL)
 		dump_string(ind, "file", prf->file);
@@ -141,6 +161,12 @@ dump_preference(unsigned int ind, const char *name,
 		dump_string(ind, "key", prf->key);
 	if (prf->value != NULL)
 		dump_string(ind, "value", prf->value);
+	if (prf->has_booleanvalue)
+		dump_bool(ind, "booleanValue", prf->booleanvalue);
+	for (i = 0; i < prf->n_stringsetvalue; i++)
+		dump_string(ind, "stringSetValue", prf->stringsetvalue[i]);
+	if (prf->has_isstringsetvalue)
+		dump_bool(ind, "isStringSetValue", prf->isstringsetvalue);
 }
 
 static void
@@ -191,6 +217,26 @@ dump_version(unsigned int ind, const char *name, Signal__DatabaseVersion *ver)
 }
 
 static void
+dump_keyvalue(unsigned int ind, const char *name, Signal__KeyValue *key)
+{
+	dump_var(ind++, name, "KeyValue", NULL);
+	if (key->key != NULL)
+		dump_string(ind, "key", key->key);
+	if (key->has_blobvalue)
+		dump_binary(ind, "blobValue", &key->blobvalue);
+	if (key->has_booleanvalue)
+		dump_bool(ind, "booleanValue", key->booleanvalue);
+	if (key->has_floatvalue)
+		dump_float(ind, "floatValue", key->floatvalue);
+	if (key->has_integervalue)
+		dump_int32(ind, "integerValue", key->integervalue);
+	if (key->has_longvalue)
+		dump_int64(ind, "longValue", key->longvalue);
+	if (key->stringvalue != NULL)
+		dump_string(ind, "stringValue", key->stringvalue);
+}
+
+static void
 dump_frame(Signal__BackupFrame *frm)
 {
 	dump_var(0, "frame", "BackupFrame", NULL);
@@ -210,6 +256,8 @@ dump_frame(Signal__BackupFrame *frm)
 		dump_avatar(1, "avatar", frm->avatar);
 	if (frm->sticker != NULL)
 		dump_sticker(1, "sticker", frm->sticker);
+	if (frm->keyvalue != NULL)
+		dump_keyvalue(1, "keyValue", frm->keyvalue);
 }
 
 int
