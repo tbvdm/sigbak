@@ -113,10 +113,8 @@ main(int argc, char **argv)
 {
 	setprogname(argv[0]);
 
-	if (argc < 2) {
+	if (argc < 2)
 		usage("command", "[argument ...]");
-		return 1;
-	}
 
 	argc--;
 	argv++;
