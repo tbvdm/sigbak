@@ -1557,7 +1557,8 @@ sbk_free_mention_list(struct sbk_mention_list *lst)
 	"SELECT "							\
 	"recipient_id "							\
 	"FROM mention "							\
-	"WHERE message_id = ?"
+	"WHERE message_id = ? "						\
+	"ORDER BY range_start"
 
 static struct sbk_mention *
 sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
