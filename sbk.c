@@ -1556,7 +1556,8 @@ sbk_free_mention_list(struct sbk_mention_list *lst)
 	"SELECT "							\
 	"recipient_id "							\
 	"FROM mention "							\
-	"WHERE message_id = ?"
+	"WHERE message_id = ? "						\
+	"ORDER BY range_start"
 
 static struct sbk_mention *
 sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -1954,6 +1955,9 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 		}
 
 	if (!found)
+		return 0;
+
+	if (att->status != SBK_ATTACHMENT_TRANSFER_DONE)
 		return 0;
 
 	if (att->file == NULL) {
