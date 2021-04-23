@@ -1958,6 +1958,9 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (!found)
 		return 0;
 
+	if (att->status != SBK_ATTACHMENT_TRANSFER_DONE)
+		return 0;
+
 	if (att->file == NULL) {
 		sbk_error_setx(ctx, "Long-message attachment not available");
 		return -1;
