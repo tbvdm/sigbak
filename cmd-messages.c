@@ -270,11 +270,29 @@ maildir_write_message(const char *maildir, struct sbk_message *msg)
 
 	fprintf(fp, "X-Thread: %d\n", msg->thread);
 	fputs("MIME-Version: 1.0\n", fp);
+	fputs("Content-Type: multipart/mixed; boundary=frontier\n\n", fp);
+	fputs("--frontier\n", fp);
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
 	if (msg->text != NULL)
 		fprintf(fp, "\n%s\n", msg->text);
+
+	struct sbk_attachment	*att;
+
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries) {
+      fputs("--frontier\n", fp);
+      fprintf(fp, "Content-Type: %s\n",
+        (att->content_type != NULL) ? att->content_type : "");
+      if (att->filename != NULL)
+        fprintf(fp, "Content-Disposition: attachment;filename=%s\n", att->filename);
+      else
+        fprintf(fp, "Content-Disposition: attachment;filename=%" PRId64 ".%s\n",
+          att->attachmentid, strrchr(att->content_type, '/') + 1);
+      fputs("Content-Transfer-Encoding: base64;\n\n", fp);
+      // Need to puth the attachment in base64
+		}
 
 	fclose(fp);
 	return 0;
