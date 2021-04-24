@@ -271,6 +271,7 @@ maildir_write_message(const char *maildir, struct sbk_message *msg)
 	fprintf(fp, "X-Thread: %d\n", msg->thread);
 	fputs("MIME-Version: 1.0\n", fp);
 	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
+	fputs("Content-Transfer-Encoding: binary\n", fp);
 	fputs("Content-Disposition: inline\n", fp);
 
 	if (msg->text != NULL)
