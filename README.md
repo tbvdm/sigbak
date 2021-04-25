@@ -42,7 +42,7 @@ If you are unsure what to do with `config.h`, then leave it as is and just run
 
 [1]: https://www.kariliq.nl/sigbak/
 [2]: https://www.signal.org/
-[3]: https://www.kariliq.nl/sigbak/manual.html
+[3]: https://www.kariliq.nl/man/sigbak.1.html
 [4]: https://www.libressl.org/
 [5]: https://www.openssl.org/
 [6]: https://github.com/protobuf-c/protobuf-c
