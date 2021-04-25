@@ -560,12 +560,16 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	return 0;
 }
 
-char *
-sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
+static char *
+sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
+    size_t *buflen, int terminate)
 {
 	size_t		 ibuflen, len, obuflen, obufsize;
 	unsigned char	 mac[SBK_MAC_LEN];
 	char		*obuf, *ptr;
+
+	if (buflen != NULL)
+		*buflen = 0;
 
 	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
 		return NULL;
@@ -575,12 +579,15 @@ sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 		return NULL;
 	}
 
-	if ((size_t)file->len > SIZE_MAX - EVP_MAX_BLOCK_LENGTH - 1) {
+	if (terminate)
+		terminate = 1;
+
+	if ((size_t)file->len > SIZE_MAX - EVP_MAX_BLOCK_LENGTH - terminate) {
 		sbk_error_setx(ctx, "File too large");
 		return NULL;
 	}
 
-	obufsize = file->len + EVP_MAX_BLOCK_LENGTH + 1;
+	obufsize = file->len + EVP_MAX_BLOCK_LENGTH + terminate;
 
 	if ((obuf = malloc(obufsize)) == NULL) {
 		sbk_error_set(ctx, NULL);
@@ -623,12 +630,23 @@ sbk_get_file_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 		ptr += obuflen;
 	}
 
-	*ptr = '\0';
+	if (terminate)
+		*ptr = '\0';
+
+	if (buflen != NULL)
+		*buflen = ptr - obuf;
+
 	return obuf;
 
 error:
 	free(obuf);
 	return NULL;
+}
+
+static char *
+sbk_get_file_data_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
+{
+	return sbk_decrypt_file_data(ctx, file, NULL, 1);
 }
 
 static int
@@ -1966,7 +1984,7 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return -1;
 	}
 
-	if ((longmsg = sbk_get_file_as_string(ctx, att->file)) == NULL)
+	if ((longmsg = sbk_get_file_data_as_string(ctx, att->file)) == NULL)
 		return -1;
 
 	free(msg->text);

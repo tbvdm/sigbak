@@ -196,7 +196,6 @@ int		 sbk_rewind(struct sbk_ctx *);
 
 Signal__BackupFrame *sbk_get_frame(struct sbk_ctx *, struct sbk_file **);
 int		 sbk_write_file(struct sbk_ctx *, struct sbk_file *, FILE *);
-char		*sbk_get_file_as_string(struct sbk_ctx *, struct sbk_file *);
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
