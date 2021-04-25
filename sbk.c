@@ -1957,6 +1957,17 @@ sbk_get_body(struct sbk_message *msg)
 	return 0;
 }
 
+static void
+sbk_remove_attachment(struct sbk_message *msg, struct sbk_attachment *att)
+{
+	TAILQ_REMOVE(msg->attachments, att, entries);
+	sbk_free_attachment(att);
+	if (TAILQ_EMPTY(msg->attachments)) {
+		sbk_free_attachment_list(msg->attachments);
+		msg->attachments = NULL;
+	}
+}
+
 static int
 sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
@@ -1991,8 +2002,7 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	msg->text = longmsg;
 
 	/* Do not expose the long-message attachment */
-	TAILQ_REMOVE(msg->attachments, att, entries);
-	sbk_free_attachment(att);
+	sbk_remove_attachment(msg, att);
 
 	return 0;
 }
