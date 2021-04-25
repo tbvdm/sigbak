@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd February 6, 2021
+.Dd April 25, 2021
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -123,10 +123,9 @@ With the
 .Cm maildir
 format, messages are written as emails in maildir format to the directory
 .Ar dest .
-Message attachments are not included (yet).
 As a precaution,
 .Nm
-will refuse to write to an already existing maildir.
+will refuse to write to an existing maildir.
 .Pp
 With the
 .Cm text

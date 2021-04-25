@@ -643,6 +643,12 @@ error:
 	return NULL;
 }
 
+char *
+sbk_get_file_data(struct sbk_ctx *ctx, struct sbk_file *file, size_t *len)
+{
+	return sbk_decrypt_file_data(ctx, file, len, 0);
+}
+
 static char *
 sbk_get_file_data_as_string(struct sbk_ctx *ctx, struct sbk_file *file)
 {
