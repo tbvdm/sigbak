@@ -29,6 +29,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <openssl/evp.h>
+
 #include "sigbak.h"
 
 enum {
@@ -36,6 +38,8 @@ enum {
 	FORMAT_MAILDIR,
 	FORMAT_TEXT
 };
+
+static EVP_ENCODE_CTX *evp_encode_ctx;
 
 static void
 csv_print_quoted_string(FILE *fp, const char *str)
@@ -243,10 +247,118 @@ maildir_write_date_header(FILE *fp, const char *hdr, int64_t date)
 }
 
 static int
-maildir_write_message(const char *maildir, struct sbk_message *msg)
+maildir_generate_random_boundary(char *buf, size_t bufsize)
 {
-	FILE		*fp;
-	const char	*addr, *name;
+	size_t		i;
+	const char	chars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	    "abcdefghijklmnopqrstuvwxyz";
+
+	if (bufsize < 2)
+		return -1;
+
+	/*
+	 * Include an underscore to ensure that the boundary does not occur in
+	 * Base64 strings or in the headers of a body part
+	 */
+	buf[0] = '_';
+
+	for (i = 1; i < bufsize - 1; i++)
+		buf[i] = chars[rand() % (sizeof chars - 1)];
+
+	buf[i] = '\0';
+	return 0;
+}
+
+static int
+maildir_generate_boundary(struct sbk_message *msg, char *buf,
+    size_t bufsize)
+{
+	for (;;) {
+		if (maildir_generate_random_boundary(buf, bufsize) == -1)
+			return -1;
+		if (msg->text == NULL || strstr(msg->text, buf) == NULL)
+			return 0;
+	}
+}
+
+static char *
+maildir_base64_encode(const char *in, size_t inlen, size_t *outlen)
+{
+	char	*out;
+	size_t	 outsize;
+
+	*outlen = 0;
+
+	if (evp_encode_ctx == NULL) {
+		if ((evp_encode_ctx = EVP_ENCODE_CTX_new()) == NULL) {
+			warnx("Cannot allocate encoding context");
+			return NULL;
+		}
+	}
+
+	/*
+	 * Ensure that inlen can be passed to EVP_EncodeBlock() and that the
+	 * outsize computation won't overflow
+	 */
+	if (inlen > INT_MAX || inlen > (SIZE_MAX - 1) / 4 * 3) {
+		warnx("Attachment too large");
+		return NULL;
+	}
+
+	outsize = (inlen + 2) / 3 * 4 + 1;
+	if ((out = malloc(outsize)) == NULL) {
+		warn(NULL);
+		return NULL;
+	}
+
+	*outlen = EVP_EncodeBlock((unsigned char *)out, (unsigned char *)in,
+	    inlen);
+	return out;
+}
+
+static int
+maildir_write_attachment(struct sbk_ctx *ctx, FILE *fp,
+    struct sbk_attachment *att)
+{
+	char	*b64, *data, *s;
+	size_t	 b64len, datalen, n;
+
+	if ((data = sbk_get_file_data(ctx, att->file, &datalen)) == NULL) {
+		warnx("Cannot get attachment data: %s", sbk_error(ctx));
+		return -1;
+	}
+
+	if ((b64 = maildir_base64_encode(data, datalen, &b64len)) == NULL) {
+		free(data);
+		return -1;
+	}
+
+	s = b64;
+	while (b64len > 0) {
+		n = (b64len > 76) ? 76 : b64len;
+		fprintf(fp, "%.*s\n", (int)n, s);
+		s += n;
+		b64len -= n;
+	}
+
+	free(data);
+	free(b64);
+	return 0;
+}
+
+static int
+maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
+    struct sbk_message *msg)
+{
+	FILE			*fp;
+	struct sbk_attachment	*att;
+	const char		*addr, *name;
+	int			 ret;
+	char			 boundary[33];
+
+	if (msg->attachments != NULL &&
+	    maildir_generate_boundary(msg, boundary, sizeof boundary) == -1)
+		return -1;
 
 	if ((fp = maildir_open_file(maildir, msg->time_recv, msg->time_sent))
 	    == NULL)
@@ -271,14 +383,40 @@ maildir_write_message(const char *maildir, struct sbk_message *msg)
 
 	fprintf(fp, "X-Thread: %d\n", msg->thread);
 	fputs("MIME-Version: 1.0\n", fp);
-	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
-	fputs("Content-Disposition: inline\n", fp);
 
+	if (msg->attachments != NULL) {
+		fprintf(fp, "Content-Type: multipart/mixed; "
+		    "boundary=%s\n\n", boundary);
+		fprintf(fp, "--%s\n", boundary);
+	}
+
+	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
+	fputs("Content-Transfer-Encoding: binary\n", fp);
+	fputs("Content-Disposition: inline\n\n", fp);
 	if (msg->text != NULL)
-		fprintf(fp, "\n%s\n", msg->text);
+		fprintf(fp, "%s\n", msg->text);
+
+	ret = 0;
+
+	if (msg->attachments != NULL) {
+		TAILQ_FOREACH(att, msg->attachments, entries) {
+			if (att->file == NULL) {
+				warnx("Attachment not available in backup");
+				continue;
+			}
+			fprintf(fp, "--%s\n", boundary);
+			fprintf(fp, "Content-Type: %s\n",
+			    (att->content_type != NULL) ? att->content_type :
+			    "application/octet-stream");
+			fputs("Content-Transfer-Encoding: base64\n", fp);
+			fputs("Content-Disposition: attachment\n\n", fp);
+			ret |= maildir_write_attachment(ctx, fp, att);
+		}
+		fprintf(fp, "--%s--\n", boundary);
+	}
 
 	fclose(fp);
-	return 0;
+	return ret;
 }
 
 static int
@@ -301,8 +439,11 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	ret = 0;
 
 	SIMPLEQ_FOREACH(msg, lst, entries)
-		if (maildir_write_message(maildir, msg) == -1)
+		if (maildir_write_message(ctx, maildir, msg) == -1)
 			ret = -1;
+
+	if (evp_encode_ctx != NULL)
+		EVP_ENCODE_CTX_free(evp_encode_ctx);
 
 	sbk_free_message_list(lst);
 	return ret;
