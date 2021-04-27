@@ -769,7 +769,7 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 		return -1;
 	}
 
-	if ((*buf = strdup(txt)) == NULL) {
+	if ((*buf = strdup((const char *)txt)) == NULL) {
 		sbk_error_set(ctx, NULL);
 		return -1;
 	}
@@ -2373,8 +2373,9 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 		SHA512_Final(key, &sha);
 	}
 
-	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN, "",
-	    0, SBK_HKDF_INFO, strlen(SBK_HKDF_INFO)) == 0) {
+	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN,
+	    (const unsigned char *)"", 0, (const unsigned char *)SBK_HKDF_INFO,
+	    strlen(SBK_HKDF_INFO)) == 0) {
 		sbk_error_setx(ctx, "Cannot compute keys");
 		ret = -1;
 	} else {
