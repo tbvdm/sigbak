@@ -37,8 +37,6 @@
 
 #ifdef __DragonFly__
 
-/* Untested */
-
 #define HAVE_ASPRINTF
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
