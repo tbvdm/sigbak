@@ -2046,7 +2046,6 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"0, "				/* part_count */		\
 	"-1, "				/* mms _id */			\
 	"NULL "				/* reactions */			\
 	"FROM sms "
@@ -2060,7 +2059,6 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"0, "				/* part_count */		\
 	"-1, "				/* mms _id */			\
 	"reactions "							\
 	"FROM sms "
@@ -2074,7 +2072,6 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
-	"part_count, "							\
 	"_id, "								\
 	"NULL "				/* reactions */			\
 	"FROM mms "
@@ -2088,7 +2085,6 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
-	"part_count, "							\
 	"_id, "								\
 	"reactions "							\
 	"FROM mms "
@@ -2135,7 +2131,7 @@ static struct sbk_message *
 sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_message	*msg;
-	int			 mms_id, nattachments;
+	int			 mms_id;
 
 	if ((msg = malloc(sizeof *msg)) == NULL) {
 		sbk_error_set(ctx, NULL);
@@ -2163,23 +2159,20 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	if (sbk_get_body(msg) == -1)
 		goto error;
 
-	nattachments = sqlite3_column_int(stm, 6);
-	mms_id = sqlite3_column_int(stm, 7);
+	mms_id = sqlite3_column_int(stm, 6);
 
-	if (nattachments > 0) {
+	if (mms_id != -1) {
 		if (sbk_get_attachments_for_message(ctx, msg, mms_id) == -1)
 			goto error;
 
 		if (sbk_get_long_message(ctx, msg) == -1)
 			goto error;
-	}
 
-	if (mms_id != -1) {
 		if (sbk_insert_mentions(ctx, msg, mms_id) == -1)
 			goto error;
 	}
 
-	if (sbk_get_reactions(ctx, &msg->reactions, stm, 8) == -1)
+	if (sbk_get_reactions(ctx, &msg->reactions, stm, 7) == -1)
 		goto error;
 
 	return msg;
