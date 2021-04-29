@@ -27,59 +27,6 @@
 
 #include "sigbak.h"
 
-static struct {
-	const char *type;
-	const char *extension;
-} extensions[] = {
-	{ "application/gzip",					"gz" },
-	{ "application/msword",					"doc" },
-	{ "application/pdf",					"pdf" },
-	{ "application/rtf",					"rtf" },
-	{ "application/vnd.oasis.opendocument.presentation",	"odp" },
-	{ "application/vnd.oasis.opendocument.spreadsheet",	"ods" },
-	{ "application/vnd.oasis.opendocument.text",		"odt" },
-	{ "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx" },
-	{ "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx" },
-	{ "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx" },
-	{ "application/vnd.rar",				"rar" },
-	{ "application/x-7z-compressed",			"7z" },
-	{ "application/x-bzip2",				"bz2" },
-	{ "application/x-tar",					"tar" },
-	{ "application/zip",					"zip" },
-
-	{ "audio/aac",						"aac" },
-	{ "audio/flac",						"flac" },
-	{ "audio/ogg",						"ogg" },
-	{ "audio/mp4",						"mp4" },
-	{ "audio/mpeg",						"mp3" },
-
-	{ "image/gif",						"gif" },
-	{ "image/jpeg",						"jpg" },
-	{ "image/png",						"png" },
-	{ "image/svg+xml",					"svg" },
-	{ "image/tiff",						"tiff" },
-	{ "image/webp",						"webp" },
-
-	{ "text/html",						"html" },
-	{ "text/plain",						"txt" },
-	{ "text/x-signal-plain",				"txt" },
-
-	{ "video/mp4",						"mp4" },
-	{ "video/mpeg",						"mpg" },
-};
-
-static const char *
-get_extension(const char *type)
-{
-	size_t i;
-
-	for (i = 0; i < nitems(extensions); i++)
-		if (strcmp(extensions[i].type, type) == 0)
-			return extensions[i].extension;
-
-	return NULL;
-}
-
 static char *
 get_filename(struct sbk_attachment *att)
 {
@@ -89,7 +36,7 @@ get_filename(struct sbk_attachment *att)
 	if (att->content_type == NULL)
 		ext = NULL;
 	else
-		ext = get_extension(att->content_type);
+		ext = mime_get_extension(att->content_type);
 
 	if (asprintf(&fname, "%" PRId64 "-%" PRId64 "%s%s",
 	    att->rowid,

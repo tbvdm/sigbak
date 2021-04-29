@@ -229,6 +229,8 @@ int		 sbk_write_database(struct sbk_ctx *, const char *);
 
 const char	*sbk_error(struct sbk_ctx *);
 
+const char	*mime_get_extension(const char *);
+
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 usage(const char *, const char *) __dead;
