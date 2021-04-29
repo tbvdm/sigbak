@@ -161,7 +161,16 @@ struct sbk_reaction {
 
 SIMPLEQ_HEAD(sbk_reaction_list, sbk_reaction);
 
+struct sbk_message_id {
+	enum {
+		SBK_MESSAGE_SMS,
+		SBK_MESSAGE_MMS
+	}		 type;
+	int		 rowid;
+};
+
 struct sbk_message {
+	struct sbk_message_id id;
 	struct sbk_recipient *recipient;
 	uint64_t	 time_sent;
 	uint64_t	 time_recv;

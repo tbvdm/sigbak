@@ -471,6 +471,7 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	if (!sbk_is_outgoing_message(msg))
 		maildir_write_date_header(fp, "Received", msg->time_recv);
 
+	fprintf(fp, "Message id: %d-%d\n", msg->id.type, msg->id.rowid);
 	fprintf(fp, "Thread: %d\n", msg->thread);
 
 	if (msg->attachments != NULL)

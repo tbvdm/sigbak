@@ -1544,15 +1544,17 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 }
 
 static int
-sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
-    int mms_id)
+sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
 	sqlite3_stmt *stm;
+
+	if (msg->id.type != SBK_MESSAGE_MMS)
+		return 0;
 
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}
@@ -1636,18 +1638,18 @@ error:
 }
 
 static int
-sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
-    int mms_id)
+sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
 	sqlite3_stmt *stm;
 
-	if (ctx->db_version < SBK_DB_VERSION_MENTIONS)
+	if (msg->id.type != SBK_MESSAGE_MMS ||
+	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
 		return 0;
 
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_MENTIONS_QUERY) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mms_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}
@@ -1659,14 +1661,14 @@ sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
 }
 
 static int
-sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg, int mms_id)
+sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
 	struct sbk_mention *mnt;
 	char		*newtext, *newtextpos, *placeholderpos, *textpos;
 	const char	*name;
 	size_t		 copylen, newtextlen, placeholderlen, prefixlen;
 
-	if (sbk_get_mentions_for_message(ctx, msg, mms_id) == -1)
+	if (sbk_get_mentions_for_message(ctx, msg) == -1)
 		return -1;
 
 	if (msg->mentions == NULL || SIMPLEQ_EMPTY(msg->mentions))
@@ -2040,52 +2042,56 @@ sbk_free_message_list(struct sbk_message_list *lst)
 /* For database versions < SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_SELECT_SMS_1					\
 	"SELECT "							\
+	"0, "								\
+	"_id, "								\
 	"address, "							\
 	"body, "							\
 	"date_sent, "							\
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"-1, "				/* mms _id */			\
 	"NULL "				/* reactions */			\
 	"FROM sms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_SELECT_SMS_2					\
 	"SELECT "							\
+	"0, "								\
+	"_id, "								\
 	"address, "							\
 	"body, "							\
 	"date_sent, "							\
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"-1, "				/* mms _id */			\
 	"reactions "							\
 	"FROM sms "
 
 /* For database versions < SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_SELECT_MMS_1					\
 	"SELECT "							\
+	"1, "								\
+	"_id, "								\
 	"address, "							\
 	"body, "							\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
-	"_id, "								\
 	"NULL "				/* reactions */			\
 	"FROM mms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_SELECT_MMS_2					\
 	"SELECT "							\
+	"1, "								\
+	"_id, "								\
 	"address, "							\
 	"body, "							\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
-	"_id, "								\
 	"reactions "							\
 	"FROM mms "
 
@@ -2130,8 +2136,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 static struct sbk_message *
 sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
-	struct sbk_message	*msg;
-	int			 mms_id;
+	struct sbk_message *msg;
 
 	if ((msg = malloc(sizeof *msg)) == NULL) {
 		sbk_error_set(ctx, NULL);
@@ -2144,35 +2149,37 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	msg->mentions = NULL;
 	msg->reactions = NULL;
 
-	msg->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+	msg->id.type = (sqlite3_column_int(stm, 0) == 0) ?
+	    SBK_MESSAGE_SMS : SBK_MESSAGE_MMS;
+	msg->id.rowid = sqlite3_column_int(stm, 1);
+
+	msg->recipient = sbk_get_recipient_from_column(ctx, stm, 2);
 	if (msg->recipient == NULL)
 		goto error;
 
-	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm, 1) == -1)
+	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm, 3) == -1)
 		goto error;
 
-	msg->time_sent = sqlite3_column_int64(stm, 2);
-	msg->time_recv = sqlite3_column_int64(stm, 3);
-	msg->type = sqlite3_column_int(stm, 4);
-	msg->thread = sqlite3_column_int(stm, 5);
+	msg->time_sent = sqlite3_column_int64(stm, 4);
+	msg->time_recv = sqlite3_column_int64(stm, 5);
+	msg->type = sqlite3_column_int(stm, 6);
+	msg->thread = sqlite3_column_int(stm, 7);
 
 	if (sbk_get_body(msg) == -1)
 		goto error;
 
-	mms_id = sqlite3_column_int(stm, 6);
-
-	if (mms_id != -1) {
-		if (sbk_get_attachments_for_message(ctx, msg, mms_id) == -1)
+	if (msg->id.type == SBK_MESSAGE_MMS) {
+		if (sbk_get_attachments_for_message(ctx, msg) == -1)
 			goto error;
 
 		if (sbk_get_long_message(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_insert_mentions(ctx, msg, mms_id) == -1)
+		if (sbk_insert_mentions(ctx, msg) == -1)
 			goto error;
 	}
 
-	if (sbk_get_reactions(ctx, &msg->reactions, stm, 7) == -1)
+	if (sbk_get_reactions(ctx, &msg->reactions, stm, 8) == -1)
 		goto error;
 
 	return msg;
