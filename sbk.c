@@ -16,6 +16,7 @@
 
 #include <sys/tree.h>
 
+#include <err.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -50,6 +51,8 @@
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
 #define SBK_DB_VERSION_MENTIONS			68
+
+#define sbk_warnx(ctx, ...)	warnx(__VA_ARGS__)
 
 struct sbk_file {
 	long		 pos;
@@ -1457,18 +1460,15 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	att->attachmentid = sqlite3_column_int64(stm, 3);
 	att->status = sqlite3_column_int(stm, 4);
 	att->size = sqlite3_column_int64(stm, 5);
+	att->file = sbk_get_attachment_file(ctx, att->rowid,
+	    att->attachmentid);
 
-	if (att->status == SBK_ATTACHMENT_TRANSFER_DONE) {
-		if ((att->file = sbk_get_attachment_file(ctx, att->rowid,
-		    att->attachmentid)) == NULL) {
-			sbk_error_setx(ctx, "Cannot find attachment file");
-			goto error;
-		}
-
-		if (att->size != att->file->len) {
-			sbk_error_setx(ctx, "Inconsistent attachment size");
-			goto error;
-		}
+	if (att->file == NULL)
+		sbk_warnx(ctx, "Attachment %" PRId64 "-%" PRId64 " not "
+		    "available in backup", att->rowid, att->attachmentid);
+	else if (att->size != att->file->len) {
+		sbk_error_setx(ctx, "Inconsistent attachment size");
+		goto error;
 	}
 
 	return att;
