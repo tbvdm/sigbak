@@ -1466,10 +1466,9 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	if (att->file == NULL)
 		sbk_warnx(ctx, "Attachment %" PRId64 "-%" PRId64 " not "
 		    "available in backup", att->rowid, att->attachmentid);
-	else if (att->size != att->file->len) {
-		sbk_error_setx(ctx, "Inconsistent attachment size");
-		goto error;
-	}
+	else if (att->size != att->file->len)
+		sbk_warnx(ctx, "Attachment %" PRId64 "-%" PRId64 " has "
+		    "inconsistent size", att->rowid, att->attachmentid);
 
 	return att;
 
@@ -1732,9 +1731,10 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 	return 0;
 
 error:
-	sbk_error_setx(ctx, "Invalid mention in message");
+	sbk_warnx(ctx, "Invalid mention in message %d-%d", msg->id.type,
+	    msg->id.rowid);
 	free(newtext);
-	return -1;
+	return 0;
 }
 
 int
@@ -1995,12 +1995,10 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (!found)
 		return 0;
 
-	if (att->status != SBK_ATTACHMENT_TRANSFER_DONE)
-		return 0;
-
 	if (att->file == NULL) {
-		sbk_error_setx(ctx, "Long-message attachment not available");
-		return -1;
+		sbk_warnx(ctx, "Long-message attachment for message %d-%d not "
+		    "available in backup", msg->id.type, msg->id.rowid);
+		return 0;
 	}
 
 	if ((longmsg = sbk_get_file_data_as_string(ctx, att->file)) == NULL)
