@@ -352,7 +352,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 {
 	FILE			*fp;
 	struct sbk_attachment	*att;
-	const char		*addr, *name;
+	const char		*addr, *ext, *name, *type;
 	int			 ret;
 	char			 boundary[33];
 
@@ -404,12 +404,22 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 				warnx("Attachment not available in backup");
 				continue;
 			}
+			if (att->content_type == NULL) {
+				type = "application/octet-stream";
+				ext = NULL;
+			} else {
+				type = att->content_type;
+				ext = mime_get_extension(att->content_type);
+			}
 			fprintf(fp, "--%s\n", boundary);
-			fprintf(fp, "Content-Type: %s\n",
-			    (att->content_type != NULL) ? att->content_type :
-			    "application/octet-stream");
+			fprintf(fp, "Content-Type: %s\n", type);
 			fputs("Content-Transfer-Encoding: base64\n", fp);
-			fputs("Content-Disposition: attachment\n\n", fp);
+			fprintf(fp, "Content-Disposition: attachment; "
+			    "filename=%" PRId64 "-%" PRId64 "%s%s\n\n",
+			    att->rowid,
+			    att->attachmentid,
+			    (ext != NULL) ? "." : "",
+			    (ext != NULL) ? ext : "");
 			ret |= maildir_write_attachment(ctx, fp, att);
 		}
 		fprintf(fp, "--%s--\n", boundary);
@@ -472,6 +482,7 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	if (!sbk_is_outgoing_message(msg))
 		maildir_write_date_header(fp, "Received", msg->time_recv);
 
+	fprintf(fp, "Message id: %d-%d\n", msg->id.type, msg->id.rowid);
 	fprintf(fp, "Thread: %d\n", msg->thread);
 
 	if (msg->attachments != NULL)

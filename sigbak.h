@@ -161,7 +161,16 @@ struct sbk_reaction {
 
 SIMPLEQ_HEAD(sbk_reaction_list, sbk_reaction);
 
+struct sbk_message_id {
+	enum {
+		SBK_MESSAGE_SMS,
+		SBK_MESSAGE_MMS
+	}		 type;
+	int		 rowid;
+};
+
 struct sbk_message {
+	struct sbk_message_id id;
 	struct sbk_recipient *recipient;
 	uint64_t	 time_sent;
 	uint64_t	 time_recv;
@@ -219,6 +228,8 @@ const char	*sbk_get_recipient_display_name(const struct sbk_recipient *);
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
 const char	*sbk_error(struct sbk_ctx *);
+
+const char	*mime_get_extension(const char *);
 
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);

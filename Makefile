@@ -21,8 +21,8 @@ PROTO_SRCS=	${PROTOS:.proto=.pb-c.c}
 PROTO_OBJS=	${PROTO_SRCS:.c=.o}
 
 OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
-		cmd-messages.o cmd-sqlite.o cmd-threads.o sbk.o sigbak.o \
-		${PROTO_OBJS}
+		cmd-messages.o cmd-sqlite.o cmd-threads.o mime.o sbk.o \
+		sigbak.o ${PROTO_OBJS}
 
 OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/getprogname.o compat/hkdf.o \
