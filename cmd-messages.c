@@ -399,10 +399,8 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 
 	if (msg->attachments != NULL) {
 		TAILQ_FOREACH(att, msg->attachments, entries) {
-			if (att->file == NULL) {
-				warnx("Attachment not available in backup");
+			if (att->file == NULL)
 				continue;
-			}
 			if (att->content_type == NULL) {
 				type = "application/octet-stream";
 				ext = NULL;
