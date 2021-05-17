@@ -5,15 +5,15 @@ sigbak
 messaging app][2]. It can be used to extract messages, attachments and other
 data.
 
-Documentation is available in the `sigbak.1` manual page. It is also [available
+Documentation is available in the `sigbak.1` manual page. You can also [read it
 online][3].
 
 Dependencies
 ------------
 
 sigbak depends on libcrypto (from either [LibreSSL][4] or [OpenSSL][5]),
-[protobuf-c][6] and [SQLite][7]. A C compiler, `make` and `pkg-config` are also
-needed.
+[protobuf-c][6] and [SQLite][7]. You will also need a C compiler, `make` and
+`pkg-config`.
 
 On Debian-based distros it should suffice to install the following packages:
 build-essential libprotobuf-c-dev libsqlite3-dev libssl-dev pkg-config
@@ -22,23 +22,31 @@ protobuf-c-compiler.
 Building on OpenBSD
 -------------------
 
-To build sigbak on OpenBSD, run `make` and optionally `make install`.
+To build sigbak on OpenBSD, clone the repository and run `make`.
 
 Building on other systems
 -------------------------
 
-To build sigbak on other systems, first check out the `portable` branch:
+To build sigbak on other systems, clone the repository, switch to the
+`portable` branch and run `make`:
 
-	$ git checkout portable
+	git clone https://github.com/tbvdm/sigbak.git
+	cd sigbak
+	git checkout portable
+	make
 
-Then check if `config.h` is suited to your system. Edit it if necessary.
-`config.h` already has support for several systems. On those systems, no
-editing should be necessary.
+sigbak should build without problems on Linux and the BSDs.
 
-Finally, run `make` and optionally `make install`.
+If the build does fail, check if `config.h` is suited to your system. You may
+have to edit it. After editing `config.h`, run `make` to retry the build.
 
-If you are unsure what to do with `config.h`, then leave it as is and just run
-`make`. It is likely to work fine.
+Reporting problems
+------------------
+
+Please report bugs and other problems with sigbak. If sigbak shows errors or
+warnings unexpectedly, please report them as well. You can [open an issue on
+GitHub][8] or send an email. You can find my email address at the top of the
+`sigbak.c` file.
 
 [1]: https://www.kariliq.nl/sigbak/
 [2]: https://www.signal.org/
@@ -47,3 +55,4 @@ If you are unsure what to do with `config.h`, then leave it as is and just run
 [5]: https://www.openssl.org/
 [6]: https://github.com/protobuf-c/protobuf-c
 [7]: https://www.sqlite.org/
+[8]: https://github.com/tbvdm/sigbak/issues

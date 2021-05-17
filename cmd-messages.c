@@ -181,15 +181,15 @@ maildir_create(const char *path)
 }
 
 static FILE *
-maildir_open_file(const char *maildir, int64_t date_recv, int64_t date_sent)
+maildir_open_file(const char *maildir, const struct sbk_message *msg)
 {
 	FILE	*fp;
 	char	*path;
 
 	/* Intentionally create deterministic filenames */
 	/* XXX Shouldn't write directly into cur */
-	if (asprintf(&path, "%s/cur/%" PRId64 ".%" PRId64 ".localhost:2,S",
-	    maildir, date_recv, date_sent) == -1) {
+	if (asprintf(&path, "%s/cur/%" PRIu64 ".%d-%d.localhost:2,S", maildir,
+	    msg->time_recv, msg->id.type, msg->id.rowid) == -1) {
 		warnx("asprintf() failed");
 		return NULL;
 	}
@@ -360,8 +360,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 	    maildir_generate_boundary(msg, boundary, sizeof boundary) == -1)
 		return -1;
 
-	if ((fp = maildir_open_file(maildir, msg->time_recv, msg->time_sent))
-	    == NULL)
+	if ((fp = maildir_open_file(maildir, msg)) == NULL)
 		return -1;
 
 	name = sbk_get_recipient_display_name(msg->recipient);
