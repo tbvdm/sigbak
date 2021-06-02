@@ -1604,42 +1604,14 @@ sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	return mnt;
 }
 
-static struct sbk_mention_list *
-sbk_get_mentions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+static int
+sbk_get_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
-	struct sbk_mention_list	*lst;
 	struct sbk_mention	*mnt;
+	sqlite3_stmt		*stm;
 	int			 ret;
 
-	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
-		goto error;
-	}
-
-	SIMPLEQ_INIT(lst);
-
-	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
-		if ((mnt = sbk_get_mention(ctx, stm)) == NULL)
-			goto error;
-		SIMPLEQ_INSERT_TAIL(lst, mnt, entries);
-	}
-
-	if (ret != SQLITE_DONE)
-		goto error;
-
-	sqlite3_finalize(stm);
-	return lst;
-
-error:
-	sbk_free_mention_list(lst);
-	sqlite3_finalize(stm);
-	return NULL;
-}
-
-static int
-sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
-{
-	sqlite3_stmt *stm;
+	msg->mentions = NULL;
 
 	if (msg->id.type != SBK_MESSAGE_MMS ||
 	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
@@ -1648,15 +1620,33 @@ sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_MENTIONS_QUERY) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
-		sqlite3_finalize(stm);
-		return -1;
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1)
+		goto error;
+
+	if ((msg->mentions = malloc(sizeof *msg->mentions)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		goto error;
 	}
 
-	if ((msg->mentions = sbk_get_mentions(ctx, stm)) == NULL)
-		return -1;
+	SIMPLEQ_INIT(msg->mentions);
 
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((mnt = sbk_get_mention(ctx, stm)) == NULL)
+			goto error;
+		SIMPLEQ_INSERT_TAIL(msg->mentions, mnt, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
 	return 0;
+
+error:
+	sbk_free_mention_list(msg->mentions);
+	msg->mentions = NULL;
+	sqlite3_finalize(stm);
+	return -1;
 }
 
 static int
@@ -1667,7 +1657,7 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 	const char	*name;
 	size_t		 copylen, newtextlen, placeholderlen, prefixlen;
 
-	if (sbk_get_mentions_for_message(ctx, msg) == -1)
+	if (sbk_get_mentions(ctx, msg) == -1)
 		return -1;
 
 	if (msg->mentions == NULL || SIMPLEQ_EMPTY(msg->mentions))
