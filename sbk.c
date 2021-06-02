@@ -2012,11 +2012,13 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 static void
 sbk_free_message(struct sbk_message *msg)
 {
-	free(msg->text);
-	sbk_free_attachment_list(msg->attachments);
-	sbk_free_mention_list(msg->mentions);
-	sbk_free_reaction_list(msg->reactions);
-	free(msg);
+	if (msg != NULL) {
+		free(msg->text);
+		sbk_free_attachment_list(msg->attachments);
+		sbk_free_mention_list(msg->mentions);
+		sbk_free_reaction_list(msg->reactions);
+		free(msg);
+	}
 }
 
 void
