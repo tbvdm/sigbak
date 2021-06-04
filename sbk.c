@@ -2096,9 +2096,9 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"_id, "								\
 	"address, "							\
 	"body, "							\
-	"date, "			/* date_sent */			\
+	"date, "			/* sms.date_sent */		\
 	"date_received, "						\
-	"msg_box, "			/* type */			\
+	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
 	"NULL "				/* reactions */			\
 	"FROM mms "
@@ -2110,7 +2110,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"_id, "								\
 	"address, "							\
 	"body, "							\
-	"date, "			/* date_sent */			\
+	"date, "			/* sms.date_sent */		\
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
