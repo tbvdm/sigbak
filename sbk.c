@@ -1190,6 +1190,17 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	"LEFT JOIN groups AS g "					\
 	"ON r._id = g.recipient_id"
 
+#define SBK_RECIPIENTS_COLUMN__ID			0
+#define SBK_RECIPIENTS_COLUMN_PHONE			1
+#define SBK_RECIPIENTS_COLUMN_EMAIL			2
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME	3
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	4
+#define SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME	5
+#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	6
+#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	7
+#define SBK_RECIPIENTS_COLUMN_GROUP_ID			8
+#define SBK_RECIPIENTS_COLUMN_TITLE			9
+
 static struct sbk_recipient_entry *
 sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
@@ -1202,10 +1213,12 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		return NULL;
 	}
 
-	if (sbk_get_recipient_id_from_column(ctx, &ent->id, stm, 0) == -1)
+	if (sbk_get_recipient_id_from_column(ctx, &ent->id, stm,
+	    SBK_RECIPIENTS_COLUMN__ID) == -1)
 		goto error;
 
-	if (sqlite3_column_type(stm, 8) == SQLITE_NULL)
+	if (sqlite3_column_type(stm, SBK_RECIPIENTS_COLUMN_GROUP_ID) ==
+	    SQLITE_NULL)
 		ent->recipient.type = SBK_CONTACT;
 	else
 		ent->recipient.type = SBK_GROUP;
@@ -1234,32 +1247,32 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			}
 		} else {
 			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
-			    stm, 1) == -1)
+			    stm, SBK_RECIPIENTS_COLUMN_PHONE) == -1)
 				goto error;
 
 			if (sbk_sqlite_column_text_copy(ctx, &con->email,
-			    stm, 2) == -1)
+			    stm, SBK_RECIPIENTS_COLUMN_EMAIL) == -1)
 				goto error;
 		}
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
-		    stm, 3) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_phone_label,
-		    stm, 4) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_name,
-		    stm, 5) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_family_name,
-		    stm, 6) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_joined_name,
-		    stm, 7) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME) == -1)
 			goto error;
 
 		break;
@@ -1271,7 +1284,8 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 		}
 
-		if (sbk_sqlite_column_text_copy(ctx, &grp->name, stm, 9) == -1)
+		if (sbk_sqlite_column_text_copy(ctx, &grp->name,
+		    stm, SBK_RECIPIENTS_COLUMN_TITLE) == -1)
 			goto error;
 
 		break;
@@ -1442,6 +1456,13 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
+#define SBK_ATTACHMENTS_COLUMN_FILE_NAME	0
+#define SBK_ATTACHMENTS_COLUMN_CT		1
+#define SBK_ATTACHMENTS_COLUMN__ID		2
+#define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	3
+#define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	4
+#define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	5
+
 static struct sbk_attachment *
 sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
@@ -1456,16 +1477,21 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	att->content_type = NULL;
 	att->file = NULL;
 
-	if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm, 0) == -1)
+	if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm,
+	    SBK_ATTACHMENTS_COLUMN_FILE_NAME) == -1)
 		goto error;
 
-	if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm, 1) == -1)
+	if (sbk_sqlite_column_text_copy(ctx, &att->content_type, stm,
+	    SBK_ATTACHMENTS_COLUMN_CT) == -1)
 		goto error;
 
-	att->rowid = sqlite3_column_int64(stm, 2);
-	att->attachmentid = sqlite3_column_int64(stm, 3);
-	att->status = sqlite3_column_int(stm, 4);
-	att->size = sqlite3_column_int64(stm, 5);
+	att->rowid = sqlite3_column_int64(stm, SBK_ATTACHMENTS_COLUMN__ID);
+	att->attachmentid = sqlite3_column_int64(stm,
+	    SBK_ATTACHMENTS_COLUMN_UNIQUE_ID);
+	att->status = sqlite3_column_int(stm,
+	    SBK_ATTACHMENTS_COLUMN_PENDING_PUSH);
+	att->size = sqlite3_column_int64(stm,
+	    SBK_ATTACHMENTS_COLUMN_DATA_SIZE);
 	att->file = sbk_get_attachment_file(ctx, att->rowid,
 	    att->attachmentid);
 
@@ -2129,6 +2155,16 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
+#define SBK_MESSAGES_COLUMN_TABLE		0
+#define SBK_MESSAGES_COLUMN__ID			1
+#define SBK_MESSAGES_COLUMN_ADDRESS		2
+#define SBK_MESSAGES_COLUMN_BODY		3
+#define SBK_MESSAGES_COLUMN_DATE_SENT		4
+#define SBK_MESSAGES_COLUMN_DATE_RECEIVED	5
+#define SBK_MESSAGES_COLUMN_TYPE		6
+#define SBK_MESSAGES_COLUMN_THREAD_ID		7
+#define SBK_MESSAGES_COLUMN_REACTIONS		8
+
 static struct sbk_message *
 sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
@@ -2145,21 +2181,26 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	msg->mentions = NULL;
 	msg->reactions = NULL;
 
-	msg->id.type = (sqlite3_column_int(stm, 0) == 0) ?
+	msg->id.type =
+	    (sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TABLE) == 0) ?
 	    SBK_MESSAGE_SMS : SBK_MESSAGE_MMS;
-	msg->id.rowid = sqlite3_column_int(stm, 1);
+	msg->id.rowid = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN__ID);
 
-	msg->recipient = sbk_get_recipient_from_column(ctx, stm, 2);
+	msg->recipient = sbk_get_recipient_from_column(ctx, stm,
+	    SBK_MESSAGES_COLUMN_ADDRESS);
 	if (msg->recipient == NULL)
 		goto error;
 
-	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm, 3) == -1)
+	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm,
+	    SBK_MESSAGES_COLUMN_BODY) == -1)
 		goto error;
 
-	msg->time_sent = sqlite3_column_int64(stm, 4);
-	msg->time_recv = sqlite3_column_int64(stm, 5);
-	msg->type = sqlite3_column_int(stm, 6);
-	msg->thread = sqlite3_column_int(stm, 7);
+	msg->time_sent = sqlite3_column_int64(stm,
+	    SBK_MESSAGES_COLUMN_DATE_SENT);
+	msg->time_recv = sqlite3_column_int64(stm,
+	    SBK_MESSAGES_COLUMN_DATE_RECEIVED);
+	msg->type = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TYPE);
+	msg->thread = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_THREAD_ID);
 
 	if (sbk_get_body(msg) == -1)
 		goto error;
@@ -2175,7 +2216,8 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 	}
 
-	if (sbk_get_reactions(ctx, &msg->reactions, stm, 8) == -1)
+	if (sbk_get_reactions(ctx, &msg->reactions, stm,
+	    SBK_MESSAGES_COLUMN_REACTIONS) == -1)
 		goto error;
 
 	return msg;
