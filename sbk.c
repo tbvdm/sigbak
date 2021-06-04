@@ -1110,7 +1110,7 @@ sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
 			free(ent->recipient.contact->email);
 			free(ent->recipient.contact->system_display_name);
 			free(ent->recipient.contact->system_phone_label);
-			free(ent->recipient.contact->profile_name);
+			free(ent->recipient.contact->profile_given_name);
 			free(ent->recipient.contact->profile_family_name);
 			free(ent->recipient.contact->profile_joined_name);
 			free(ent->recipient.contact);
@@ -1263,7 +1263,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL) == -1)
 			goto error;
 
-		if (sbk_sqlite_column_text_copy(ctx, &con->profile_name,
+		if (sbk_sqlite_column_text_copy(ctx, &con->profile_given_name,
 		    stm, SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME) == -1)
 			goto error;
 
@@ -1383,8 +1383,8 @@ sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 			return rcp->contact->system_display_name;
 		if (rcp->contact->profile_joined_name != NULL)
 			return rcp->contact->profile_joined_name;
-		if (rcp->contact->profile_name != NULL)
-			return rcp->contact->profile_name;
+		if (rcp->contact->profile_given_name != NULL)
+			return rcp->contact->profile_given_name;
 		if (rcp->contact->phone != NULL)
 			return rcp->contact->phone;
 		if (rcp->contact->email != NULL)
