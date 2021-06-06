@@ -39,8 +39,6 @@ enum {
 	FORMAT_TEXT
 };
 
-static EVP_ENCODE_CTX *evp_encode_ctx;
-
 static void
 csv_print_quoted_string(FILE *fp, const char *str)
 {
@@ -289,13 +287,6 @@ maildir_base64_encode(const char *in, size_t inlen, size_t *outlen)
 
 	*outlen = 0;
 
-	if (evp_encode_ctx == NULL) {
-		if ((evp_encode_ctx = EVP_ENCODE_CTX_new()) == NULL) {
-			warnx("Cannot allocate encoding context");
-			return NULL;
-		}
-	}
-
 	/*
 	 * Ensure that inlen can be passed to EVP_EncodeBlock() and that the
 	 * outsize computation won't overflow
@@ -448,9 +439,6 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	SIMPLEQ_FOREACH(msg, lst, entries)
 		if (maildir_write_message(ctx, maildir, msg) == -1)
 			ret = -1;
-
-	if (evp_encode_ctx != NULL)
-		EVP_ENCODE_CTX_free(evp_encode_ctx);
 
 	sbk_free_message_list(lst);
 	return ret;

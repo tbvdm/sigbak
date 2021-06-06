@@ -113,7 +113,7 @@ struct sbk_contact {
 	char		*email;
 	char		*system_display_name;
 	char		*system_phone_label;
-	char		*profile_name;
+	char		*profile_given_name;
 	char		*profile_family_name;
 	char		*profile_joined_name;
 };
