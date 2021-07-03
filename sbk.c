@@ -2332,6 +2332,11 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	"FROM thread "							\
 	"ORDER BY _id"
 
+#define SBK_THREADS_COLUMN_RECIPIENT_IDS	0
+#define SBK_THREADS_COLUMN__ID			1
+#define SBK_THREADS_COLUMN_DATE			2
+#define SBK_THREADS_COLUMN_MESSAGE_COUNT	3
+
 struct sbk_thread_list *
 sbk_get_threads(struct sbk_ctx *ctx)
 {
@@ -2359,15 +2364,17 @@ sbk_get_threads(struct sbk_ctx *ctx)
 			goto error;
 		}
 
-		thd->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+		thd->recipient = sbk_get_recipient_from_column(ctx, stm,
+		    SBK_THREADS_COLUMN_RECIPIENT_IDS);
 		if (thd->recipient == NULL) {
 			free(thd);
 			goto error;
 		}
 
-		thd->id = sqlite3_column_int64(stm, 1);
-		thd->date = sqlite3_column_int64(stm, 2);
-		thd->nmessages = sqlite3_column_int64(stm, 3);
+		thd->id = sqlite3_column_int64(stm, SBK_THREADS_COLUMN__ID);
+		thd->date = sqlite3_column_int64(stm, SBK_THREADS_COLUMN_DATE);
+		thd->nmessages = sqlite3_column_int64(stm,
+		    SBK_THREADS_COLUMN_MESSAGE_COUNT);
 		SIMPLEQ_INSERT_TAIL(lst, thd, entries);
 	}
 
