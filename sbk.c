@@ -49,6 +49,7 @@
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
 #define SBK_DB_VERSION_MENTIONS			68
+#define SBK_DB_VERSION_THREAD_AUTOINCREMENT	108
 
 #define sbk_warnx(ctx, ...)	warnx(__VA_ARGS__)
 
@@ -2321,7 +2322,8 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	}
 }
 
-#define SBK_THREADS_QUERY						\
+/* For database versions < SBK_DB_VERSION_THREAD_AUTOINCREMENT */
+#define SBK_THREADS_QUERY_1						\
 	"SELECT "							\
 	"recipient_ids, "						\
 	"_id, "								\
@@ -2330,12 +2332,28 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	"FROM thread "							\
 	"ORDER BY _id"
 
+/* For database versions >= SBK_DB_VERSION_THREAD_AUTOINCREMENT */
+#define SBK_THREADS_QUERY_2						\
+	"SELECT "							\
+	"thread_recipient_id, "						\
+	"_id, "								\
+	"date, "							\
+	"message_count "						\
+	"FROM thread "							\
+	"ORDER BY _id"
+
+#define SBK_THREADS_COLUMN_THREAD_RECIPIENT_ID	0
+#define SBK_THREADS_COLUMN__ID			1
+#define SBK_THREADS_COLUMN_DATE			2
+#define SBK_THREADS_COLUMN_MESSAGE_COUNT	3
+
 struct sbk_thread_list *
 sbk_get_threads(struct sbk_ctx *ctx)
 {
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
 	sqlite3_stmt		*stm;
+	const char		*query;
 	int			 ret;
 
 	if (sbk_create_database(ctx) == -1)
@@ -2348,7 +2366,12 @@ sbk_get_threads(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_THREADS_QUERY) == -1)
+	if (ctx->db_version < SBK_DB_VERSION_THREAD_AUTOINCREMENT)
+		query = SBK_THREADS_QUERY_1;
+	else
+		query = SBK_THREADS_QUERY_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		goto error;
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
@@ -2357,15 +2380,17 @@ sbk_get_threads(struct sbk_ctx *ctx)
 			goto error;
 		}
 
-		thd->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+		thd->recipient = sbk_get_recipient_from_column(ctx, stm,
+		    SBK_THREADS_COLUMN_THREAD_RECIPIENT_ID);
 		if (thd->recipient == NULL) {
 			free(thd);
 			goto error;
 		}
 
-		thd->id = sqlite3_column_int64(stm, 1);
-		thd->date = sqlite3_column_int64(stm, 2);
-		thd->nmessages = sqlite3_column_int64(stm, 3);
+		thd->id = sqlite3_column_int64(stm, SBK_THREADS_COLUMN__ID);
+		thd->date = sqlite3_column_int64(stm, SBK_THREADS_COLUMN_DATE);
+		thd->nmessages = sqlite3_column_int64(stm,
+		    SBK_THREADS_COLUMN_MESSAGE_COUNT);
 		SIMPLEQ_INSERT_TAIL(lst, thd, entries);
 	}
 
