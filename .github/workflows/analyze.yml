@@ -16,9 +16,10 @@ jobs:
       uses: actions/checkout@v2
 
     - name: install dependencies
-      run: >
-        sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev
-        libssl-dev pkg-config protobuf-c-compiler
+      run: |
+        sudo apt-get update
+        sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev \
+          libssl-dev pkg-config protobuf-c-compiler
 
     - name: initialize
       uses: github/codeql-action/init@v1

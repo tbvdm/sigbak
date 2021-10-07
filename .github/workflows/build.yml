@@ -5,6 +5,7 @@ on: push
 jobs:
   ubuntu:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-18.04, ubuntu-20.04]
 
@@ -16,6 +17,7 @@ jobs:
 
     - name: install dependencies
       run: |
+        sudo apt-get update
         sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev \
           libssl-dev pkg-config protobuf-c-compiler
 
@@ -24,6 +26,7 @@ jobs:
 
   macos:
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-10.15, macos-11]
         ssl: [libressl, openssl]
@@ -36,7 +39,9 @@ jobs:
 
     - name: install dependencies
       # Also install make because Xcode provides GNU make 3.81 which is too old
-      run: brew install make pkg-config protobuf-c sqlite ${{ matrix.ssl }}
+      run: |
+        brew update
+        brew install make pkg-config protobuf-c sqlite ${{ matrix.ssl }}
 
     - name: build
       # Set PKG_CONFIG_PATH as per the instructions from "brew install". See
