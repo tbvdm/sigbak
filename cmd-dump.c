@@ -107,8 +107,11 @@ dump_binary(unsigned int ind, const char *name, ProtobufCBinaryData *bin)
 		return;
 	}
 
-	for (i = 0; i < bin->len; i++)
-		snprintf(hex + (i * 2), 3, "%02" PRIx8, bin->data[i]);
+	if (bin->len == 0)
+		hex[0] = '\0';
+	else
+		for (i = 0; i < bin->len; i++)
+			snprintf(hex + (i * 2), 3, "%02" PRIx8, bin->data[i]);
 
 	dump_var(ind, name, "bytes", "%s", hex);
 	free(hex);
