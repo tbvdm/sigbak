@@ -40,12 +40,26 @@ sigbak should build without problems on Linux and the BSDs.
 If the build does fail, check if `config.h` is suited to your system. You may
 have to edit it. After editing `config.h`, run `make` to retry the build.
 
+Building on macOS
+-----------------
+
+To build sigbak on macOS, first install [Homebrew][8].
+
+Then install the required packages, clone the repository, switch to the
+`portable` branch and run `gmake`:
+
+	brew install libressl make pkg-config protobuf-c sqlite
+	git clone https://github.com/tbvdm/sigbak.git
+	cd sigbak
+	git checkout portable
+	PKG_CONFIG_PATH=$(brew --prefix)/opt/libressl/lib/pkgconfig gmake
+
 Reporting problems
 ------------------
 
 Please report bugs and other problems with sigbak. If sigbak shows errors or
 warnings unexpectedly, please report them as well. You can [open an issue on
-GitHub][8] or send an email. You can find my email address at the top of the
+GitHub][9] or send an email. You can find my email address at the top of the
 `sigbak.c` file.
 
 [1]: https://www.kariliq.nl/sigbak/
@@ -55,4 +69,5 @@ GitHub][8] or send an email. You can find my email address at the top of the
 [5]: https://www.openssl.org/
 [6]: https://github.com/protobuf-c/protobuf-c
 [7]: https://www.sqlite.org/
-[8]: https://github.com/tbvdm/sigbak/issues
+[8]: https://brew.sh/
+[9]: https://github.com/tbvdm/sigbak/issues
