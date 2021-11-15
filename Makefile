@@ -31,7 +31,8 @@ OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 
 .PHONY: all clean install
 
-.SUFFIXES: .c .o .pb-c.c .pb-c.h .pb-c.o .proto
+.SUFFIXES:
+.SUFFIXES: .c .pb-c.o .o .pb-c.c .pb-c.h .proto
 
 .c.o .pb-c.c.pb-c.o:
 	${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
