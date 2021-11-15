@@ -20,14 +20,14 @@ PROTO_HDRS=	${PROTOS:.proto=.pb-c.h}
 PROTO_SRCS=	${PROTOS:.proto=.pb-c.c}
 PROTO_OBJS=	${PROTO_SRCS:.c=.o}
 
-OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
-		cmd-messages.o cmd-sqlite.o cmd-threads.o mime.o sbk.o \
-		sigbak.o ${PROTO_OBJS}
-
-OBJS+=		compat/asprintf.o compat/err.o compat/explicit_bzero.o \
+COMPAT_OBJS=	compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/getprogname.o compat/hkdf.o \
 		compat/hmac_ctx_new.o compat/pledge.o compat/readpassphrase.o \
 		compat/reallocarray.o compat/strtonum.o compat/unveil.o
+
+OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
+		cmd-messages.o cmd-sqlite.o cmd-threads.o mime.o sbk.o \
+		sigbak.o ${PROTO_OBJS} ${COMPAT_OBJS}
 
 .PHONY: all clean install
 
