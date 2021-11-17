@@ -63,3 +63,28 @@ jobs:
         set +e
         ./sigbak check -p sigbak.c sigbak.c
         test $? = 1
+
+  # https://github.com/vmactions/freebsd-vm
+  freebsd:
+    strategy:
+      fail-fast: false
+      matrix:
+        ssl: [libressl, openssl]
+
+    runs-on: macos-10.15
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: run vm
+      uses: vmactions/freebsd-vm@v0.1.5
+      with:
+        usesh: true
+        prepare: pkg install -y pkgconf protobuf-c sqlite3 ${{ matrix.ssl }}
+        run: |
+          uname -a
+          make
+          set +e
+          ./sigbak check -p sigbak.c sigbak.c
+          test $? = 1
