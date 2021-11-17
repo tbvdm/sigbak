@@ -24,6 +24,13 @@ jobs:
     - name: build
       run: make
 
+    - name: run
+      # Run with bogus input files
+      run: |
+        set +e
+        ./sigbak check -p sigbak.c sigbak.c
+        test $? = 1
+
   macos:
     strategy:
       fail-fast: false
@@ -44,8 +51,7 @@ jobs:
         brew install make pkg-config protobuf-c sqlite ${{ matrix.ssl }}
 
     - name: build
-      # Set PKG_CONFIG_PATH as per the instructions from "brew install". See
-      # also:
+      # Set PKG_CONFIG_PATH as per the instructions from "brew install" and
       # https://docs.brew.sh/How-to-Build-Software-Outside-Homebrew-with-Homebrew-keg-only-Dependencies
       run: |
         PKG_CONFIG_PATH=$(brew --prefix)/opt/${{ matrix.ssl }}/lib/pkgconfig \
@@ -53,4 +59,7 @@ jobs:
 
     - name: run
       # Run with bogus input files
-      run: ./sigbak check -p sigbak.c sigbak.c || test $? = 1
+      run: |
+        set +e
+        ./sigbak check -p sigbak.c sigbak.c
+        test $? = 1
