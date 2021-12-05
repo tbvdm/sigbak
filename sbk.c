@@ -2532,8 +2532,9 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	}
 
 	memcpy(ctx->iv, frm->header->iv.data, SBK_IV_LEN);
-	ctx->counter = (ctx->iv[0] << 24) | (ctx->iv[1] << 16) |
-	    (ctx->iv[2] << 8) | ctx->iv[3];
+	ctx->counter =
+	    ((uint32_t)ctx->iv[0] << 24) | ((uint32_t)ctx->iv[1] << 16) |
+	    ((uint32_t)ctx->iv[2] <<  8) | ctx->iv[3];
 
 	if (frm->header->has_salt) {
 		salt = frm->header->salt.data;
