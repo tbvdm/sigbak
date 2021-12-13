@@ -37,6 +37,14 @@
 
 #include "readpassphrase.h"
 
+#ifndef _NSIG
+#  ifdef NSIG
+#    define _NSIG NSIG
+#  else
+#    define _NSIG 128
+#  endif
+#endif
+
 #ifndef TCSASOFT
 #define TCSASOFT 0
 #endif
