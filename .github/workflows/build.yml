@@ -100,7 +100,8 @@ jobs:
     - name: run vm
       uses: vmactions/solaris-vm@v0.0.3
       with:
-        prepare: pkgutil -iy gcc5core gmake libprotobuf_c_dev libsqlite3_dev \
+        prepare: |
+          pkgutil -iy gcc5core gmake libprotobuf_c_dev libsqlite3_dev \
           libssl_dev pkgconfig
         run: |
           uname -a
