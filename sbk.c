@@ -46,7 +46,7 @@
 #define SBK_MENTION_PLACEHOLDER	"\357\277\274"	/* U+FFFC */
 #define SBK_MENTION_PREFIX	"@"
 
-/* Based on SQLCipherOpenHelper.java in the Signal-Android repository */
+/* Based on SignalDatabaseMigrations.kt in the Signal-Android repository */
 #define SBK_DB_VERSION_RECIPIENT_IDS		24
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
