@@ -52,6 +52,7 @@
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
 #define SBK_DB_VERSION_MENTIONS			68
 #define SBK_DB_VERSION_THREAD_AUTOINCREMENT	108
+#define SBK_DB_VERSION_REACTION_REFACTOR	121
 
 #define sbk_warnx(ctx, ...)	warnx(__VA_ARGS__)
 
@@ -1779,6 +1780,13 @@ sbk_is_outgoing_message(const struct sbk_message *msg)
 }
 
 static void
+sbk_free_reaction(struct sbk_reaction *rct)
+{
+	free(rct->emoji);
+	free(rct);
+}
+
+static void
 sbk_free_reaction_list(struct sbk_reaction_list *lst)
 {
 	struct sbk_reaction *rct;
@@ -1786,12 +1794,15 @@ sbk_free_reaction_list(struct sbk_reaction_list *lst)
 	if (lst != NULL) {
 		while ((rct = SIMPLEQ_FIRST(lst)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			free(rct->emoji);
-			free(rct);
+			sbk_free_reaction(rct);
 		}
 		free(lst);
 	}
 }
+
+/*
+ * For database versions < SBK_DB_VERSION_REACTION_REFACTOR
+ */
 
 static Signal__ReactionList *
 sbk_unpack_reaction_list_message(struct sbk_ctx *ctx, const void *buf,
@@ -1813,8 +1824,8 @@ sbk_free_reaction_list_message(Signal__ReactionList *msg)
 }
 
 static int
-sbk_get_reactions(struct sbk_ctx *ctx, struct sbk_reaction_list **lst,
-    sqlite3_stmt *stm, int idx)
+sbk_get_reactions_from_column(struct sbk_ctx *ctx,
+    struct sbk_reaction_list **lst, sqlite3_stmt *stm, int idx)
 {
 	struct sbk_reaction	*rct;
 	struct sbk_recipient_id	 id;
@@ -1883,6 +1894,113 @@ error1:
 	sbk_free_reaction_list_message(msg);
 	*lst = NULL;
 	return -1;
+}
+
+/*
+ * For database versions >= SBK_DB_VERSION_REACTION_REFACTOR
+ */
+
+#define SBK_REACTIONS_QUERY						\
+	"SELECT "							\
+	"author_id, "							\
+	"date_sent, "							\
+	"date_received, "						\
+	"emoji "							\
+	"FROM reaction "						\
+	"WHERE message_id = ? AND is_mms = ? "				\
+	"ORDER BY date_sent"
+
+#define SBK_REACTIONS_COLUMN_AUTHOR_ID		0
+#define SBK_REACTIONS_COLUMN_DATE_SENT		1
+#define SBK_REACTIONS_COLUMN_DATE_RECEIVED	2
+#define SBK_REACTIONS_COLUMN_EMOJI		3
+
+static struct sbk_reaction *
+sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_reaction *rct;
+
+	if ((rct = calloc(1, sizeof *rct)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return NULL;
+	}
+
+	rct->recipient = sbk_get_recipient_from_column(ctx, stm,
+	    SBK_REACTIONS_COLUMN_AUTHOR_ID);
+	if (rct->recipient == NULL)
+		goto error;
+
+	if (sbk_sqlite_column_text_copy(ctx, &rct->emoji, stm,
+	    SBK_REACTIONS_COLUMN_EMOJI) == -1)
+		goto error;
+
+	rct->time_sent = sqlite3_column_int64(stm,
+	    SBK_REACTIONS_COLUMN_DATE_SENT);
+	rct->time_recv = sqlite3_column_int64(stm,
+	    SBK_REACTIONS_COLUMN_DATE_RECEIVED);
+
+	return rct;
+
+error:
+	sbk_free_reaction(rct);
+	return NULL;
+}
+
+static struct sbk_reaction_list *
+sbk_get_reactions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_reaction_list	*lst;
+	struct sbk_reaction		*rct;
+	int				 ret;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		goto error;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((rct = sbk_get_reaction(ctx, stm)) == NULL)
+			goto error;
+		SIMPLEQ_INSERT_TAIL(lst, rct, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_reaction_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+static int
+sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	sqlite3_stmt *stm;
+
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_REACTIONS_QUERY) == -1)
+		return -1;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
+		sqlite3_finalize(stm);
+		return -1;
+	}
+
+	if (sbk_sqlite_bind_int(ctx, stm, 2, msg->id.type == SBK_MESSAGE_MMS)
+	    == -1) {
+		sqlite3_finalize(stm);
+		return -1;
+	}
+
+	if ((msg->reactions = sbk_get_reactions(ctx, stm)) == NULL)
+		return -1;
+
+	return 0;
 }
 
 static int
@@ -2217,9 +2335,14 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 	}
 
-	if (sbk_get_reactions(ctx, &msg->reactions, stm,
-	    SBK_MESSAGES_COLUMN_REACTIONS) == -1)
-		goto error;
+	if (ctx->db_version < SBK_DB_VERSION_REACTION_REFACTOR) {
+		if (sbk_get_reactions_from_column(ctx, &msg->reactions, stm,
+		    SBK_MESSAGES_COLUMN_REACTIONS) == -1)
+			goto error;
+	} else {
+		if (sbk_get_reactions_from_table(ctx, msg) == -1)
+			goto error;
+	}
 
 	return msg;
 
