@@ -1778,6 +1778,21 @@ sbk_is_outgoing_message(const struct sbk_message *msg)
 	}
 }
 
+static void
+sbk_free_reaction_list(struct sbk_reaction_list *lst)
+{
+	struct sbk_reaction *rct;
+
+	if (lst != NULL) {
+		while ((rct = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			free(rct->emoji);
+			free(rct);
+		}
+		free(lst);
+	}
+}
+
 static Signal__ReactionList *
 sbk_unpack_reaction_list_message(struct sbk_ctx *ctx, const void *buf,
     size_t len)
@@ -1795,21 +1810,6 @@ sbk_free_reaction_list_message(Signal__ReactionList *msg)
 {
 	if (msg != NULL)
 		signal__reaction_list__free_unpacked(msg, NULL);
-}
-
-static void
-sbk_free_reaction_list(struct sbk_reaction_list *lst)
-{
-	struct sbk_reaction *rct;
-
-	if (lst != NULL) {
-		while ((rct = SIMPLEQ_FIRST(lst)) != NULL) {
-			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			free(rct->emoji);
-			free(rct);
-		}
-		free(lst);
-	}
 }
 
 static int
