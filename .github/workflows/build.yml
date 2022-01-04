@@ -124,7 +124,7 @@ jobs:
     - name: install Cygwin
       uses: cygwin/cygwin-install-action@master
       with:
-        packages: |
+        packages: >
           curl gcc-core gcc-g++ libprotobuf-devel libsqlite3-devel libssl-devel
           make pkg-config
 
