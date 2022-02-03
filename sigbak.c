@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <ctype.h>
 #include <err.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -43,7 +44,7 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 		return -1;
 
 	if (passfile == NULL) {
-		if (readpassphrase("Enter 30-digit passphrase (spaces are "
+		if (readpassphrase("Enter 30-digit passphrase (whitespace is "
 		    "ignored): ", buf, bufsize, 0) == NULL) {
 			warnx("Cannot read passphrase");
 			explicit_bzero(buf, bufsize);
@@ -73,9 +74,9 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 		close(fd);
 	}
 
-	/* Remove spaces */
+	/* Remove whitespace */
 	for (c = d = buf; *c != '\0'; c++)
-		if (*c != ' ')
+		if (!isspace((unsigned char)*c))
 			*d++ = *c;
 	*d = '\0';
 
