@@ -56,12 +56,8 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 			return -1;
 		}
 
-		if ((len = read(fd, buf, bufsize - 1)) <= 0) {
-			if (len == -1)
-				warn("%s", passfile);
-			else
-				warnx("%s: Empty file", passfile);
-
+		if ((len = read(fd, buf, bufsize - 1)) == -1) {
+			warn("%s", passfile);
 			explicit_bzero(buf, bufsize);
 			close(fd);
 			return -1;
