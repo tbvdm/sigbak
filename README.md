@@ -92,6 +92,11 @@ Now you can build and install sigbak. Run the following commands:
 	git checkout portable
 	PKG_CONFIG_PATH=/usr/local/lib/pkgconfig make install
 
+If you wish, you can also use [this PowerShell script][12] to install Cygwin
+and sigbak automatically. To use it, first download the script file. Then
+navigate to the folder where you saved the script file. Right-click the script
+file and then click "Run with PowerShell".
+
 You can access your Windows drives through the `/cygdrive` directory. For
 example:
 
@@ -103,7 +108,7 @@ Reporting problems
 
 Please report bugs and other problems with sigbak. If sigbak shows errors or
 warnings unexpectedly, please report them as well. You can [open an issue on
-GitHub][12] or send an email. You can find my email address at the top of the
+GitHub][13] or send an email. You can find my email address at the top of the
 `sigbak.c` file.
 
 [1]: https://www.kariliq.nl/sigbak/
@@ -117,4 +122,5 @@ GitHub][12] or send an email. You can find my email address at the top of the
 [9]: https://github.com/tbvdm/homebrew-tap
 [10]: https://cygwin.com/
 [11]: https://cygwin.com/cygwin-ug-net/setup-net.html#internet-setup
-[12]: https://github.com/tbvdm/sigbak/issues
+[12]: https://www.kariliq.nl/sigbak/install-cygwin-sigbak.ps1
+[13]: https://github.com/tbvdm/sigbak/issues

@@ -1780,8 +1780,10 @@ sbk_is_outgoing_message(const struct sbk_message *msg)
 static void
 sbk_free_reaction(struct sbk_reaction *rct)
 {
-	free(rct->emoji);
-	free(rct);
+	if (rct != NULL) {
+		free(rct->emoji);
+		free(rct);
+	}
 }
 
 static void

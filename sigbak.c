@@ -16,6 +16,7 @@
 
 #include "config.h"
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdio.h>
@@ -43,7 +44,7 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 		return -1;
 
 	if (passfile == NULL) {
-		if (readpassphrase("Enter 30-digit passphrase (spaces are "
+		if (readpassphrase("Enter 30-digit passphrase (whitespace is "
 		    "ignored): ", buf, bufsize, 0) == NULL) {
 			warnx("Cannot read passphrase");
 			explicit_bzero(buf, bufsize);
@@ -55,12 +56,8 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 			return -1;
 		}
 
-		if ((len = read(fd, buf, bufsize - 1)) <= 0) {
-			if (len == -1)
-				warn("%s", passfile);
-			else
-				warnx("%s: Empty file", passfile);
-
+		if ((len = read(fd, buf, bufsize - 1)) == -1) {
+			warn("%s", passfile);
 			explicit_bzero(buf, bufsize);
 			close(fd);
 			return -1;
@@ -73,9 +70,9 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 		close(fd);
 	}
 
-	/* Remove spaces */
+	/* Remove whitespace */
 	for (c = d = buf; *c != '\0'; c++)
-		if (*c != ' ')
+		if (!isspace((unsigned char)*c))
 			*d++ = *c;
 	*d = '\0';
 
