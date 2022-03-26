@@ -301,8 +301,8 @@ maildir_base64_encode(const char *in, size_t inlen, size_t *outlen)
 		return NULL;
 	}
 
-	*outlen = EVP_EncodeBlock((unsigned char *)out, (unsigned char *)in,
-	    inlen);
+	*outlen = EVP_EncodeBlock((unsigned char *)out,
+	    (const unsigned char *)in, inlen);
 	return out;
 }
 
