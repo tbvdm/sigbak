@@ -28,15 +28,16 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+
 #include <sqlite3.h>
 
 #include "sigbak.h"
 
 #define SBK_IV_LEN		16
 #define SBK_KEY_LEN		32
-#define SBK_CIPHERKEY_LEN	32
-#define SBK_MACKEY_LEN		32
-#define SBK_DERIVKEY_LEN	(SBK_CIPHERKEY_LEN + SBK_MACKEY_LEN)
+#define SBK_CIPHER_KEY_LEN	32
+#define SBK_MAC_KEY_LEN		32
+#define SBK_DERIV_KEY_LEN	(SBK_CIPHER_KEY_LEN + SBK_MAC_KEY_LEN)
 #define SBK_MAC_LEN		10
 #define SBK_ROUNDS		250000
 #define SBK_HKDF_INFO		"Backup Export"
@@ -88,10 +89,10 @@ struct sbk_ctx {
 	unsigned int	 db_version;
 	struct sbk_attachment_tree attachments;
 	struct sbk_recipient_tree recipients;
-	EVP_CIPHER_CTX	*cipher;
-	HMAC_CTX	*hmac;
-	unsigned char	 cipherkey[SBK_CIPHERKEY_LEN];
-	unsigned char	 mackey[SBK_MACKEY_LEN];
+	EVP_CIPHER_CTX	*cipher_ctx;
+	HMAC_CTX	*hmac_ctx;
+	unsigned char	 cipher_key[SBK_CIPHER_KEY_LEN];
+	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	uint32_t	 counter;
 	unsigned char	*ibuf;
@@ -232,18 +233,18 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 static int
 sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
+	if (!HMAC_Init_ex(ctx->hmac_ctx, NULL, 0, NULL, NULL)) {
+		sbk_error_setx(ctx, "Cannot initialise MAC");
+		return -1;
+	}
+
 	ctx->iv[0] = counter >> 24;
 	ctx->iv[1] = counter >> 16;
 	ctx->iv[2] = counter >> 8;
 	ctx->iv[3] = counter;
 
-	if (HMAC_Init_ex(ctx->hmac, NULL, 0, NULL, NULL) == 0) {
-		sbk_error_setx(ctx, "Cannot initialise HMAC");
-		return -1;
-	}
-
-	if (EVP_DecryptInit_ex(ctx->cipher, NULL, NULL, ctx->cipherkey,
-	    ctx->iv) == 0) {
+	if (!EVP_DecryptInit_ex(ctx->cipher_ctx, NULL, NULL, ctx->cipher_key,
+	    ctx->iv)) {
 		sbk_error_setx(ctx, "Cannot initialise cipher");
 		return -1;
 	}
@@ -256,13 +257,13 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 {
 	int len;
 
-	if (HMAC_Update(ctx->hmac, ctx->ibuf, ibuflen) == 0) {
-		sbk_error_setx(ctx, "Cannot compute HMAC");
+	if (!HMAC_Update(ctx->hmac_ctx, ctx->ibuf, ibuflen)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
 		return -1;
 	}
 
-	if (EVP_DecryptUpdate(ctx->cipher, ctx->obuf, &len, ctx->ibuf,
-	    ibuflen) == 0) {
+	if (!EVP_DecryptUpdate(ctx->cipher_ctx, ctx->obuf, &len, ctx->ibuf,
+	    ibuflen)) {
 		sbk_error_setx(ctx, "Cannot decrypt data");
 		return -1;
 	}
@@ -279,24 +280,23 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 	unsigned int	ourmaclen;
 	int		len;
 
-	if (EVP_DecryptFinal_ex(ctx->cipher, ctx->obuf + *obuflen, &len) ==
-	    0) {
+	if (!HMAC_Final(ctx->hmac_ctx, ourmac, &ourmaclen)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
+		return -1;
+	}
+
+	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
+		sbk_error_setx(ctx, "MAC mismatch");
+		return -1;
+	}
+
+	if (!EVP_DecryptFinal_ex(ctx->cipher_ctx, ctx->obuf + *obuflen,
+	    &len)) {
 		sbk_error_setx(ctx, "Cannot decrypt data");
 		return -1;
 	}
 
 	*obuflen += len;
-
-	if (HMAC_Final(ctx->hmac, ourmac, &ourmaclen) == 0) {
-		sbk_error_setx(ctx, "Cannot compute HMAC");
-		return -1;
-	}
-
-	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
-		sbk_error_setx(ctx, "HMAC mismatch");
-		return -1;
-	}
-
 	return 0;
 }
 
@@ -526,8 +526,8 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
 		return -1;
 
-	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
-		sbk_error_setx(ctx, "Cannot compute HMAC");
+	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
 		return -1;
 	}
 
@@ -600,8 +600,8 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
 		goto error;
 
-	if (HMAC_Update(ctx->hmac, ctx->iv, SBK_IV_LEN) == 0) {
-		sbk_error_setx(ctx, "Cannot compute HMAC");
+	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
 		goto error;
 	}
 
@@ -2535,45 +2535,62 @@ static int
 sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
     const unsigned char *salt, size_t saltlen)
 {
-	unsigned char	key[SHA512_DIGEST_LENGTH];
-	unsigned char	derivkey[SBK_DERIVKEY_LEN];
-	SHA512_CTX	sha;
-	size_t		passphrlen;
-	int		i, ret;
+	EVP_MD_CTX	*md_ctx;
+	unsigned char	 key[SHA512_DIGEST_LENGTH];
+	unsigned char	 deriv_key[SBK_DERIV_KEY_LEN];
+	size_t		 passphrlen;
+	int		 i, ret;
+
+	if ((md_ctx = EVP_MD_CTX_new()) == NULL)
+		goto error;
 
 	passphrlen = strlen(passphr);
 
 	/* The first round */
-	SHA512_Init(&sha);
+	if (!EVP_DigestInit_ex(md_ctx, EVP_sha512(), NULL))
+		goto error;
 	if (salt != NULL)
-		SHA512_Update(&sha, salt, saltlen);
-	SHA512_Update(&sha, passphr, passphrlen);
-	SHA512_Update(&sha, passphr, passphrlen);
-	SHA512_Final(key, &sha);
+		if (!EVP_DigestUpdate(md_ctx, salt, saltlen))
+			goto error;
+	if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
+		goto error;
+	if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
+		goto error;
+	if (!EVP_DigestFinal_ex(md_ctx, key, NULL))
+		goto error;
 
 	/* The remaining rounds */
 	for (i = 0; i < SBK_ROUNDS - 1; i++) {
-		SHA512_Init(&sha);
-		SHA512_Update(&sha, key, sizeof key);
-		SHA512_Update(&sha, passphr, passphrlen);
-		SHA512_Final(key, &sha);
+		if (!EVP_DigestInit_ex(md_ctx, EVP_sha512(), NULL))
+			goto error;
+		if (!EVP_DigestUpdate(md_ctx, key, sizeof key))
+			goto error;
+		if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
+			goto error;
+		if (!EVP_DigestFinal(md_ctx, key, NULL))
+			goto error;
 	}
 
-	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN,
+	if (!HKDF(deriv_key, sizeof deriv_key, EVP_sha256(), key, SBK_KEY_LEN,
 	    (const unsigned char *)"", 0, (const unsigned char *)SBK_HKDF_INFO,
-	    strlen(SBK_HKDF_INFO)) == 0) {
-		sbk_error_setx(ctx, "Cannot compute keys");
-		ret = -1;
-	} else {
-		memcpy(ctx->cipherkey, derivkey, SBK_CIPHERKEY_LEN);
-		memcpy(ctx->mackey, derivkey + SBK_CIPHERKEY_LEN,
-		    SBK_MACKEY_LEN);
-		ret = 0;
-	}
+	    strlen(SBK_HKDF_INFO)))
+		goto error;
 
+	memcpy(ctx->cipher_key, deriv_key, SBK_CIPHER_KEY_LEN);
+	memcpy(ctx->mac_key, deriv_key + SBK_CIPHER_KEY_LEN, SBK_MAC_KEY_LEN);
+
+	ret = 0;
+	goto out;
+
+error:
+	sbk_error_setx(ctx, "Cannot compute keys");
+	ret = -1;
+
+out:
 	explicit_bzero(key, sizeof key);
-	explicit_bzero(derivkey, sizeof derivkey);
-	explicit_bzero(&sha, sizeof sha);
+	explicit_bzero(deriv_key, sizeof deriv_key);
+	if (md_ctx != NULL)
+		EVP_MD_CTX_free(md_ctx);
 	return ret;
 }
 
@@ -2585,17 +2602,17 @@ sbk_ctx_new(void)
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
-	ctx->hmac = NULL;
+	ctx->hmac_ctx = NULL;
 	ctx->ibuf = NULL;
 	ctx->obuf = NULL;
 	ctx->ibufsize = 0;
 	ctx->obufsize = 0;
 	ctx->error = NULL;
 
-	if ((ctx->cipher = EVP_CIPHER_CTX_new()) == NULL)
+	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL)
 		goto error;
 
-	if ((ctx->hmac = HMAC_CTX_new()) == NULL)
+	if ((ctx->hmac_ctx = HMAC_CTX_new()) == NULL)
 		goto error;
 
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
@@ -2613,8 +2630,8 @@ sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	if (ctx != NULL) {
 		sbk_error_clear(ctx);
-		EVP_CIPHER_CTX_free(ctx->cipher);
-		HMAC_CTX_free(ctx->hmac);
+		EVP_CIPHER_CTX_free(ctx->cipher_ctx);
+		HMAC_CTX_free(ctx->hmac_ctx);
 		free(ctx->ibuf);
 		free(ctx->obuf);
 		free(ctx);
@@ -2670,15 +2687,15 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	if (sbk_compute_keys(ctx, passphr, salt, saltlen) == -1)
 		goto error;
 
-	if (EVP_DecryptInit_ex(ctx->cipher, EVP_aes_256_ctr(), NULL, NULL,
-	    NULL) == 0) {
+	if (!EVP_DecryptInit_ex(ctx->cipher_ctx, EVP_aes_256_ctr(), NULL, NULL,
+	    NULL)) {
 		sbk_error_setx(ctx, "Cannot initialise cipher");
 		goto error;
 	}
 
-	if (HMAC_Init_ex(ctx->hmac, ctx->mackey, SBK_MACKEY_LEN, EVP_sha256(),
-	    NULL) == 0) {
-		sbk_error_setx(ctx, "Cannot initialise HMAC");
+	if (!HMAC_Init_ex(ctx->hmac_ctx, ctx->mac_key, SBK_MAC_KEY_LEN,
+	    EVP_sha256(), NULL)) {
+		sbk_error_setx(ctx, "Cannot initialise MAC");
 		goto error;
 	}
 
@@ -2693,8 +2710,8 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	return 0;
 
 error:
-	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
-	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
+	explicit_bzero(ctx->cipher_key, SBK_CIPHER_KEY_LEN);
+	explicit_bzero(ctx->mac_key, SBK_MAC_KEY_LEN);
 	sbk_free_frame(frm);
 	fclose(ctx->fp);
 	return -1;
@@ -2705,8 +2722,8 @@ sbk_close(struct sbk_ctx *ctx)
 {
 	sbk_free_recipient_tree(ctx);
 	sbk_free_attachment_tree(ctx);
-	explicit_bzero(ctx->cipherkey, SBK_CIPHERKEY_LEN);
-	explicit_bzero(ctx->mackey, SBK_MACKEY_LEN);
+	explicit_bzero(ctx->cipher_key, SBK_CIPHER_KEY_LEN);
+	explicit_bzero(ctx->mac_key, SBK_MAC_KEY_LEN);
 	sqlite3_close(ctx->db);
 	fclose(ctx->fp);
 }
