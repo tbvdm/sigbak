@@ -2546,33 +2546,46 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 	passphrlen = strlen(passphr);
 
 	/* The first round */
-	SHA512_Init(&sha);
+	if (!SHA512_Init(&sha))
+		goto error;
 	if (salt != NULL)
-		SHA512_Update(&sha, salt, saltlen);
-	SHA512_Update(&sha, passphr, passphrlen);
-	SHA512_Update(&sha, passphr, passphrlen);
-	SHA512_Final(key, &sha);
+		if (!SHA512_Update(&sha, salt, saltlen))
+			goto error;
+	if (!SHA512_Update(&sha, passphr, passphrlen))
+		goto error;
+	if (!SHA512_Update(&sha, passphr, passphrlen))
+		goto error;
+	if (!SHA512_Final(key, &sha))
+		goto error;
 
 	/* The remaining rounds */
 	for (i = 0; i < SBK_ROUNDS - 1; i++) {
-		SHA512_Init(&sha);
-		SHA512_Update(&sha, key, sizeof key);
-		SHA512_Update(&sha, passphr, passphrlen);
-		SHA512_Final(key, &sha);
+		if (!SHA512_Init(&sha))
+			goto error;
+		if (!SHA512_Update(&sha, key, sizeof key))
+			goto error;
+		if (!SHA512_Update(&sha, passphr, passphrlen))
+			goto error;
+		if (!SHA512_Final(key, &sha))
+			goto error;
 	}
 
 	if (HKDF(derivkey, sizeof derivkey, EVP_sha256(), key, SBK_KEY_LEN,
 	    (const unsigned char *)"", 0, (const unsigned char *)SBK_HKDF_INFO,
-	    strlen(SBK_HKDF_INFO)) == 0) {
-		sbk_error_setx(ctx, "Cannot compute keys");
-		ret = -1;
-	} else {
-		memcpy(ctx->cipherkey, derivkey, SBK_CIPHERKEY_LEN);
-		memcpy(ctx->mackey, derivkey + SBK_CIPHERKEY_LEN,
-		    SBK_MACKEY_LEN);
-		ret = 0;
-	}
+	    strlen(SBK_HKDF_INFO)) == 0)
+		goto error;
 
+	memcpy(ctx->cipherkey, derivkey, SBK_CIPHERKEY_LEN);
+	memcpy(ctx->mackey, derivkey + SBK_CIPHERKEY_LEN, SBK_MACKEY_LEN);
+
+	ret = 0;
+	goto out;
+
+error:
+	sbk_error_setx(ctx, "Cannot compute keys");
+	ret = -1;
+
+out:
 	explicit_bzero(key, sizeof key);
 	explicit_bzero(derivkey, sizeof derivkey);
 	explicit_bzero(&sha, sizeof sha);
