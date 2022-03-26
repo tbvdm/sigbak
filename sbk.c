@@ -2537,36 +2537,39 @@ static int
 sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
     const unsigned char *salt, size_t saltlen)
 {
-	unsigned char	key[SHA512_DIGEST_LENGTH];
-	unsigned char	derivkey[SBK_DERIVKEY_LEN];
-	SHA512_CTX	sha;
-	size_t		passphrlen;
-	int		i, ret;
+	EVP_MD_CTX	*md_ctx;
+	unsigned char	 key[SHA512_DIGEST_LENGTH];
+	unsigned char	 derivkey[SBK_DERIVKEY_LEN];
+	size_t		 passphrlen;
+	int		 i, ret;
+
+	if ((md_ctx = EVP_MD_CTX_new()) == NULL)
+		goto error;
 
 	passphrlen = strlen(passphr);
 
 	/* The first round */
-	if (!SHA512_Init(&sha))
+	if (!EVP_DigestInit_ex(md_ctx, EVP_sha512(), NULL))
 		goto error;
 	if (salt != NULL)
-		if (!SHA512_Update(&sha, salt, saltlen))
+		if (!EVP_DigestUpdate(md_ctx, salt, saltlen))
 			goto error;
-	if (!SHA512_Update(&sha, passphr, passphrlen))
+	if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
 		goto error;
-	if (!SHA512_Update(&sha, passphr, passphrlen))
+	if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
 		goto error;
-	if (!SHA512_Final(key, &sha))
+	if (!EVP_DigestFinal_ex(md_ctx, key, NULL))
 		goto error;
 
 	/* The remaining rounds */
 	for (i = 0; i < SBK_ROUNDS - 1; i++) {
-		if (!SHA512_Init(&sha))
+		if (!EVP_DigestInit_ex(md_ctx, EVP_sha512(), NULL))
 			goto error;
-		if (!SHA512_Update(&sha, key, sizeof key))
+		if (!EVP_DigestUpdate(md_ctx, key, sizeof key))
 			goto error;
-		if (!SHA512_Update(&sha, passphr, passphrlen))
+		if (!EVP_DigestUpdate(md_ctx, passphr, passphrlen))
 			goto error;
-		if (!SHA512_Final(key, &sha))
+		if (!EVP_DigestFinal(md_ctx, key, NULL))
 			goto error;
 	}
 
@@ -2588,7 +2591,8 @@ error:
 out:
 	explicit_bzero(key, sizeof key);
 	explicit_bzero(derivkey, sizeof derivkey);
-	explicit_bzero(&sha, sizeof sha);
+	if (md_ctx != NULL)
+		EVP_MD_CTX_free(md_ctx);
 	return ret;
 }
 
