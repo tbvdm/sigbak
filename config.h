@@ -218,10 +218,12 @@
 #    define HAVE_HKDF
 #  endif
 #  if LIBRESSL_VERSION_NUMBER >= 0x2070000fL
+#    define HAVE_EVP_MD_CTX_NEW
 #    define HAVE_HMAC_CTX_NEW
 #  endif
 #else
 #  if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#    define HAVE_EVP_MD_CTX_NEW
 #    define HAVE_HMAC_CTX_NEW
 #  endif
 #endif

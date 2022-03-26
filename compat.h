@@ -67,6 +67,11 @@ void	 vwarnc(int, const char *, va_list);
 void	 vwarnx(const char *, va_list);
 #endif
 
+#ifndef HAVE_EVP_MD_CTX_NEW
+#define EVP_MD_CTX_new	EVP_MD_CTX_create
+#define EVP_MD_CTX_free	EVP_MD_CTX_destroy
+#endif
+
 #ifdef HAVE_EXPLICIT_BZERO
 #include <strings.h> /* For FreeBSD */
 #else
