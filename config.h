@@ -226,4 +226,7 @@
 #    define HAVE_EVP_MD_CTX_NEW
 #    define HAVE_HMAC_CTX_NEW
 #  endif
+#  if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#    define HAVE_EVP_MAC
+#  endif
 #endif

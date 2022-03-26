@@ -22,6 +22,9 @@
 #include <string.h>
 
 #include <openssl/err.h>
+#ifdef HAVE_EVP_MAC
+#include <openssl/evp.h>
+#endif
 #include <openssl/hmac.h>
 
 #include "../compat.h"
@@ -76,7 +79,13 @@ HKDF_expand(uint8_t *out_key, size_t out_len,
 	size_t n, done = 0;
 	unsigned int i;
 	int ret = 0;
+#ifdef HAVE_EVP_MAC
+	EVP_MAC *mac;
+	EVP_MAC_CTX *mac_ctx = NULL;
+	OSSL_PARAM params[3];
+#else
 	HMAC_CTX *hmac;
+#endif
 
 	/* Expand key material to desired length. */
 	n = (out_len + digest_len - 1) / digest_len;
@@ -84,16 +93,42 @@ HKDF_expand(uint8_t *out_key, size_t out_len,
 		return 0;
 	}
 
+#ifdef HAVE_EVP_MAC
+	if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL)
+		goto out;
+
+	if ((mac_ctx = EVP_MAC_CTX_new(mac)) == NULL)
+		goto out;
+
+	params[0] = OSSL_PARAM_construct_octet_string("key", (uint8_t *)prk,
+	    prk_len);
+	params[1] = OSSL_PARAM_construct_utf8_string("digest",
+	    (char *)EVP_MD_get0_name(digest), 0);
+	params[2] = OSSL_PARAM_construct_end();
+#else
 	if ((hmac = HMAC_CTX_new()) == NULL)
 		goto out;
 
 	if (!HMAC_Init_ex(hmac, prk, prk_len, digest, NULL))
 		goto out;
+#endif
 
 	for (i = 0; i < n; i++) {
 		uint8_t ctr = i + 1;
 		size_t todo;
 
+#ifdef HAVE_EVP_MAC
+		if (!EVP_MAC_init(mac_ctx, NULL, 0, params))
+			goto out;
+
+		if (i != 0 && !EVP_MAC_update(mac_ctx, previous, digest_len))
+			goto out;
+
+		if (!EVP_MAC_update(mac_ctx, info, info_len) ||
+		    !EVP_MAC_update(mac_ctx, &ctr, 1) ||
+		    !EVP_MAC_final(mac_ctx, previous, NULL, sizeof(previous)))
+			goto out;
+#else
 		if (i != 0 && (!HMAC_Init_ex(hmac, NULL, 0, NULL, NULL) ||
 		    !HMAC_Update(hmac, previous, digest_len)))
 			goto out;
@@ -102,6 +137,7 @@ HKDF_expand(uint8_t *out_key, size_t out_len,
 		    !HMAC_Update(hmac, &ctr, 1) ||
 		    !HMAC_Final(hmac, previous, NULL))
 			goto out;
+#endif
 
 		todo = digest_len;
 		if (done + todo > out_len)
@@ -114,7 +150,12 @@ HKDF_expand(uint8_t *out_key, size_t out_len,
 	ret = 1;
 
  out:
+#ifdef HAVE_EVP_MAC
+	EVP_MAC_CTX_free(mac_ctx);
+	EVP_MAC_free(mac);
+#else
 	HMAC_CTX_free(hmac);
+#endif
 	explicit_bzero(previous, sizeof(previous));
 	return ret;
 }

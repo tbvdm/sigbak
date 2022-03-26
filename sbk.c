@@ -26,7 +26,9 @@
 #include <strings.h>
 
 #include <openssl/evp.h>
+#ifndef HAVE_EVP_MAC
 #include <openssl/hmac.h>
+#endif
 #include <openssl/sha.h>
 
 #include <sqlite3.h>
@@ -90,7 +92,12 @@ struct sbk_ctx {
 	struct sbk_attachment_tree attachments;
 	struct sbk_recipient_tree recipients;
 	EVP_CIPHER_CTX	*cipher_ctx;
+#ifdef HAVE_EVP_MAC
+	EVP_MAC_CTX	*mac_ctx;
+	OSSL_PARAM	 params[3];
+#else
 	HMAC_CTX	*hmac_ctx;
+#endif
 	unsigned char	 cipher_key[SBK_CIPHER_KEY_LEN];
 	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
@@ -233,10 +240,17 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 static int
 sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
+#ifdef HAVE_EVP_MAC
+	if (!EVP_MAC_init(ctx->mac_ctx, NULL, 0, ctx->params)) {
+		sbk_error_setx(ctx, "Cannot initialise MAC");
+		return -1;
+	}
+#else
 	if (!HMAC_Init_ex(ctx->hmac_ctx, NULL, 0, NULL, NULL)) {
 		sbk_error_setx(ctx, "Cannot initialise MAC");
 		return -1;
 	}
+#endif
 
 	ctx->iv[0] = counter >> 24;
 	ctx->iv[1] = counter >> 16;
@@ -257,10 +271,17 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 {
 	int len;
 
+#ifdef HAVE_EVP_MAC
+	if (!EVP_MAC_update(ctx->mac_ctx, ctx->ibuf, ibuflen)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
+		return -1;
+	}
+#else
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->ibuf, ibuflen)) {
 		sbk_error_setx(ctx, "Cannot compute MAC");
 		return -1;
 	}
+#endif
 
 	if (!EVP_DecryptUpdate(ctx->cipher_ctx, ctx->obuf, &len, ctx->ibuf,
 	    ibuflen)) {
@@ -277,13 +298,24 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
     const unsigned char *theirmac)
 {
 	unsigned char	ourmac[EVP_MAX_MD_SIZE];
+#ifdef HAVE_EVP_MAC
+	size_t		ourmaclen;
+#else
 	unsigned int	ourmaclen;
+#endif
 	int		len;
 
+#ifdef HAVE_EVP_MAC
+	if (!EVP_MAC_final(ctx->mac_ctx, ourmac, &ourmaclen, sizeof ourmac)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
+		return -1;
+	}
+#else
 	if (!HMAC_Final(ctx->hmac_ctx, ourmac, &ourmaclen)) {
 		sbk_error_setx(ctx, "Cannot compute MAC");
 		return -1;
 	}
+#endif
 
 	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
 		sbk_error_setx(ctx, "MAC mismatch");
@@ -526,10 +558,17 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
 		return -1;
 
+#ifdef HAVE_EVP_MAC
+	if (!EVP_MAC_update(ctx->mac_ctx, ctx->iv, SBK_IV_LEN)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
+		return -1;
+	}
+#else
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
 		sbk_error_setx(ctx, "Cannot compute MAC");
 		return -1;
 	}
+#endif
 
 	for (len = file->len; len > 0; len -= ibuflen) {
 		ibuflen = (len < BUFSIZ) ? len : BUFSIZ;
@@ -600,10 +639,17 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 	if (sbk_decrypt_init(ctx, file->counter) == -1)
 		goto error;
 
+#ifdef HAVE_EVP_MAC
+	if (!EVP_MAC_update(ctx->mac_ctx, ctx->iv, SBK_IV_LEN)) {
+		sbk_error_setx(ctx, "Cannot compute MAC");
+		goto error;
+	}
+#else
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
 		sbk_error_setx(ctx, "Cannot compute MAC");
 		goto error;
 	}
+#endif
 
 	ptr = obuf;
 
@@ -2598,11 +2644,18 @@ struct sbk_ctx *
 sbk_ctx_new(void)
 {
 	struct sbk_ctx *ctx;
+#ifdef HAVE_EVP_MAC
+	EVP_MAC *mac;
+#endif
 
 	if ((ctx = malloc(sizeof *ctx)) == NULL)
 		return NULL;
 
+#ifdef HAVE_EVP_MAC
+	ctx->mac_ctx = NULL;
+#else
 	ctx->hmac_ctx = NULL;
+#endif
 	ctx->ibuf = NULL;
 	ctx->obuf = NULL;
 	ctx->ibufsize = 0;
@@ -2612,8 +2665,20 @@ sbk_ctx_new(void)
 	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL)
 		goto error;
 
+#ifdef HAVE_EVP_MAC
+	if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL)
+		goto error;
+
+	if ((ctx->mac_ctx = EVP_MAC_CTX_new(mac)) == NULL) {
+		EVP_MAC_free(mac);
+		goto error;
+	}
+
+	EVP_MAC_free(mac);
+#else
 	if ((ctx->hmac_ctx = HMAC_CTX_new()) == NULL)
 		goto error;
+#endif
 
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
 		goto error;
@@ -2631,7 +2696,11 @@ sbk_ctx_free(struct sbk_ctx *ctx)
 	if (ctx != NULL) {
 		sbk_error_clear(ctx);
 		EVP_CIPHER_CTX_free(ctx->cipher_ctx);
+#ifdef HAVE_EVP_MAC
+		EVP_MAC_CTX_free(ctx->mac_ctx);
+#else
 		HMAC_CTX_free(ctx->hmac_ctx);
+#endif
 		free(ctx->ibuf);
 		free(ctx->obuf);
 		free(ctx);
@@ -2693,11 +2762,19 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error;
 	}
 
+#ifdef HAVE_EVP_MAC
+	ctx->params[0] = OSSL_PARAM_construct_octet_string("key", ctx->mac_key,
+	    SBK_MAC_KEY_LEN);
+	ctx->params[1] = OSSL_PARAM_construct_utf8_string("digest", "SHA256",
+	    0);
+	ctx->params[2] = OSSL_PARAM_construct_end();
+#else
 	if (!HMAC_Init_ex(ctx->hmac_ctx, ctx->mac_key, SBK_MAC_KEY_LEN,
 	    EVP_sha256(), NULL)) {
 		sbk_error_setx(ctx, "Cannot initialise MAC");
 		goto error;
 	}
+#endif
 
 	if (sbk_rewind(ctx) == -1)
 		goto error;
