@@ -48,6 +48,7 @@
 #define SBK_MENTION_PREFIX	"@"
 
 /* Based on SignalDatabaseMigrations.kt in the Signal-Android repository */
+#define SBK_DB_VERSION_QUOTED_REPLIES		7
 #define SBK_DB_VERSION_RECIPIENT_IDS		24
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
@@ -1425,7 +1426,20 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
-#define SBK_ATTACHMENTS_SELECT						\
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_SELECT_1					\
+	"SELECT "							\
+	"file_name, "							\
+	"ct, "								\
+	"_id, "								\
+	"unique_id, "							\
+	"pending_push, "						\
+	"data_size, "							\
+	"0 AS quote "							\
+	"FROM part "
+
+/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_SELECT_2					\
 	"SELECT "							\
 	"file_name, "							\
 	"ct, "								\
@@ -1439,22 +1453,29 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	"WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
 
 #define SBK_ATTACHMENTS_WHERE_MESSAGE					\
-	"WHERE mid = ? "
+	"WHERE mid = ? AND quote = 0 "
 
 #define SBK_ATTACHMENTS_ORDER						\
 	"ORDER BY unique_id, _id"
 
 #define SBK_ATTACHMENTS_QUERY_ALL					\
-	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_ORDER
 
 #define SBK_ATTACHMENTS_QUERY_THREAD					\
-	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_WHERE_THREAD					\
 	SBK_ATTACHMENTS_ORDER
 
-#define SBK_ATTACHMENTS_QUERY_MESSAGE					\
-	SBK_ATTACHMENTS_SELECT						\
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_QUERY_MESSAGE_1					\
+	SBK_ATTACHMENTS_SELECT_1					\
+	SBK_ATTACHMENTS_WHERE_MESSAGE					\
+	SBK_ATTACHMENTS_ORDER
+
+/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_QUERY_MESSAGE_2					\
+	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
@@ -1579,12 +1600,18 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 static int
 sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
-	sqlite3_stmt *stm;
+	sqlite3_stmt	*stm;
+	const char	*query;
 
 	if (msg->id.type != SBK_MESSAGE_MMS)
 		return 0;
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) == -1)
+	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
+		query = SBK_ATTACHMENTS_QUERY_MESSAGE_1;
+	else
+		query = SBK_ATTACHMENTS_QUERY_MESSAGE_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
