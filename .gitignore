@@ -1,6 +1,5 @@
-*.d
-*.o
-*.pb-c.[ch]
-*.swp
-sigbak
-tags
+*.[do]
+/*.pb-c.[ch]
+/obj/
+/sigbak
+/tags
