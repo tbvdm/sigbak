@@ -48,6 +48,7 @@
 #define SBK_MENTION_PREFIX	"@"
 
 /* Based on SignalDatabaseMigrations.kt in the Signal-Android repository */
+#define SBK_DB_VERSION_QUOTED_REPLIES		7
 #define SBK_DB_VERSION_RECIPIENT_IDS		24
 #define SBK_DB_VERSION_REACTIONS		37
 #define SBK_DB_VERSION_SPLIT_PROFILE_NAMES	43
@@ -1469,7 +1470,20 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
-#define SBK_ATTACHMENTS_SELECT						\
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_SELECT_1					\
+	"SELECT "							\
+	"file_name, "							\
+	"ct, "								\
+	"_id, "								\
+	"unique_id, "							\
+	"pending_push, "						\
+	"data_size, "							\
+	"0 AS quote "							\
+	"FROM part "
+
+/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_SELECT_2					\
 	"SELECT "							\
 	"file_name, "							\
 	"ct, "								\
@@ -1483,23 +1497,38 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	"WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
 
 #define SBK_ATTACHMENTS_WHERE_MESSAGE					\
-	"WHERE mid = ? "
+	"WHERE mid = ? AND quote = 0 "
+
+#define SBK_ATTACHMENTS_WHERE_QUOTE					\
+	"WHERE mid = ? AND quote = 1 "
 
 #define SBK_ATTACHMENTS_ORDER						\
 	"ORDER BY unique_id, _id"
 
 #define SBK_ATTACHMENTS_QUERY_ALL					\
-	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_ORDER
 
 #define SBK_ATTACHMENTS_QUERY_THREAD					\
-	SBK_ATTACHMENTS_SELECT						\
+	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_WHERE_THREAD					\
 	SBK_ATTACHMENTS_ORDER
 
-#define SBK_ATTACHMENTS_QUERY_MESSAGE					\
-	SBK_ATTACHMENTS_SELECT						\
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_QUERY_MESSAGE_1					\
+	SBK_ATTACHMENTS_SELECT_1					\
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
+	SBK_ATTACHMENTS_ORDER
+
+/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+#define SBK_ATTACHMENTS_QUERY_MESSAGE_2					\
+	SBK_ATTACHMENTS_SELECT_2					\
+	SBK_ATTACHMENTS_WHERE_MESSAGE					\
+	SBK_ATTACHMENTS_ORDER
+
+#define SBK_ATTACHMENTS_QUERY_QUOTE					\
+	SBK_ATTACHMENTS_SELECT_2					\
+	SBK_ATTACHMENTS_WHERE_QUOTE					\
 	SBK_ATTACHMENTS_ORDER
 
 #define SBK_ATTACHMENTS_COLUMN_FILE_NAME	0
@@ -1621,14 +1650,40 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 }
 
 static int
-sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
+    struct sbk_message_id *mid)
 {
 	sqlite3_stmt *stm;
+
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_QUOTE) == -1)
+		return -1;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1) {
+		sqlite3_finalize(stm);
+		return -1;
+	}
+
+	if ((qte->attachments = sbk_get_attachments(ctx, stm)) == NULL)
+		return -1;
+
+	return 0;
+}
+
+static int
+sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	sqlite3_stmt	*stm;
+	const char	*query;
 
 	if (msg->id.type != SBK_MESSAGE_MMS)
 		return 0;
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_MESSAGE) == -1)
+	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
+		query = SBK_ATTACHMENTS_QUERY_MESSAGE_1;
+	else
+		query = SBK_ATTACHMENTS_QUERY_MESSAGE_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
@@ -2201,6 +2256,16 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 }
 
 static void
+sbk_free_quote(struct sbk_quote *qte)
+{
+	if (qte != NULL) {
+		free(qte->text);
+		sbk_free_attachment_list(qte->attachments);
+		free(qte);
+	}
+}
+
+static void
 sbk_free_message(struct sbk_message *msg)
 {
 	if (msg != NULL) {
@@ -2208,6 +2273,7 @@ sbk_free_message(struct sbk_message *msg)
 		sbk_free_attachment_list(msg->attachments);
 		sbk_free_mention_list(msg->mentions);
 		sbk_free_reaction_list(msg->reactions);
+		sbk_free_quote(msg->quote);
 		free(msg);
 	}
 }
@@ -2237,7 +2303,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"NULL "				/* reactions */			\
+	"NULL, "			/* reactions */			\
+	"0, "				/* quote_id */			\
+	"NULL, "			/* quote_author */		\
+	"NULL "				/* quote_body */		\
 	"FROM sms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
@@ -2251,10 +2320,13 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date AS date_received, "					\
 	"type, "							\
 	"thread_id, "							\
-	"reactions "							\
+	"reactions, "							\
+	"0, "				/* quote_id */			\
+	"NULL, "			/* quote_author */		\
+	"NULL "				/* quote_body */		\
 	"FROM sms "
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
 #define SBK_MESSAGES_SELECT_MMS_1					\
 	"SELECT "							\
 	"1, "								\
@@ -2265,11 +2337,31 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date_received, "						\
 	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
-	"NULL "				/* reactions */			\
+	"NULL, "			/* reactions */			\
+	"0, "				/* quote_id */			\
+	"NULL, "			/* quote_author */		\
+	"NULL "				/* quote_body */		\
+	"FROM mms "
+
+/* For database versions < SBK_DB_VERSION_REACTIONS */
+#define SBK_MESSAGES_SELECT_MMS_2					\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"address, "							\
+	"body, "							\
+	"date, "			/* sms.date_sent */		\
+	"date_received, "						\
+	"msg_box, "			/* sms.type */			\
+	"thread_id, "							\
+	"NULL, "			/* reactions */			\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body "							\
 	"FROM mms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
-#define SBK_MESSAGES_SELECT_MMS_2					\
+#define SBK_MESSAGES_SELECT_MMS_3					\
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
@@ -2279,7 +2371,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date_received, "						\
 	"msg_box, "			/* type */			\
 	"thread_id, "							\
-	"reactions "							\
+	"reactions, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body "							\
 	"FROM mms "
 
 #define SBK_MESSAGES_WHERE_THREAD					\
@@ -2288,21 +2383,28 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_ORDER						\
 	"ORDER BY date_received"
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
 #define SBK_MESSAGES_QUERY_ALL_1					\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	"UNION ALL "							\
 	SBK_MESSAGES_SELECT_MMS_1					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
+/* For database versions < SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_QUERY_ALL_2					\
-	SBK_MESSAGES_SELECT_SMS_2					\
+	SBK_MESSAGES_SELECT_SMS_1					\
 	"UNION ALL "							\
 	SBK_MESSAGES_SELECT_MMS_2					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions >= SBK_DB_VERSION_REACTIONS */
+#define SBK_MESSAGES_QUERY_ALL_3					\
+	SBK_MESSAGES_SELECT_SMS_2					\
+	"UNION ALL "							\
+	SBK_MESSAGES_SELECT_MMS_3					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
 #define SBK_MESSAGES_QUERY_THREAD_1					\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
@@ -2311,12 +2413,21 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
+/* For database versions < SBK_DB_VERSION_REACTIONS */
 #define SBK_MESSAGES_QUERY_THREAD_2					\
-	SBK_MESSAGES_SELECT_SMS_2					\
+	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
 	SBK_MESSAGES_SELECT_MMS_2					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= SBK_DB_VERSION_REACTIONS */
+#define SBK_MESSAGES_QUERY_THREAD_3					\
+	SBK_MESSAGES_SELECT_SMS_2					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	"UNION ALL "							\
+	SBK_MESSAGES_SELECT_MMS_3					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
@@ -2329,6 +2440,50 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_COLUMN_TYPE		6
 #define SBK_MESSAGES_COLUMN_THREAD_ID		7
 #define SBK_MESSAGES_COLUMN_REACTIONS		8
+#define SBK_MESSAGES_COLUMN_QUOTE_ID		9
+#define SBK_MESSAGES_COLUMN_QUOTE_AUTHOR	10
+#define SBK_MESSAGES_COLUMN_QUOTE_BODY		11
+
+static int
+sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
+{
+	struct sbk_quote *qte;
+
+	if (sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID) == 0 &&
+	    sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_AUTHOR) == 0) {
+		/* No quote */
+		return 0;
+	}
+
+	if ((qte = malloc(sizeof *qte)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		return -1;
+	}
+
+	qte->id = sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID);
+	qte->recipient = NULL;
+	qte->text = NULL;
+	qte->attachments = NULL;
+
+	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
+	    SBK_MESSAGES_COLUMN_QUOTE_AUTHOR);
+	if (qte->recipient == NULL)
+		goto error;
+
+	if (sbk_sqlite_column_text_copy(ctx, &qte->text, stm,
+	    SBK_MESSAGES_COLUMN_QUOTE_BODY) == -1)
+		goto error;
+
+	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
+		goto error;
+
+	msg->quote = qte;
+	return 0;
+
+error:
+	sbk_free_quote(qte);
+	return -1;
+}
 
 static struct sbk_message *
 sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -2345,6 +2500,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	msg->attachments = NULL;
 	msg->mentions = NULL;
 	msg->reactions = NULL;
+	msg->quote = NULL;
 
 	msg->id.type =
 	    (sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TABLE) == 0) ?
@@ -2378,6 +2534,9 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 
 		if (sbk_insert_mentions(ctx, msg) == -1)
+			goto error;
+
+		if (sbk_get_quote(ctx, msg, stm) == -1)
 			goto error;
 	}
 
@@ -2438,10 +2597,12 @@ sbk_get_all_messages(struct sbk_ctx *ctx)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
+	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
 		query = SBK_MESSAGES_QUERY_ALL_1;
-	else
+	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
 		query = SBK_MESSAGES_QUERY_ALL_2;
+	else
+		query = SBK_MESSAGES_QUERY_ALL_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
@@ -2458,10 +2619,12 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
+	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
 		query = SBK_MESSAGES_QUERY_THREAD_1;
-	else
+	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
 		query = SBK_MESSAGES_QUERY_THREAD_2;
+	else
+		query = SBK_MESSAGES_QUERY_THREAD_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;

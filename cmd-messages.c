@@ -456,6 +456,52 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	return ret;
 }
 
+static void
+text_write_time_field(FILE *fp, const char *name, int64_t t)
+{
+	maildir_write_date_header(fp, name, t);
+}
+
+static void
+text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
+{
+	fputs("Attachment: ", fp);
+
+	if (att->filename == NULL)
+		fputs("no filename", fp);
+	else
+		fprintf(fp, "\"%s\"", att->filename);
+
+	fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64 "-%" PRId64 ")\n",
+	    (att->content_type != NULL) ?
+	    att->content_type : "",
+	    att->size,
+	    att->rowid,
+	    att->attachmentid);
+}
+
+static void
+text_write_quote(FILE *fp, struct sbk_quote *qte)
+{
+	struct sbk_attachment *att;
+
+	fprintf(fp, "\n> From: %s (%s)\n",
+	    sbk_get_recipient_display_name(qte->recipient),
+	    qte->recipient->contact->phone);
+
+	fputs("> ", fp);
+	text_write_time_field(fp, "Sent", qte->id);
+
+	if (qte->attachments != NULL)
+		TAILQ_FOREACH(att, qte->attachments, entries) {
+			fputs("> ", fp);
+			text_write_attachment_field(fp, att);
+		}
+
+	if (qte->text != NULL)
+		fprintf(fp, ">\n> %s\n", qte->text);
+}
+
 static int
 text_write_message(FILE *fp, struct sbk_message *msg)
 {
@@ -474,37 +520,26 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 
 	fprintf(fp, "%s (%s)\n", name, addr);
 
-	maildir_write_date_header(fp, "Sent", msg->time_sent);
+	text_write_time_field(fp, "Sent", msg->time_sent);
 
 	if (!sbk_is_outgoing_message(msg))
-		maildir_write_date_header(fp, "Received", msg->time_recv);
+		text_write_time_field(fp, "Received", msg->time_recv);
 
 	fprintf(fp, "Message id: %d-%d\n", msg->id.type, msg->id.rowid);
 	fprintf(fp, "Thread: %d\n", msg->thread);
 
 	if (msg->attachments != NULL)
-		TAILQ_FOREACH(att, msg->attachments, entries) {
-			fputs("Attachment: ", fp);
-
-			if (att->filename == NULL)
-				fputs("no filename", fp);
-			else
-				fprintf(fp, "\"%s\"", att->filename);
-
-			fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64
-			    "-%" PRId64 ")\n",
-			    (att->content_type != NULL) ?
-			    att->content_type : "",
-			    att->size,
-			    att->rowid,
-			    att->attachmentid);
-		}
+		TAILQ_FOREACH(att, msg->attachments, entries)
+			text_write_attachment_field(fp, att);
 
 	if (msg->reactions != NULL)
 		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
 			fprintf(fp, "Reaction: %s from %s\n",
 			    rct->emoji,
 			    sbk_get_recipient_display_name(rct->recipient));
+
+	if (msg->quote != NULL)
+		text_write_quote(fp, msg->quote);
 
 	if (msg->text != NULL)
 		fprintf(fp, "\n%s\n\n", msg->text);
