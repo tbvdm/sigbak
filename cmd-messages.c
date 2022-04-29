@@ -467,6 +467,28 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 	    att->attachmentid);
 }
 
+static void
+text_write_quote(FILE *fp, struct sbk_quote *qte)
+{
+	struct sbk_attachment *att;
+
+	fprintf(fp, "\n> From: %s (%s)\n",
+	    sbk_get_recipient_display_name(qte->recipient),
+	    qte->recipient->contact->phone);
+
+	fputs("> ", fp);
+	text_write_time_field(fp, "Sent", qte->id);
+
+	if (qte->attachments != NULL)
+		TAILQ_FOREACH(att, qte->attachments, entries) {
+			fputs("> ", fp);
+			text_write_attachment_field(fp, att);
+		}
+
+	if (qte->text != NULL)
+		fprintf(fp, ">\n> %s\n", qte->text);
+}
+
 static int
 text_write_message(FILE *fp, struct sbk_message *msg)
 {
@@ -502,6 +524,9 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 			fprintf(fp, "Reaction: %s from %s\n",
 			    rct->emoji,
 			    sbk_get_recipient_display_name(rct->recipient));
+
+	if (msg->quote != NULL)
+		text_write_quote(fp, msg->quote);
 
 	if (msg->text != NULL)
 		fprintf(fp, "\n%s\n\n", msg->text);

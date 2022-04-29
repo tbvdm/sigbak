@@ -161,6 +161,13 @@ struct sbk_reaction {
 
 SIMPLEQ_HEAD(sbk_reaction_list, sbk_reaction);
 
+struct sbk_quote {
+	uint64_t	 id;
+	struct sbk_recipient *recipient;
+	char		*text;
+	struct sbk_attachment_list *attachments;
+};
+
 struct sbk_message_id {
 	enum {
 		SBK_MESSAGE_SMS,
@@ -180,6 +187,7 @@ struct sbk_message {
 	struct sbk_attachment_list *attachments;
 	struct sbk_mention_list *mentions;
 	struct sbk_reaction_list *reactions;
+	struct sbk_quote *quote;
 	SIMPLEQ_ENTRY(sbk_message) entries;
 };
 
