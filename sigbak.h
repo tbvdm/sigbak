@@ -109,6 +109,7 @@ struct sbk_ctx;
 struct sbk_file;
 
 struct sbk_contact {
+	char		*uuid;
 	char		*phone;
 	char		*email;
 	char		*system_display_name;
@@ -166,6 +167,7 @@ struct sbk_quote {
 	struct sbk_recipient *recipient;
 	char		*text;
 	struct sbk_attachment_list *attachments;
+	struct sbk_mention_list *mentions;
 };
 
 struct sbk_message_id {
