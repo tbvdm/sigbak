@@ -1146,6 +1146,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 #define SBK_RECIPIENTS_QUERY_1						\
 	"SELECT "							\
 	"r.recipient_ids, "						\
+	"NULL, "			/* uuid */			\
 	"NULL, "			/* phone */			\
 	"NULL, "			/* email */			\
 	"r.system_display_name, "					\
@@ -1163,6 +1164,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 #define SBK_RECIPIENTS_QUERY_2						\
 	"SELECT "							\
 	"r._id, "							\
+	"r.uuid, "							\
 	"r.phone, "							\
 	"r.email, "							\
 	"r.system_display_name, "					\
@@ -1180,6 +1182,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 #define SBK_RECIPIENTS_QUERY_3						\
 	"SELECT "							\
 	"r._id, "							\
+	"r.uuid, "							\
 	"r.phone, "							\
 	"r.email, "							\
 	"r.system_display_name, "					\
@@ -1194,15 +1197,16 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	"ON r._id = g.recipient_id"
 
 #define SBK_RECIPIENTS_COLUMN__ID			0
-#define SBK_RECIPIENTS_COLUMN_PHONE			1
-#define SBK_RECIPIENTS_COLUMN_EMAIL			2
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME	3
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	4
-#define SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME	5
-#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	6
-#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	7
-#define SBK_RECIPIENTS_COLUMN_GROUP_ID			8
-#define SBK_RECIPIENTS_COLUMN_TITLE			9
+#define SBK_RECIPIENTS_COLUMN_UUID			1
+#define SBK_RECIPIENTS_COLUMN_PHONE			2
+#define SBK_RECIPIENTS_COLUMN_EMAIL			3
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME	4
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	5
+#define SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME	6
+#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	7
+#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	8
+#define SBK_RECIPIENTS_COLUMN_GROUP_ID			9
+#define SBK_RECIPIENTS_COLUMN_TITLE			10
 
 static struct sbk_recipient_entry *
 sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -1257,6 +1261,10 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			    stm, SBK_RECIPIENTS_COLUMN_EMAIL) == -1)
 				goto error;
 		}
+
+		if (sbk_sqlite_column_text_copy(ctx, &con->uuid,
+		    stm, SBK_RECIPIENTS_COLUMN_UUID) == -1)
+			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
 		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME) == -1)
@@ -1375,6 +1383,20 @@ sbk_get_recipient_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
 	rcp = sbk_get_recipient(ctx, &id);
 	free(id.old);
 	return rcp;
+}
+
+static struct sbk_recipient *
+sbk_get_recipient_from_uuid(struct sbk_ctx *ctx, const char *uuid)
+{
+	struct sbk_recipient_entry *ent;
+
+	RB_FOREACH(ent, sbk_recipient_tree, &ctx->recipients)
+		if (ent->recipient.type == SBK_CONTACT &&
+		    ent->recipient.contact->uuid != NULL &&
+		    strcmp(uuid, ent->recipient.contact->uuid) == 0)
+			return &ent->recipient;
+
+	return NULL;
 }
 
 const char *
@@ -1739,17 +1761,15 @@ error:
 }
 
 static int
-sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
+sbk_insert_mentions(struct sbk_ctx *ctx, char **text,
+    struct sbk_mention_list *lst, struct sbk_message_id *mid)
 {
 	struct sbk_mention *mnt;
 	char		*newtext, *newtextpos, *placeholderpos, *textpos;
 	const char	*name;
 	size_t		 copylen, newtextlen, placeholderlen, prefixlen;
 
-	if (sbk_get_mentions(ctx, msg) == -1)
-		return -1;
-
-	if (msg->mentions == NULL || SIMPLEQ_EMPTY(msg->mentions))
+	if (lst == NULL || SIMPLEQ_EMPTY(lst))
 		return 0;
 
 	newtext = NULL;
@@ -1757,8 +1777,8 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 	prefixlen = strlen(SBK_MENTION_PREFIX);
 
 	/* Calculate length of new text */
-	newtextlen = strlen(msg->text);
-	SIMPLEQ_FOREACH(mnt, msg->mentions, entries) {
+	newtextlen = strlen(*text);
+	SIMPLEQ_FOREACH(mnt, lst, entries) {
 		if (newtextlen < placeholderlen)
 			goto error;
 		name = sbk_get_recipient_display_name(mnt->recipient);
@@ -1772,11 +1792,11 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return -1;
 	}
 
-	textpos = msg->text;
+	textpos = *text;
 	newtextpos = newtext;
 
 	/* Write new text, replacing placeholders with mentions */
-	SIMPLEQ_FOREACH(mnt, msg->mentions, entries) {
+	SIMPLEQ_FOREACH(mnt, lst, entries) {
 		placeholderpos = strstr(textpos, SBK_MENTION_PLACEHOLDER);
 		if (placeholderpos == NULL)
 			goto error;
@@ -1804,14 +1824,14 @@ sbk_insert_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 	newtextpos += copylen;
 	*newtextpos = '\0';
 
-	free(msg->text);
-	msg->text = newtext;
+	free(*text);
+	*text = newtext;
 
 	return 0;
 
 error:
-	sbk_warnx(ctx, "Invalid mention in message %d-%d", msg->id.type,
-	    msg->id.rowid);
+	sbk_warnx(ctx, "Invalid mention in message %d-%d", mid->type,
+	    mid->rowid);
 	free(newtext);
 	return 0;
 }
@@ -2217,6 +2237,7 @@ sbk_free_quote(struct sbk_quote *qte)
 	if (qte != NULL) {
 		free(qte->text);
 		sbk_free_attachment_list(qte->attachments);
+		sbk_free_mention_list(qte->mentions);
 		free(qte);
 	}
 }
@@ -2262,7 +2283,8 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL, "			/* reactions */			\
 	"0, "				/* quote_id */			\
 	"NULL, "			/* quote_author */		\
-	"NULL "				/* quote_body */		\
+	"NULL, "			/* quote_body */		\
+	"NULL "				/* quote_mentions */		\
 	"FROM sms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
@@ -2279,7 +2301,8 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"reactions, "							\
 	"0, "				/* quote_id */			\
 	"NULL, "			/* quote_author */		\
-	"NULL "				/* quote_body */		\
+	"NULL, "			/* quote_body */		\
+	"NULL "				/* quote_mentions */		\
 	"FROM sms "
 
 /* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
@@ -2296,7 +2319,8 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL, "			/* reactions */			\
 	"0, "				/* quote_id */			\
 	"NULL, "			/* quote_author */		\
-	"NULL "				/* quote_body */		\
+	"NULL, "			/* quote_body */		\
+	"NULL "				/* quote_mentions */		\
 	"FROM mms "
 
 /* For database versions < SBK_DB_VERSION_REACTIONS */
@@ -2313,7 +2337,8 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL, "			/* reactions */			\
 	"quote_id, "							\
 	"quote_author, "						\
-	"quote_body "							\
+	"quote_body, "							\
+	"quote_mentions "						\
 	"FROM mms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
@@ -2330,7 +2355,8 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"reactions, "							\
 	"quote_id, "							\
 	"quote_author, "						\
-	"quote_body "							\
+	"quote_body, "							\
+	"quote_mentions "						\
 	"FROM mms "
 
 #define SBK_MESSAGES_WHERE_THREAD					\
@@ -2399,6 +2425,102 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_COLUMN_QUOTE_ID		9
 #define SBK_MESSAGES_COLUMN_QUOTE_AUTHOR	10
 #define SBK_MESSAGES_COLUMN_QUOTE_BODY		11
+#define SBK_MESSAGES_COLUMN_QUOTE_MENTIONS	12
+
+static Signal__BodyRangeList *
+sbk_unpack_quote_mention_list_message(struct sbk_ctx *ctx, const void *buf,
+    size_t len)
+{
+	Signal__BodyRangeList *msg;
+
+	if ((msg = signal__body_range_list__unpack(NULL, len, buf)) == NULL)
+		sbk_error_setx(ctx, "Cannot unpack quoted mention list");
+
+	return msg;
+}
+
+static void
+sbk_free_quote_mention_list_message(Signal__BodyRangeList *msg)
+{
+	if (msg != NULL)
+		signal__body_range_list__free_unpacked(msg, NULL);
+}
+
+static int
+sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
+    sqlite3_stmt *stm, int idx)
+{
+	Signal__BodyRangeList	*msg;
+	struct sbk_mention	*mnt;
+	struct sbk_recipient	*rcp;
+	const void		*blob;
+	size_t			 i;
+	int			 len;
+
+	*lst = NULL;
+
+	if (sqlite3_column_type(stm, idx) != SQLITE_BLOB) {
+		/* No mentions */
+		return 0;
+	}
+
+	if ((blob = sqlite3_column_blob(stm, idx)) == NULL) {
+		sbk_error_sqlite_set(ctx, "Cannot get quoted mentions column");
+		return -1;
+	}
+
+	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
+		sbk_error_sqlite_set(ctx, "Cannot get quoted mentions size");
+		return -1;
+	}
+
+	msg = sbk_unpack_quote_mention_list_message(ctx, blob, len);
+	if (msg == NULL)
+		return -1;
+
+	if ((*lst = malloc(sizeof **lst)) == NULL) {
+		sbk_error_set(ctx, NULL);
+		goto error;
+	}
+
+	SIMPLEQ_INIT(*lst);
+
+	for (i = 0; i < msg->n_ranges; i++) {
+		if (msg->ranges[i]->associated_value_case !=
+		    SIGNAL__BODY_RANGE_LIST__BODY_RANGE__ASSOCIATED_VALUE_MENTION_UUID)
+			continue;
+
+		if (msg->ranges[i]->mentionuuid == NULL) {
+			sbk_warnx(ctx, "Mention without uuid");
+			continue;
+		}
+
+		rcp = sbk_get_recipient_from_uuid(ctx,
+		    msg->ranges[i]->mentionuuid);
+		if (rcp == NULL) {
+			sbk_warnx(ctx, "Mention uuid %s not found",
+			    msg->ranges[i]->mentionuuid);
+			continue;
+		}
+
+		if ((mnt = malloc(sizeof *mnt)) == NULL) {
+			sbk_error_set(ctx, NULL);
+			goto error;
+		}
+
+		mnt->recipient = rcp;
+		SIMPLEQ_INSERT_TAIL(*lst, mnt, entries);
+	}
+
+	sbk_free_quote_mention_list_message(msg);
+	return 0;
+
+error:
+	sbk_free_quote_mention_list_message(msg);
+	sbk_free_mention_list(*lst);
+	*lst = NULL;
+	return -1;
+}
 
 static int
 sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
@@ -2420,6 +2542,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 	qte->recipient = NULL;
 	qte->text = NULL;
 	qte->attachments = NULL;
+	qte->mentions = NULL;
 
 	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
 	    SBK_MESSAGES_COLUMN_QUOTE_AUTHOR);
@@ -2431,6 +2554,14 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		goto error;
 
 	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
+		goto error;
+
+	if (sbk_get_quote_mentions(ctx, &qte->mentions, stm,
+	    SBK_MESSAGES_COLUMN_QUOTE_MENTIONS) == -1)
+		goto error;
+
+	if (sbk_insert_mentions(ctx, &qte->text, qte->mentions, &msg->id) ==
+	    -1)
 		goto error;
 
 	msg->quote = qte;
@@ -2489,7 +2620,11 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_long_message(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_insert_mentions(ctx, msg) == -1)
+		if (sbk_get_mentions(ctx, msg) == -1)
+			goto error;
+
+		if (sbk_insert_mentions(ctx, &msg->text, msg->mentions,
+		    &msg->id) == -1)
 			goto error;
 
 		if (sbk_get_quote(ctx, msg, stm) == -1)
