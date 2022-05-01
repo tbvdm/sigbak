@@ -1109,6 +1109,7 @@ sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
 	switch (ent->recipient.type) {
 	case SBK_CONTACT:
 		if (ent->recipient.contact != NULL) {
+			free(ent->recipient.contact->uuid);
 			free(ent->recipient.contact->phone);
 			free(ent->recipient.contact->email);
 			free(ent->recipient.contact->system_display_name);
