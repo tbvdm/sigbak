@@ -1153,6 +1153,7 @@ sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
 	switch (ent->recipient.type) {
 	case SBK_CONTACT:
 		if (ent->recipient.contact != NULL) {
+			free(ent->recipient.contact->uuid);
 			free(ent->recipient.contact->phone);
 			free(ent->recipient.contact->email);
 			free(ent->recipient.contact->system_display_name);
@@ -2325,10 +2326,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"type, "							\
 	"thread_id, "							\
 	"NULL, "			/* reactions */			\
-	"0, "				/* quote_id */			\
-	"NULL, "			/* quote_author */		\
-	"NULL, "			/* quote_body */		\
-	"NULL "				/* quote_mentions */		\
+	"0, "				/* mms.quote_id */		\
+	"NULL, "			/* mms.quote_author */		\
+	"NULL, "			/* mms.quote_body */		\
+	"NULL "				/* mms.quote_mentions */	\
 	"FROM sms "
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
@@ -2343,10 +2344,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"type, "							\
 	"thread_id, "							\
 	"reactions, "							\
-	"0, "				/* quote_id */			\
-	"NULL, "			/* quote_author */		\
-	"NULL, "			/* quote_body */		\
-	"NULL "				/* quote_mentions */		\
+	"0, "				/* mms.quote_id */		\
+	"NULL, "			/* mms.quote_author */		\
+	"NULL, "			/* mms.quote_body */		\
+	"NULL "				/* mms.quote_mentions */	\
 	"FROM sms "
 
 /* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
@@ -2394,7 +2395,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"body, "							\
 	"date, "			/* sms.date_sent */		\
 	"date_received, "						\
-	"msg_box, "			/* type */			\
+	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
 	"reactions, "							\
 	"quote_id, "							\

@@ -483,7 +483,8 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 static void
 text_write_quote(FILE *fp, struct sbk_quote *qte)
 {
-	struct sbk_attachment *att;
+	struct sbk_attachment	*att;
+	char			*s, *t;
 
 	fprintf(fp, "\n> From: %s (%s)\n",
 	    sbk_get_recipient_display_name(qte->recipient),
@@ -498,8 +499,12 @@ text_write_quote(FILE *fp, struct sbk_quote *qte)
 			text_write_attachment_field(fp, att);
 		}
 
-	if (qte->text != NULL)
-		fprintf(fp, ">\n> %s\n", qte->text);
+	if (qte->text != NULL) {
+		fputs(">\n", fp);
+		for (s = qte->text; (t = strchr(s, '\n')) != NULL; s = t + 1)
+			fprintf(fp, "> %.*s\n", (int)(t - s), s);
+		fprintf(fp, "> %s\n", s);
+	}
 }
 
 static int
