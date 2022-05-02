@@ -1403,24 +1403,25 @@ sbk_get_recipient_from_uuid(struct sbk_ctx *ctx, const char *uuid)
 const char *
 sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 {
-	switch (rcp->type) {
-	case SBK_CONTACT:
-		if (rcp->contact->system_display_name != NULL)
-			return rcp->contact->system_display_name;
-		if (rcp->contact->profile_joined_name != NULL)
-			return rcp->contact->profile_joined_name;
-		if (rcp->contact->profile_given_name != NULL)
-			return rcp->contact->profile_given_name;
-		if (rcp->contact->phone != NULL)
-			return rcp->contact->phone;
-		if (rcp->contact->email != NULL)
-			return rcp->contact->email;
-		break;
-	case SBK_GROUP:
-		if (rcp->group->name != NULL)
-			return rcp->group->name;
-		break;
-	}
+	if (rcp != NULL)
+		switch (rcp->type) {
+		case SBK_CONTACT:
+			if (rcp->contact->system_display_name != NULL)
+				return rcp->contact->system_display_name;
+			if (rcp->contact->profile_joined_name != NULL)
+				return rcp->contact->profile_joined_name;
+			if (rcp->contact->profile_given_name != NULL)
+				return rcp->contact->profile_given_name;
+			if (rcp->contact->phone != NULL)
+				return rcp->contact->phone;
+			if (rcp->contact->email != NULL)
+				return rcp->contact->email;
+			break;
+		case SBK_GROUP:
+			if (rcp->group->name != NULL)
+				return rcp->group->name;
+			break;
+		}
 
 	return "Unknown";
 }
@@ -2449,7 +2450,7 @@ sbk_free_quote_mention_list_message(Signal__BodyRangeList *msg)
 
 static int
 sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
-    sqlite3_stmt *stm, int idx)
+    sqlite3_stmt *stm, int idx, struct sbk_message_id *mid)
 {
 	Signal__BodyRangeList	*msg;
 	struct sbk_mention	*mnt;
@@ -2492,17 +2493,18 @@ sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 			continue;
 
 		if (msg->ranges[i]->mentionuuid == NULL) {
-			sbk_warnx(ctx, "Mention without uuid");
+			sbk_warnx(ctx, "Quoted mention without uuid in "
+			    "message %d-%d", mid->type, mid->rowid);
 			continue;
 		}
 
 		rcp = sbk_get_recipient_from_uuid(ctx,
 		    msg->ranges[i]->mentionuuid);
-		if (rcp == NULL) {
-			sbk_warnx(ctx, "Mention uuid %s not found",
-			    msg->ranges[i]->mentionuuid);
-			continue;
-		}
+		if (rcp == NULL)
+			sbk_warnx(ctx, "Cannot find recipient for quoted "
+			    "mention uuid %s in message %d-%d",
+			    msg->ranges[i]->mentionuuid, mid->type,
+			    mid->rowid);
 
 		if ((mnt = malloc(sizeof *mnt)) == NULL) {
 			sbk_error_set(ctx, NULL);
@@ -2558,7 +2560,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		goto error;
 
 	if (sbk_get_quote_mentions(ctx, &qte->mentions, stm,
-	    SBK_MESSAGES_COLUMN_QUOTE_MENTIONS) == -1)
+	    SBK_MESSAGES_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
 		goto error;
 
 	if (sbk_insert_mentions(ctx, &qte->text, qte->mentions, &msg->id) ==
