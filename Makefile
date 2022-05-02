@@ -7,13 +7,17 @@ INSTALL?=	install
 PKG_CONFIG?=	pkg-config
 PROTOC?=	protoc-c
 
-PKGS?=		libcrypto libprotobuf-c sqlite3
+LIBCRYPTO_PKG?=		libcrypto
+LIBPROTOBUF_C_PKG?=	libprotobuf-c
+SQLITE3_PKG?=		sqlite3
 
-PKGS_CFLAGS!=	${PKG_CONFIG} --cflags ${PKGS}
-PKGS_LDFLAGS!=	${PKG_CONFIG} --libs ${PKGS}
+PKGS?=		${LIBCRYPTO_PKG} ${LIBPROTOBUF_C_PKG} ${SQLITE3_PKG}
 
-CFLAGS+=	${PKGS_CFLAGS}
-LDFLAGS+=	${PKGS_LDFLAGS}
+PKG_CFLAGS!=	${PKG_CONFIG} --cflags ${PKGS}
+PKG_LDFLAGS!=	${PKG_CONFIG} --libs ${PKGS}
+
+CFLAGS+=	${PKG_CFLAGS}
+LDFLAGS+=	${PKG_LDFLAGS}
 
 PROTOS=		backup.proto database.proto
 PROTO_HDRS=	${PROTOS:.proto=.pb-c.h}
