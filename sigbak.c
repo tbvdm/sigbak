@@ -96,7 +96,7 @@ unveil_dirname(const char *path, const char *perms)
 	}
 
 	if (unveil(dir, perms) == -1) {
-		warn("unveil");
+		warn("unveil: %s", dir);
 		free(tmp);
 		return -1;
 	}

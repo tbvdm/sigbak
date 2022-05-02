@@ -129,25 +129,25 @@ cmd_attachments(int argc, char **argv)
 	}
 
 	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil");
+		err(1, "unveil: %s", argv[0]);
 
 	if (unveil(outdir, "rwc") == -1)
-		err(1, "unveil");
+		err(1, "unveil: %s", outdir);
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
-		err(1, "unveil");
+		err(1, "unveil: /dev/urandom");
 
 	/* For SQLite */
 	if (unveil("/tmp", "rwc") == -1)
-		err(1, "unveil");
+		err(1, "unveil: /tmp");
 
 	if (passfile == NULL) {
 		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
 		if (unveil(passfile, "r") == -1)
-			err(1, "unveil");
+			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath wpath cpath", NULL) == -1)
 			err(1, "pledge");
