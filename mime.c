@@ -62,10 +62,13 @@ static struct {
 const char *
 mime_get_extension(const char *type)
 {
-	size_t i;
+	size_t i, len;
+
+	/* We're not interested in content-type parameters */
+	len = strcspn(type, ";");
 
 	for (i = 0; i < nitems(mime_extensions); i++)
-		if (strcmp(mime_extensions[i].type, type) == 0)
+		if (strncmp(mime_extensions[i].type, type, len) == 0)
 			return mime_extensions[i].extension;
 
 	return NULL;
