@@ -31,6 +31,22 @@ enum type {
 	STICKER
 };
 
+static const char *
+get_extension(const char *data, size_t datalen)
+{
+	if (datalen >= 3 && memcmp(data, "\xff\xd8\xff", 3) == 0)
+		return ".jpg";
+
+	if (datalen >= 8 && memcmp(data, "\x89PNG\r\n\x1a\n", 8) == 0)
+		return ".png";
+
+	if (datalen >= 12 && memcmp(data, "RIFF", 4) == 0 &&
+	    memcmp(data + 8, "WEBP", 4) == 0)
+		return ".webp";
+
+	return "";
+}
+
 static int
 write_file(const char *path, const char *data, size_t datalen)
 {
@@ -54,9 +70,10 @@ write_file(const char *path, const char *data, size_t datalen)
 static int
 write_avatar(struct sbk_ctx *ctx, Signal__Avatar *avt, struct sbk_file *file)
 {
-	char	*base, *data, *name;
-	size_t	 datalen;
-	int	 ret;
+	char		*base, *data, *name;
+	const char	*ext;
+	size_t		 datalen;
+	int		 ret;
 
 	data = name = NULL;
 	ret = -1;
@@ -78,7 +95,9 @@ write_avatar(struct sbk_ctx *ctx, Signal__Avatar *avt, struct sbk_file *file)
 	if ((data = sbk_get_file_data(ctx, file, &datalen)) == NULL)
 		goto out;
 
-	if (asprintf(&name, "%s.jpg", base) == -1) {
+	ext = get_extension(data, datalen);
+
+	if (asprintf(&name, "%s%s", base, ext) == -1) {
 		warnx("asprintf() failed");
 		name = NULL;
 		goto out;
@@ -95,9 +114,10 @@ out:
 static int
 write_sticker(struct sbk_ctx *ctx, Signal__Sticker *stk, struct sbk_file *file)
 {
-	char	*data, *name;
-	size_t	 datalen;
-	int	 ret;
+	char		*data, *name;
+	const char	*ext;
+	size_t		 datalen;
+	int		 ret;
 
 	data = name = NULL;
 	ret = -1;
@@ -110,7 +130,9 @@ write_sticker(struct sbk_ctx *ctx, Signal__Sticker *stk, struct sbk_file *file)
 	if ((data = sbk_get_file_data(ctx, file, &datalen)) == NULL)
 		goto out;
 
-	if (asprintf(&name, "%" PRIu64 ".webp", stk->rowid) == -1) {
+	ext = get_extension(data, datalen);
+
+	if (asprintf(&name, "%" PRIu64 "%s", stk->rowid, ext) == -1) {
 		warnx("asprintf() failed");
 		name = NULL;
 		goto out;
