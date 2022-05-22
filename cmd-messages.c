@@ -457,9 +457,25 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 }
 
 static void
-text_write_time_field(FILE *fp, const char *name, int64_t t)
+text_write_recipient_field(FILE *fp, const char *field,
+    struct sbk_recipient *rcp)
 {
-	maildir_write_date_header(fp, name, t);
+	fprintf(fp, "%s: %s", field, sbk_get_recipient_display_name(rcp));
+
+	if (rcp != NULL) {
+		if (rcp->type == SBK_GROUP)
+			fputs(" (group)", fp);
+		else if (rcp->contact->phone != NULL)
+			fprintf(fp, " (%s)", rcp->contact->phone);
+	}
+
+	putc('\n', fp);
+}
+
+static void
+text_write_time_field(FILE *fp, const char *field, int64_t t)
+{
+	maildir_write_date_header(fp, field, t);
 }
 
 static void
@@ -486,9 +502,8 @@ text_write_quote(FILE *fp, struct sbk_quote *qte)
 	struct sbk_attachment	*att;
 	char			*s, *t;
 
-	fprintf(fp, "\n> From: %s (%s)\n",
-	    sbk_get_recipient_display_name(qte->recipient),
-	    qte->recipient->contact->phone);
+	fputs("\n> ", fp);
+	text_write_recipient_field(fp, "From", qte->recipient);
 
 	fputs("> ", fp);
 	text_write_time_field(fp, "Sent", qte->id);
@@ -512,18 +527,10 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 {
 	struct sbk_attachment	*att;
 	struct sbk_reaction	*rct;
-	const char		*addr, *name;
 
-	name = sbk_get_recipient_display_name(msg->recipient);
-	addr = (msg->recipient->type == SBK_CONTACT) ?
-	    msg->recipient->contact->phone : "group";
-
-	if (sbk_is_outgoing_message(msg))
-		fputs("To: ", fp);
-	else
-		fputs("From: ", fp);
-
-	fprintf(fp, "%s (%s)\n", name, addr);
+	text_write_recipient_field(fp,
+	    sbk_is_outgoing_message(msg) ? "To" : "From",
+	    msg->recipient);
 
 	text_write_time_field(fp, "Sent", msg->time_sent);
 
@@ -644,29 +651,29 @@ cmd_messages(int argc, char **argv)
 		if (format == FORMAT_MAILDIR)
 			maildir_create(dest);
 		if (unveil(dest, "wc") == -1)
-			err(1, "unveil");
+			err(1, "unveil: %s", dest);
 		break;
 	default:
 		goto usage;
 	}
 
 	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil");
+		err(1, "unveil: %s", argv[0]);
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
-		err(1, "unveil");
+		err(1, "unveil: /dev/urandom");
 
 	/* For SQLite */
 	if (unveil("/tmp", "rwc") == -1)
-		err(1, "unveil");
+		err(1, "unveil: /tmp");
 
 	if (passfile == NULL) {
 		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
 		if (unveil(passfile, "r") == -1)
-			err(1, "unveil");
+			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath wpath cpath", NULL) == -1)
 			err(1, "pledge");

@@ -32,66 +32,118 @@ enum type {
 	STICKER
 };
 
-static int
-write_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
-    struct sbk_file *file, enum type type)
+static const char *
+get_extension(const char *data, size_t datalen)
 {
-	FILE	*fp;
-	char	*base, *fname;
-	int	 ret;
+	if (datalen >= 3 && memcmp(data, "\xff\xd8\xff", 3) == 0)
+		return ".jpg";
 
-	switch (type) {
-	case AVATAR:
-		if (frm->avatar == NULL)
-			return 0;
-		if (frm->avatar->recipientid != NULL)
-			base = frm->avatar->recipientid;
-		else if (frm->avatar->name != NULL)
-			base = frm->avatar->name;
-		else {
-			warnx("Invalid avatar frame");
-			return 1;
-		}
-		if (base[0] == '\0' || strchr(base, '/') != NULL) {
-			warnx("Invalid avatar filename");
-			return 1;
-		}
-		if (asprintf(&fname, "%s.jpg", base) == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
-	case STICKER:
-		if (frm->sticker == NULL)
-			return 0;
-		if (!frm->sticker->has_rowid) {
-			warnx("Invalid sticker frame");
-			return 1;
-		}
-		if (asprintf(&fname, "%" PRIu64 ".webp", frm->sticker->rowid)
-		    == -1) {
-			warnx("asprintf() failed");
-			return 1;
-		}
-		break;
-	default:
-		return 0;
+	if (datalen >= 8 && memcmp(data, "\x89PNG\r\n\x1a\n", 8) == 0)
+		return ".png";
+
+	if (datalen >= 12 && memcmp(data, "RIFF", 4) == 0 &&
+	    memcmp(data + 8, "WEBP", 4) == 0)
+		return ".webp";
+
+	return "";
+}
+
+static int
+write_file(const char *path, const char *data, size_t datalen)
+{
+	FILE *fp;
+
+	if ((fp = fopen(path, "wx")) == NULL) {
+		warn("%s", path);
+		return -1;
 	}
 
-	ret = 0;
-
-	if ((fp = fopen(fname, "wx")) == NULL) {
-		warn("%s", fname);
-		ret = 1;
-	} else {
-		if (sbk_write_file(ctx, file, fp) == -1) {
-			warnx("%s: %s", fname, sbk_error(ctx));
-			ret = 1;
-		}
+	if (fwrite(data, datalen, 1, fp) != 1) {
+		warn("%s", path);
 		fclose(fp);
+		return -1;
 	}
 
-	free(fname);
+	fclose(fp);
+	return 0;
+}
+
+static int
+write_avatar(struct sbk_ctx *ctx, Signal__Avatar *avt, struct sbk_file *file)
+{
+	char		*base, *data, *name;
+	const char	*ext;
+	size_t		 datalen;
+	int		 ret;
+
+	data = name = NULL;
+	ret = -1;
+
+	if (avt->recipientid != NULL)
+		base = avt->recipientid;
+	else if (avt->name != NULL)
+		base = avt->name;
+	else {
+		warnx("Invalid avatar frame");
+		goto out;
+	}
+
+	if (strchr(base, '/') != NULL) {
+		warnx("Invalid avatar filename");
+		goto out;
+	}
+
+	if ((data = sbk_get_file_data(ctx, file, &datalen)) == NULL)
+		goto out;
+
+	ext = get_extension(data, datalen);
+
+	if (asprintf(&name, "%s%s", base, ext) == -1) {
+		warnx("asprintf() failed");
+		name = NULL;
+		goto out;
+	}
+
+	ret = write_file(name, data, datalen);
+
+out:
+	free(name);
+	free(data);
+	return ret;
+}
+
+static int
+write_sticker(struct sbk_ctx *ctx, Signal__Sticker *stk, struct sbk_file *file)
+{
+	char		*data, *name;
+	const char	*ext;
+	size_t		 datalen;
+	int		 ret;
+
+	data = name = NULL;
+	ret = -1;
+
+	if (!stk->has_rowid) {
+		warnx("Invalid sticker frame");
+		goto out;
+	}
+
+	if ((data = sbk_get_file_data(ctx, file, &datalen)) == NULL)
+		goto out;
+
+	ext = get_extension(data, datalen);
+
+	if (asprintf(&name, "%" PRIu64 "%s", stk->rowid, ext) == -1) {
+		warnx("asprintf() failed");
+		name = NULL;
+		goto out;
+	}
+
+	ret = write_file(name, data, datalen);
+
+out:
+	free(name);
+	free(data);
 	return ret;
 }
 
@@ -133,15 +185,18 @@ write_files(int argc, char **argv, enum type type)
 		goto usage;
 	}
 
-	if (unveil(argv[0], "r") == -1 || unveil(outdir, "rwc") == -1)
-		err(1, "unveil");
+	if (unveil(argv[0], "r") == -1)
+		err(1, "unveil: %s", argv[0]);
+
+	if (unveil(outdir, "rwc") == -1)
+		err(1, "unveil: %s", outdir);
 
 	if (passfile == NULL) {
 		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
 		if (unveil(passfile, "r") == -1)
-			err(1, "unveil");
+			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath wpath cpath", NULL) == -1)
 			err(1, "pledge");
@@ -177,7 +232,13 @@ write_files(int argc, char **argv, enum type type)
 	ret = 0;
 
 	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
-		ret |= write_file(ctx, frm, file, type);
+		if (frm->avatar != NULL && type == AVATAR) {
+			if (write_avatar(ctx, frm->avatar, file) == -1)
+				ret = 1;
+		} else if (frm->sticker != NULL && type == STICKER) {
+			if (write_sticker(ctx, frm->sticker, file) == -1)
+				ret = 1;
+		}
 		sbk_free_frame(frm);
 		sbk_free_file(file);
 	}
