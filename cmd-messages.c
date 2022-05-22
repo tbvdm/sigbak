@@ -447,9 +447,16 @@ static void
 text_write_recipient_field(FILE *fp, const char *field,
     struct sbk_recipient *rcp)
 {
-	fprintf(fp, "%s: %s (%s)\n", field,
-	    sbk_get_recipient_display_name(rcp),
-	    (rcp->type == SBK_CONTACT) ? rcp->contact->phone : "group");
+	fprintf(fp, "%s: %s", field, sbk_get_recipient_display_name(rcp));
+
+	if (rcp != NULL) {
+		if (rcp->type == SBK_GROUP)
+			fputs(" (group)", fp);
+		else if (rcp->contact->phone != NULL)
+			fprintf(fp, " (%s)", rcp->contact->phone);
+	}
+
+	putc('\n', fp);
 }
 
 static void
