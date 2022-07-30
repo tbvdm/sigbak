@@ -64,6 +64,26 @@ jobs:
         ./sigbak check -p sigbak.c sigbak.c
         test $? = 1
 
+  # https://github.com/vmactions/dragonflybsd-vm
+  dragonfly:
+    runs-on: macos-12
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: run vm
+      uses: vmactions/dragonflybsd-vm@v0
+      with:
+        usesh: true
+        prepare: pkg install -y openssl pkgconf protobuf-c sqlite3
+        run: |
+          uname -a
+          make
+          set +e
+          ./sigbak check -p sigbak.c sigbak.c
+          test $? = 1
+
   # https://github.com/vmactions/freebsd-vm
   freebsd:
     strategy:
@@ -82,6 +102,25 @@ jobs:
       with:
         usesh: true
         prepare: pkg install -y pkgconf protobuf-c sqlite3 ${{ matrix.ssl }}
+        run: |
+          uname -a
+          make
+          set +e
+          ./sigbak check -p sigbak.c sigbak.c
+          test $? = 1
+
+  # https://github.com/vmactions/netbsd-vm
+  netbsd:
+    runs-on: macos-12
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: run vm
+      uses: vmactions/netbsd-vm@v0
+      with:
+        prepare: pkg_add pkg-config protobuf-c sqlite3
         run: |
           uname -a
           make
