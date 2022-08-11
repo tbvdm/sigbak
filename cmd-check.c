@@ -28,6 +28,7 @@ cmd_check(int argc, char **argv)
 	struct sbk_file		*file;
 	Signal__BackupFrame	*frm;
 	char			*passfile, passphr[128];
+	unsigned long long	 n;
 	int			 c, ret;
 
 	passfile = NULL;
@@ -82,6 +83,7 @@ cmd_check(int argc, char **argv)
 		err(1, "pledge");
 
 	ret = 0;
+	n = 1;
 
 	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
 		sbk_free_frame(frm);
@@ -91,10 +93,12 @@ cmd_check(int argc, char **argv)
 			if (ret == -1)
 				break;
 		}
+		n++;
 	}
 
 	if (!sbk_eof(ctx) || ret == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
+		warnx("%s: Error in frame %llu: %s", argv[0], n,
+		    sbk_error(ctx));
 		ret = 1;
 	}
 
