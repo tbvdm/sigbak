@@ -1453,37 +1453,45 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 /* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_SELECT_1					\
 	"SELECT "							\
-	"file_name, "							\
-	"ct, "								\
-	"_id, "								\
-	"unique_id, "							\
-	"pending_push, "						\
-	"data_size, "							\
+	"p.file_name, "							\
+	"p.ct, "							\
+	"p._id, "							\
+	"p.unique_id, "							\
+	"p.pending_push, "						\
+	"p.data_size, "							\
+	"m.date, "							\
+	"m.date_received, "						\
 	"0 AS quote "							\
-	"FROM part "
+	"FROM part AS p "						\
+	"LEFT JOIN mms AS m "						\
+	"ON p.mid = m._id "
 
 /* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_SELECT_2					\
 	"SELECT "							\
-	"file_name, "							\
-	"ct, "								\
-	"_id, "								\
-	"unique_id, "							\
-	"pending_push, "						\
-	"data_size "							\
-	"FROM part "
+	"p.file_name, "							\
+	"p.ct, "							\
+	"p._id, "							\
+	"p.unique_id, "							\
+	"p.pending_push, "						\
+	"p.data_size, "							\
+	"m.date, "							\
+	"m.date_received "						\
+	"FROM part AS p "						\
+	"LEFT JOIN mms AS m "						\
+	"ON p.mid = m._id "
 
 #define SBK_ATTACHMENTS_WHERE_THREAD					\
-	"WHERE mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
+	"WHERE p.mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
 
 #define SBK_ATTACHMENTS_WHERE_MESSAGE					\
-	"WHERE mid = ? AND quote = 0 "
+	"WHERE p.mid = ? AND quote = 0 "
 
 #define SBK_ATTACHMENTS_WHERE_QUOTE					\
-	"WHERE mid = ? AND quote = 1 "
+	"WHERE p.mid = ? AND quote = 1 "
 
 #define SBK_ATTACHMENTS_ORDER						\
-	"ORDER BY unique_id, _id"
+	"ORDER BY p.unique_id, p._id"
 
 #define SBK_ATTACHMENTS_QUERY_ALL					\
 	SBK_ATTACHMENTS_SELECT_2					\
@@ -1517,6 +1525,8 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 #define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	3
 #define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	4
 #define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	5
+#define SBK_ATTACHMENTS_COLUMN_DATE		6
+#define SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED	7
 
 static struct sbk_attachment *
 sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -1547,6 +1557,10 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	    SBK_ATTACHMENTS_COLUMN_PENDING_PUSH);
 	att->size = sqlite3_column_int64(stm,
 	    SBK_ATTACHMENTS_COLUMN_DATA_SIZE);
+	att->time_sent = sqlite3_column_int64(stm,
+	    SBK_ATTACHMENTS_COLUMN_DATE);
+	att->time_recv = sqlite3_column_int64(stm,
+	    SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED);
 	att->file = sbk_get_attachment_file(ctx, att->rowid,
 	    att->attachmentid);
 

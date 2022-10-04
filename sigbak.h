@@ -139,6 +139,8 @@ struct sbk_attachment {
 	char		*filename;
 	char		*content_type;
 	uint64_t	 size;
+	uint64_t	 time_sent;
+	uint64_t	 time_recv;
 	struct sbk_file	*file;
 	TAILQ_ENTRY(sbk_attachment) entries;
 };
@@ -243,6 +245,7 @@ const char	*mime_get_extension(const char *);
 
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
+void		 sanitise_filename(char *);
 void		 usage(const char *, const char *) __dead;
 
 int		 cmd_attachments(int, char **);

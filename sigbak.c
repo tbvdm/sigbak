@@ -105,6 +105,26 @@ unveil_dirname(const char *path, const char *perms)
 	return 0;
 }
 
+void
+sanitise_filename(char *name)
+{
+	char *c;
+
+	if (strcmp(name, ".") == 0) {
+		name[0] = '_';
+		return;
+	}
+
+	if (strcmp(name, "..") == 0) {
+		name[0] = name[1] = '_';
+		return;
+	}
+
+	for (c = name; *c != '\0'; c++)
+		if (*c == '/' || iscntrl((unsigned char)*c))
+			*c = '_';
+}
+
 int
 main(int argc, char **argv)
 {
