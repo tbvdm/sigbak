@@ -170,11 +170,11 @@ jobs:
     - name: install protobuf-c
       shell: C:\cygwin\bin\bash.exe -elo pipefail -o igncr '{0}'
       run: |
-        VERSION=1.3.3
+        VERSION=1.4.1
         curl -LO https://github.com/protobuf-c/protobuf-c/releases/download/v$VERSION/protobuf-c-$VERSION.tar.gz
         tar fxz protobuf-c-$VERSION.tar.gz
         cd protobuf-c-$VERSION
-        ./configure --prefix=/usr/local
+        ./configure
         make install
 
     - name: install and run sigbak
