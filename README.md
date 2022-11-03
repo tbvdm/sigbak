@@ -77,13 +77,13 @@ After the installation has completed, start the Cygwin terminal.
 Unfortunately, Cygwin does not provide a package for `protobuf-c`, so you will
 have to install it from source. Run the following commands:
 
-	curl -LO https://github.com/protobuf-c/protobuf-c/releases/download/v1.3.3/protobuf-c-1.3.3.tar.gz
-	tar fxz protobuf-c-1.3.3.tar.gz
-	cd protobuf-c-1.3.3
-	./configure --prefix=/usr/local
+	curl -LO https://github.com/protobuf-c/protobuf-c/releases/download/v1.4.1/protobuf-c-1.4.1.tar.gz
+	tar fxz protobuf-c-1.4.1.tar.gz
+	cd protobuf-c-1.4.1
+	./configure
 	make install
 	cd ..
-	rm -r protobuf-c-1.3.3
+	rm -r protobuf-c-1.4.1
 
 Now you can build and install sigbak. Run the following commands:
 
