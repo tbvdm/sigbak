@@ -56,8 +56,6 @@
 #define SBK_DB_VERSION_THREAD_AUTOINCREMENT	108
 #define SBK_DB_VERSION_REACTION_REFACTOR	121
 
-#define sbk_warnx(ctx, ...)	warnx(__VA_ARGS__)
-
 struct sbk_file {
 	long		 pos;
 	uint32_t	 len;
@@ -1565,11 +1563,11 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	    att->attachmentid);
 
 	if (att->file == NULL)
-		sbk_warnx(ctx, "Attachment %" PRId64 "-%" PRId64 " not "
-		    "available in backup", att->rowid, att->attachmentid);
+		warnx("Attachment %" PRId64 "-%" PRId64 " not available in "
+		    "backup", att->rowid, att->attachmentid);
 	else if (att->size != att->file->len)
-		sbk_warnx(ctx, "Attachment %" PRId64 "-%" PRId64 " has "
-		    "inconsistent size", att->rowid, att->attachmentid);
+		warnx("Attachment %" PRId64 "-%" PRId64 " has inconsistent "
+		    "size", att->rowid, att->attachmentid);
 
 	return att;
 
@@ -1846,8 +1844,7 @@ sbk_insert_mentions(struct sbk_ctx *ctx, char **text,
 	return 0;
 
 error:
-	sbk_warnx(ctx, "Invalid mention in message %d-%d", mid->type,
-	    mid->rowid);
+	warnx("Invalid mention in message %d-%d", mid->type, mid->rowid);
 	free(newtext);
 	return 0;
 }
@@ -2230,7 +2227,7 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return 0;
 
 	if (att->file == NULL) {
-		sbk_warnx(ctx, "Long-message attachment for message %d-%d not "
+		warnx("Long-message attachment for message %d-%d not "
 		    "available in backup", msg->id.type, msg->id.rowid);
 		return 0;
 	}
@@ -2507,18 +2504,17 @@ sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 			continue;
 
 		if (msg->ranges[i]->mentionuuid == NULL) {
-			sbk_warnx(ctx, "Quoted mention without uuid in "
-			    "message %d-%d", mid->type, mid->rowid);
+			warnx("Quoted mention without uuid in message %d-%d",
+			    mid->type, mid->rowid);
 			continue;
 		}
 
 		rcp = sbk_get_recipient_from_uuid(ctx,
 		    msg->ranges[i]->mentionuuid);
 		if (rcp == NULL)
-			sbk_warnx(ctx, "Cannot find recipient for quoted "
-			    "mention uuid %s in message %d-%d",
-			    msg->ranges[i]->mentionuuid, mid->type,
-			    mid->rowid);
+			warnx("Cannot find recipient for quoted mention uuid "
+			    "%s in message %d-%d", msg->ranges[i]->mentionuuid,
+			    mid->type, mid->rowid);
 
 		if ((mnt = malloc(sizeof *mnt)) == NULL) {
 			sbk_error_set(ctx, NULL);
