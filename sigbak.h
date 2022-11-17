@@ -92,10 +92,11 @@
 #define SBK_ENCRYPTION_REMOTE_LEGACY_BIT	0x2000000
 
 /* Attachment transfer states */
-#define SBK_ATTACHMENT_TRANSFER_DONE	0
-#define SBK_ATTACHMENT_TRANSFER_STARTED	1
-#define SBK_ATTACHMENT_TRANSFER_PENDING	2
-#define SBK_ATTACHMENT_TRANSFER_FAILED	3
+#define SBK_ATTACHMENT_TRANSFER_DONE			0
+#define SBK_ATTACHMENT_TRANSFER_STARTED			1
+#define SBK_ATTACHMENT_TRANSFER_PENDING			2
+#define SBK_ATTACHMENT_TRANSFER_FAILED			3
+#define SBK_ATTACHMENT_TRANSFER_PERMANENT_FAILURE	4
 
 /* Content type of the long-text attachment of a long message */
 #define SBK_LONG_TEXT_TYPE	"text/x-signal-plain"
@@ -238,8 +239,6 @@ void		 sbk_free_thread_list(struct sbk_thread_list *);
 const char	*sbk_get_recipient_display_name(const struct sbk_recipient *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
-
-const char	*sbk_error(struct sbk_ctx *);
 
 const char	*mime_get_extension(const char *);
 

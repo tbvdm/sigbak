@@ -63,7 +63,7 @@ cmd_check(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		errx(1, "Cannot create backup context");
+		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
@@ -71,7 +71,6 @@ cmd_check(int argc, char **argv)
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
@@ -97,8 +96,7 @@ cmd_check(int argc, char **argv)
 	}
 
 	if (!sbk_eof(ctx) || ret == -1) {
-		warnx("%s: Error in frame %llu: %s", argv[0], n,
-		    sbk_error(ctx));
+		warnx("Error in frame %llu", n);
 		ret = 1;
 	}
 

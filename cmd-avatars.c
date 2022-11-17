@@ -203,7 +203,7 @@ write_files(int argc, char **argv, enum type type)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		errx(1, "Cannot create backup context");
+		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
@@ -211,7 +211,6 @@ write_files(int argc, char **argv, enum type type)
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
@@ -243,10 +242,8 @@ write_files(int argc, char **argv, enum type type)
 		sbk_free_file(file);
 	}
 
-	if (!sbk_eof(ctx)) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
+	if (!sbk_eof(ctx))
 		ret = 1;
-	}
 
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
