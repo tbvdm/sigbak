@@ -664,7 +664,7 @@ cmd_messages(int argc, char **argv)
 		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1)
-		return -1;
+		return 1;
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
