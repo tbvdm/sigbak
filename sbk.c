@@ -95,7 +95,7 @@ struct sbk_ctx {
 	EVP_CIPHER_CTX	*cipher_ctx;
 #ifdef HAVE_EVP_MAC
 	EVP_MAC_CTX	*mac_ctx;
-	OSSL_PARAM	 params[3];
+	OSSL_PARAM	 mac_params[3];
 #else
 	HMAC_CTX	*hmac_ctx;
 #endif
@@ -242,7 +242,7 @@ static int
 sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
 #ifdef HAVE_EVP_MAC
-	if (!EVP_MAC_init(ctx->mac_ctx, NULL, 0, ctx->params)) {
+	if (!EVP_MAC_init(ctx->mac_ctx, NULL, 0, ctx->mac_params)) {
 		sbk_error_setx(ctx, "Cannot initialise MAC");
 		return -1;
 	}
@@ -3078,11 +3078,11 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	}
 
 #ifdef HAVE_EVP_MAC
-	ctx->params[0] = OSSL_PARAM_construct_octet_string("key", ctx->mac_key,
-	    SBK_MAC_KEY_LEN);
-	ctx->params[1] = OSSL_PARAM_construct_utf8_string("digest", "SHA256",
-	    0);
-	ctx->params[2] = OSSL_PARAM_construct_end();
+	ctx->mac_params[0] = OSSL_PARAM_construct_octet_string("key",
+	    ctx->mac_key, SBK_MAC_KEY_LEN);
+	ctx->mac_params[1] = OSSL_PARAM_construct_utf8_string("digest",
+	    "SHA256", 0);
+	ctx->mac_params[2] = OSSL_PARAM_construct_end();
 #else
 	if (!HMAC_Init_ex(ctx->hmac_ctx, ctx->mac_key, SBK_MAC_KEY_LEN,
 	    EVP_sha256(), NULL)) {
