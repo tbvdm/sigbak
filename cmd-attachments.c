@@ -162,10 +162,8 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 			continue;
 		}
 
-		if (sbk_write_file(ctx, att->file, fp) == -1) {
-			warnx("%s", sbk_error(ctx));
+		if (sbk_write_file(ctx, att->file, fp) == -1)
 			ret = 1;
-		}
 
 		fclose(fp);
 	}
@@ -241,7 +239,7 @@ cmd_attachments(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		errx(1, "Cannot create backup context");
+		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
@@ -249,7 +247,6 @@ cmd_attachments(int argc, char **argv)
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
@@ -272,10 +269,9 @@ cmd_attachments(int argc, char **argv)
 	else
 		lst = sbk_get_attachments_for_thread(ctx, thread);
 
-	if (lst == NULL) {
-		warnx("%s", sbk_error(ctx));
+	if (lst == NULL)
 		ret = 1;
-	} else {
+	else {
 		ret = write_attachments(ctx, lst);
 		sbk_free_attachment_list(lst);
 	}

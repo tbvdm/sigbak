@@ -240,8 +240,6 @@ const char	*sbk_get_recipient_display_name(const struct sbk_recipient *);
 
 int		 sbk_write_database(struct sbk_ctx *, const char *);
 
-const char	*sbk_error(struct sbk_ctx *);
-
 const char	*mime_get_extension(const char *);
 
 int		 get_passphrase(const char *, char *, size_t);

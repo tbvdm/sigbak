@@ -135,7 +135,6 @@ csv_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 		lst = sbk_get_messages_for_thread(ctx, thread);
 
 	if (lst == NULL) {
-		warnx("Cannot get messages: %s", sbk_error(ctx));
 		fclose(fp);
 		return -1;
 	}
@@ -313,10 +312,8 @@ maildir_write_attachment(struct sbk_ctx *ctx, FILE *fp,
 	char	*b64, *data, *s;
 	size_t	 b64len, datalen, n;
 
-	if ((data = sbk_get_file_data(ctx, att->file, &datalen)) == NULL) {
-		warnx("Cannot get attachment data: %s", sbk_error(ctx));
+	if ((data = sbk_get_file_data(ctx, att->file, &datalen)) == NULL)
 		return -1;
-	}
 
 	if ((b64 = maildir_base64_encode(data, datalen, &b64len)) == NULL) {
 		free(data);
@@ -428,10 +425,8 @@ maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
 	else
 		lst = sbk_get_messages_for_thread(ctx, thread);
 
-	if (lst == NULL) {
-		warnx("Cannot get messages: %s", sbk_error(ctx));
+	if (lst == NULL)
 		return -1;
-	}
 
 	ret = 0;
 
@@ -569,7 +564,6 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 		lst = sbk_get_messages_for_thread(ctx, thread);
 
 	if (lst == NULL) {
-		warnx("Cannot get messages: %s", sbk_error(ctx));
 		fclose(fp);
 		return -1;
 	}
@@ -667,13 +661,12 @@ cmd_messages(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		errx(1, "Cannot create backup context");
+		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1)
 		return -1;
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;

@@ -17,7 +17,6 @@
 #include <sys/tree.h>
 
 #include <err.h>
-#include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -102,7 +101,6 @@ struct sbk_ctx {
 	size_t		 obufsize;
 	int		 firstframe;
 	int		 eof;
-	char		*error;
 };
 
 static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
@@ -117,84 +115,39 @@ RB_GENERATE_STATIC(sbk_recipient_tree, sbk_recipient_entry, entries,
     sbk_cmp_recipient_entries)
 
 static void
-sbk_error_clear(struct sbk_ctx *ctx)
+sbk_sqlite_vwarnd(sqlite3 *db, const char *fmt, va_list ap)
 {
-	free(ctx->error);
-	ctx->error = NULL;
-}
+	char *msg;
 
-static void
-sbk_error_set(struct sbk_ctx *ctx, const char *fmt, ...)
-{
-	va_list	 ap;
-	char	*errmsg, *msg;
-	int	 saved_errno;
-
-	va_start(ap, fmt);
-	saved_errno = errno;
-	sbk_error_clear(ctx);
-	errmsg = strerror(saved_errno);
-
-	if (fmt == NULL || vasprintf(&msg, fmt, ap) == -1)
-		ctx->error = strdup(errmsg);
-	else if (asprintf(&ctx->error, "%s: %s", msg, errmsg) == -1)
-		ctx->error = msg;
-	else
+	if (fmt == NULL)
+		warnx("%s", sqlite3_errmsg(db));
+	else {
+		if (vasprintf(&msg, fmt, ap) == -1) {
+			warnx("vasprintf() failed");
+			return;
+		}
+		warnx("%s: %s", msg, sqlite3_errmsg(db));
 		free(msg);
-
-	errno = saved_errno;
-	va_end(ap);
+	}
 }
 
 static void
-sbk_error_setx(struct sbk_ctx *ctx, const char *fmt, ...)
+sbk_sqlite_warnd(sqlite3 *db, const char *fmt, ...)
 {
 	va_list ap;
 
 	va_start(ap, fmt);
-	sbk_error_clear(ctx);
-
-	if (fmt == NULL || vasprintf(&ctx->error, fmt, ap) == -1)
-		ctx->error = NULL;
-
+	sbk_sqlite_vwarnd(db, fmt, ap);
 	va_end(ap);
 }
 
 static void
-sbk_error_sqlite_vsetd(struct sbk_ctx *ctx, sqlite3 *db, const char *fmt,
-    va_list ap)
-{
-	const char	*errmsg;
-	char		*msg;
-
-	sbk_error_clear(ctx);
-	errmsg = sqlite3_errmsg(db);
-
-	if (fmt == NULL || vasprintf(&msg, fmt, ap) == -1)
-		ctx->error = strdup(errmsg);
-	else if (asprintf(&ctx->error, "%s: %s", msg, errmsg) == -1)
-		ctx->error = msg;
-	else
-		free(msg);
-}
-
-static void
-sbk_error_sqlite_setd(struct sbk_ctx *ctx, sqlite3 *db, const char *fmt, ...)
+sbk_sqlite_warn(struct sbk_ctx *ctx, const char *fmt, ...)
 {
 	va_list ap;
 
 	va_start(ap, fmt);
-	sbk_error_sqlite_vsetd(ctx, db, fmt, ap);
-	va_end(ap);
-}
-
-static void
-sbk_error_sqlite_set(struct sbk_ctx *ctx, const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	sbk_error_sqlite_vsetd(ctx, ctx->db, fmt, ap);
+	sbk_sqlite_vwarnd(ctx->db, fmt, ap);
 	va_end(ap);
 }
 
@@ -205,7 +158,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 
 	if (ctx->ibufsize < size) {
 		if ((buf = realloc(ctx->ibuf, size)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			return -1;
 		}
 		ctx->ibuf = buf;
@@ -213,7 +166,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 	}
 
 	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
-		sbk_error_setx(ctx, "Buffer size too large");
+		warnx("Buffer size too large");
 		return -1;
 	}
 
@@ -221,7 +174,7 @@ sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
 
 	if (ctx->obufsize < size) {
 		if ((buf = realloc(ctx->obuf, size)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			return -1;
 		}
 		ctx->obuf = buf;
@@ -235,7 +188,7 @@ static int
 sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 {
 	if (!HMAC_Init_ex(ctx->hmac_ctx, NULL, 0, NULL, NULL)) {
-		sbk_error_setx(ctx, "Cannot initialise MAC");
+		warnx("Cannot initialise MAC context");
 		return -1;
 	}
 
@@ -246,7 +199,7 @@ sbk_decrypt_init(struct sbk_ctx *ctx, uint32_t counter)
 
 	if (!EVP_DecryptInit_ex(ctx->cipher_ctx, NULL, NULL, ctx->cipher_key,
 	    ctx->iv)) {
-		sbk_error_setx(ctx, "Cannot initialise cipher");
+		warnx("Cannot initialise cipher context");
 		return -1;
 	}
 
@@ -259,13 +212,13 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 	int len;
 
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->ibuf, ibuflen)) {
-		sbk_error_setx(ctx, "Cannot compute MAC");
+		warnx("Cannot compute MAC");
 		return -1;
 	}
 
 	if (!EVP_DecryptUpdate(ctx->cipher_ctx, ctx->obuf, &len, ctx->ibuf,
 	    ibuflen)) {
-		sbk_error_setx(ctx, "Cannot decrypt data");
+		warnx("Cannot decrypt data");
 		return -1;
 	}
 
@@ -282,18 +235,18 @@ sbk_decrypt_final(struct sbk_ctx *ctx, size_t *obuflen,
 	int		len;
 
 	if (!HMAC_Final(ctx->hmac_ctx, ourmac, &ourmaclen)) {
-		sbk_error_setx(ctx, "Cannot compute MAC");
+		warnx("Cannot compute MAC");
 		return -1;
 	}
 
 	if (memcmp(ourmac, theirmac, SBK_MAC_LEN) != 0) {
-		sbk_error_setx(ctx, "MAC mismatch");
+		warnx("MAC mismatch");
 		return -1;
 	}
 
 	if (!EVP_DecryptFinal_ex(ctx->cipher_ctx, ctx->obuf + *obuflen,
 	    &len)) {
-		sbk_error_setx(ctx, "Cannot decrypt data");
+		warnx("Cannot decrypt data");
 		return -1;
 	}
 
@@ -306,9 +259,9 @@ sbk_read(struct sbk_ctx *ctx, void *ptr, size_t size)
 {
 	if (fread(ptr, size, 1, ctx->fp) != 1) {
 		if (ferror(ctx->fp))
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 		else
-			sbk_error_setx(ctx, "Unexpected end of file");
+			warnx("Unexpected end of file");
 		return -1;
 	}
 
@@ -328,7 +281,7 @@ sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
 	    lenbuf[3];
 
 	if (len <= 0) {
-		sbk_error_setx(ctx, "Invalid frame size");
+		warnx("Invalid frame size");
 		return -1;
 	}
 
@@ -361,12 +314,12 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	else if (frm->sticker != NULL && frm->sticker->has_length)
 		len = frm->sticker->length;
 	else {
-		sbk_error_setx(ctx, "Invalid frame");
+		warnx("Invalid frame");
 		return -1;
 	}
 
 	if (fseek(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1) {
-		sbk_error_set(ctx, "Cannot seek");
+		warn("Cannot seek");
 		return -1;
 	}
 
@@ -375,12 +328,12 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 }
 
 static Signal__BackupFrame *
-sbk_unpack_frame(struct sbk_ctx *ctx, unsigned char *buf, size_t len)
+sbk_unpack_frame(unsigned char *buf, size_t len)
 {
 	Signal__BackupFrame *frm;
 
 	if ((frm = signal__backup_frame__unpack(NULL, len, buf)) == NULL)
-		sbk_error_setx(ctx, "Cannot unpack frame");
+		warnx("Cannot unpack frame");
 
 	return frm;
 }
@@ -391,30 +344,30 @@ sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 	struct sbk_file *file;
 
 	if ((file = malloc(sizeof *file)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
 	if ((file->pos = ftell(ctx->fp)) == -1) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
 	if (frm->attachment != NULL) {
 		if (!frm->attachment->has_length) {
-			sbk_error_setx(ctx, "Invalid attachment frame");
+			warnx("Invalid attachment frame");
 			goto error;
 		}
 		file->len = frm->attachment->length;
 	} else if (frm->avatar != NULL) {
 		if (!frm->avatar->has_length) {
-			sbk_error_setx(ctx, "Invalid avatar frame");
+			warnx("Invalid avatar frame");
 			goto error;
 		}
 		file->len = frm->avatar->length;
 	} else if (frm->sticker != NULL) {
 		if (!frm->sticker->has_length) {
-			sbk_error_setx(ctx, "Invalid sticker frame");
+			warnx("Invalid sticker frame");
 			goto error;
 		}
 		file->len = frm->sticker->length;
@@ -447,11 +400,11 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	/* The first frame is not encrypted */
 	if (ctx->firstframe) {
 		ctx->firstframe = 0;
-		return sbk_unpack_frame(ctx, ctx->ibuf, ibuflen);
+		return sbk_unpack_frame(ctx->ibuf, ibuflen);
 	}
 
 	if (ibuflen <= SBK_MAC_LEN) {
-		sbk_error_setx(ctx, "Invalid frame size");
+		warnx("Invalid frame size");
 		return NULL;
 	}
 
@@ -467,7 +420,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
 		return NULL;
 
-	if ((frm = sbk_unpack_frame(ctx, ctx->obuf, obuflen)) == NULL)
+	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL)
 		return NULL;
 
 	if (frm->has_end)
@@ -520,7 +473,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		return -1;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
-		sbk_error_set(ctx, "Cannot seek");
+		warn("Cannot seek");
 		return -1;
 	}
 
@@ -528,7 +481,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 		return -1;
 
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
-		sbk_error_setx(ctx, "Cannot compute MAC");
+		warnx("Cannot compute MAC");
 		return -1;
 	}
 
@@ -542,7 +495,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 			return -1;
 
 		if (fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) != 1) {
-			sbk_error_set(ctx, "Cannot write file");
+			warn("Cannot write file");
 			return -1;
 		}
 	}
@@ -557,7 +510,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 
 	if (obuflen > 0 && fp != NULL && fwrite(ctx->obuf, obuflen, 1, fp) !=
 	    1) {
-		sbk_error_set(ctx, "Cannot write file");
+		warn("Cannot write file");
 		return -1;
 	}
 
@@ -579,7 +532,7 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 		return NULL;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
-		sbk_error_set(ctx, "Cannot seek");
+		warn("Cannot seek");
 		return NULL;
 	}
 
@@ -587,14 +540,14 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 		terminate = 1;
 
 	if ((size_t)file->len > SIZE_MAX - EVP_MAX_BLOCK_LENGTH - terminate) {
-		sbk_error_setx(ctx, "File too large");
+		warnx("File too large");
 		return NULL;
 	}
 
 	obufsize = file->len + EVP_MAX_BLOCK_LENGTH + terminate;
 
 	if ((obuf = malloc(obufsize)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -602,7 +555,7 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 		goto error;
 
 	if (!HMAC_Update(ctx->hmac_ctx, ctx->iv, SBK_IV_LEN)) {
-		sbk_error_setx(ctx, "Cannot compute MAC");
+		warnx("Cannot compute MAC");
 		goto error;
 	}
 
@@ -665,7 +618,7 @@ sbk_sqlite_bind_blob(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
 {
 	if (sqlite3_bind_blob(stm, idx, val, len, SQLITE_STATIC) !=
 	    SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -677,7 +630,7 @@ sbk_sqlite_bind_double(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     double val)
 {
 	if (sqlite3_bind_double(stm, idx, val) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -688,7 +641,7 @@ static int
 sbk_sqlite_bind_int(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx, int val)
 {
 	if (sqlite3_bind_int(stm, idx, val) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -700,7 +653,7 @@ sbk_sqlite_bind_int64(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     sqlite3_int64 val)
 {
 	if (sqlite3_bind_int64(stm, idx, val) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -711,7 +664,7 @@ static int
 sbk_sqlite_bind_null(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx)
 {
 	if (sqlite3_bind_null(stm, idx) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -723,7 +676,7 @@ sbk_sqlite_bind_text(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
     const char *val)
 {
 	if (sqlite3_bind_text(stm, idx, val, -1, SQLITE_STATIC) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot bind SQL parameter");
+		sbk_sqlite_warn(ctx, "Cannot bind SQL parameter");
 		return -1;
 	}
 
@@ -744,17 +697,17 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 		return 0;
 
 	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
-		sbk_error_sqlite_set(ctx, "Cannot get column text");
+		sbk_sqlite_warn(ctx, "Cannot get column text");
 		return -1;
 	}
 
 	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
-		sbk_error_sqlite_set(ctx, "Cannot get column size");
+		sbk_sqlite_warn(ctx, "Cannot get column size");
 		return -1;
 	}
 
 	if ((*buf = malloc((size_t)len + 1)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return -1;
 	}
 
@@ -769,12 +722,12 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 		return 0;
 
 	if ((txt = sqlite3_column_text(stm, idx)) == NULL) {
-		sbk_error_sqlite_set(ctx, "Cannot get column text");
+		sbk_sqlite_warn(ctx, "Cannot get column text");
 		return -1;
 	}
 
 	if ((*buf = strdup((const char *)txt)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return -1;
 	}
 
@@ -783,10 +736,10 @@ sbk_sqlite_column_text_copy(struct sbk_ctx *ctx, char **buf, sqlite3_stmt *stm,
 }
 
 static int
-sbk_sqlite_open(struct sbk_ctx *ctx, sqlite3 **db, const char *path)
+sbk_sqlite_open(sqlite3 **db, const char *path)
 {
 	if (sqlite3_open(path, db) != SQLITE_OK) {
-		sbk_error_sqlite_setd(ctx, *db, "Cannot open database");
+		sbk_sqlite_warnd(*db, "Cannot open database");
 		return -1;
 	}
 
@@ -797,7 +750,7 @@ static int
 sbk_sqlite_prepare(struct sbk_ctx *ctx, sqlite3_stmt **stm, const char *query)
 {
 	if (sqlite3_prepare_v2(ctx->db, query, -1, stm, NULL) != SQLITE_OK) {
-		sbk_error_sqlite_set(ctx, "Cannot prepare SQL statement");
+		sbk_sqlite_warn(ctx, "Cannot prepare SQL statement");
 		return -1;
 	}
 
@@ -811,7 +764,7 @@ sbk_sqlite_step(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 
 	ret = sqlite3_step(stm);
 	if (ret != SQLITE_ROW && ret != SQLITE_DONE)
-		sbk_error_sqlite_set(ctx, "Cannot execute SQL statement");
+		sbk_sqlite_warn(ctx, "Cannot execute SQL statement");
 
 	return ret;
 }
@@ -822,8 +775,7 @@ sbk_sqlite_exec(struct sbk_ctx *ctx, const char *sql)
 	char *errmsg;
 
 	if (sqlite3_exec(ctx->db, sql, NULL, NULL, &errmsg) != SQLITE_OK) {
-		sbk_error_setx(ctx, "Cannot execute SQL statement: %s",
-		    errmsg);
+		warnx("Cannot execute SQL statement: %s", errmsg);
 		sqlite3_free(errmsg);
 		return -1;
 	}
@@ -853,13 +805,13 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 
 	if (!frm->attachment->has_rowid ||
 	    !frm->attachment->has_attachmentid) {
-		sbk_error_setx(ctx, "Invalid attachment frame");
+		warnx("Invalid attachment frame");
 		sbk_free_file(file);
 		return -1;
 	}
 
 	if ((entry = malloc(sizeof *entry)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		sbk_free_file(file);
 		return -1;
 	}
@@ -918,7 +870,7 @@ sbk_bind_param(struct sbk_ctx *ctx, sqlite3_stmt *stm, int idx,
 	if (par->has_nullparameter)
 		return sbk_sqlite_bind_null(ctx, stm, idx);
 
-	sbk_error_setx(ctx, "Unknown SQL parameter type");
+	warnx("Unknown SQL parameter type");
 	return -1;
 }
 
@@ -929,7 +881,7 @@ sbk_exec_statement(struct sbk_ctx *ctx, Signal__SqlStatement *sql)
 	size_t		 i;
 
 	if (sql->statement == NULL) {
-		sbk_error_setx(ctx, "Invalid SQL frame");
+		warnx("Invalid SQL frame");
 		return -1;
 	}
 
@@ -962,7 +914,7 @@ sbk_set_database_version(struct sbk_ctx *ctx, Signal__DatabaseVersion *ver)
 	int	 ret;
 
 	if (!ver->has_version) {
-		sbk_error_setx(ctx, "Invalid version frame");
+		warnx("Invalid version frame");
 		return -1;
 	}
 
@@ -970,7 +922,7 @@ sbk_set_database_version(struct sbk_ctx *ctx, Signal__DatabaseVersion *ver)
 
 	if (asprintf(&sql, "PRAGMA user_version = %" PRIu32, ver->version) ==
 	    -1) {
-		sbk_error_setx(ctx, "asprintf() failed");
+		warnx("asprintf() failed");
 		return -1;
 	}
 
@@ -989,7 +941,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (ctx->db != NULL)
 		return 0;
 
-	if (sbk_sqlite_open(ctx, &ctx->db, ":memory:") == -1)
+	if (sbk_sqlite_open(&ctx->db, ":memory:") == -1)
 		goto error;
 
 	if (sbk_rewind(ctx) == -1)
@@ -1040,16 +992,16 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	if (sbk_create_database(ctx) == -1)
 		return -1;
 
-	if (sbk_sqlite_open(ctx, &db, path) == -1)
+	if (sbk_sqlite_open(&db, path) == -1)
 		goto error;
 
 	if ((bak = sqlite3_backup_init(db, "main", ctx->db, "main")) == NULL) {
-		sbk_error_sqlite_setd(ctx, db, "Cannot write database");
+		sbk_sqlite_warnd(db, "Cannot write database");
 		goto error;
 	}
 
 	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE) {
-		sbk_error_sqlite_setd(ctx, db, "Cannot write database");
+		sbk_sqlite_warnd(db, "Cannot write database");
 		sqlite3_backup_finish(bak);
 		goto error;
 	}
@@ -1057,7 +1009,7 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 	sqlite3_backup_finish(bak);
 
 	if (sqlite3_close(db) != SQLITE_OK) {
-		sbk_error_sqlite_setd(ctx, db, "Cannot close database");
+		sbk_sqlite_warnd(db, "Cannot close database");
 		return -1;
 	}
 
@@ -1087,7 +1039,7 @@ sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
 		if (sbk_sqlite_column_text_copy(ctx, &id->old, stm, idx) == -1)
 			return -1;
 		if (id->old == NULL) {
-			sbk_error_setx(ctx, "Invalid recipient id");
+			warnx("Invalid recipient id");
 			return -1;
 		}
 	} else {
@@ -1215,7 +1167,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	struct sbk_group		*grp;
 
 	if ((ent = calloc(1, sizeof *ent)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -1233,7 +1185,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	case SBK_CONTACT:
 		con = ent->recipient.contact = calloc(1, sizeof *con);
 		if (con == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error;
 		}
 
@@ -1241,13 +1193,13 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			if (strchr(ent->id.old, '@') != NULL) {
 				con->email = strdup(ent->id.old);
 				if (con->email == NULL) {
-					sbk_error_set(ctx, NULL);
+					warn(NULL);
 					goto error;
 				}
 			} else {
 				con->phone = strdup(ent->id.old);
 				if (con->phone == NULL) {
-					sbk_error_set(ctx, NULL);
+					warn(NULL);
 					goto error;
 				}
 			}
@@ -1290,7 +1242,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	case SBK_GROUP:
 		grp = ent->recipient.group = calloc(1, sizeof *grp);
 		if (grp == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error;
 		}
 
@@ -1362,7 +1314,7 @@ sbk_get_recipient(struct sbk_ctx *ctx, struct sbk_recipient_id *id)
 	result = RB_FIND(sbk_recipient_tree, &ctx->recipients, &find);
 
 	if (result == NULL) {
-		sbk_error_setx(ctx, "Cannot find recipient");
+		warnx("Cannot find recipient");
 		return NULL;
 	}
 
@@ -1532,7 +1484,7 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	struct sbk_attachment *att;
 
 	if ((att = malloc(sizeof *att)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -1584,7 +1536,7 @@ sbk_get_attachments(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	int				 ret;
 
 	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
@@ -1716,7 +1668,7 @@ sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	struct sbk_mention *mnt;
 
 	if ((mnt = malloc(sizeof *mnt)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -1749,7 +1701,7 @@ sbk_get_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 		goto error;
 
 	if ((msg->mentions = malloc(sizeof *msg->mentions)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
@@ -1775,8 +1727,8 @@ error:
 }
 
 static int
-sbk_insert_mentions(struct sbk_ctx *ctx, char **text,
-    struct sbk_mention_list *lst, struct sbk_message_id *mid)
+sbk_insert_mentions(char **text, struct sbk_mention_list *lst,
+    struct sbk_message_id *mid)
 {
 	struct sbk_mention *mnt;
 	char		*newtext, *newtextpos, *placeholderpos, *textpos;
@@ -1802,7 +1754,7 @@ sbk_insert_mentions(struct sbk_ctx *ctx, char **text,
 	}
 
 	if ((newtext = malloc(newtextlen + 1)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return -1;
 	}
 
@@ -1895,13 +1847,12 @@ sbk_free_reaction_list(struct sbk_reaction_list *lst)
  */
 
 static Signal__ReactionList *
-sbk_unpack_reaction_list_message(struct sbk_ctx *ctx, const void *buf,
-    size_t len)
+sbk_unpack_reaction_list_message(const void *buf, size_t len)
 {
 	Signal__ReactionList *msg;
 
 	if ((msg = signal__reaction_list__unpack(NULL, len, buf)) == NULL)
-		sbk_error_setx(ctx, "Cannot unpack reaction list");
+		warnx("Cannot unpack reaction list");
 
 	return msg;
 }
@@ -1932,20 +1883,20 @@ sbk_get_reactions_from_column(struct sbk_ctx *ctx,
 	}
 
 	if ((blob = sqlite3_column_blob(stm, idx)) == NULL) {
-		sbk_error_sqlite_set(ctx, "Cannot get reactions column");
+		sbk_sqlite_warn(ctx, "Cannot get reactions column");
 		return -1;
 	}
 
 	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
-		sbk_error_sqlite_set(ctx, "Cannot get reactions size");
+		sbk_sqlite_warn(ctx, "Cannot get reactions size");
 		return -1;
 	}
 
-	if ((msg = sbk_unpack_reaction_list_message(ctx, blob, len)) == NULL)
+	if ((msg = sbk_unpack_reaction_list_message(blob, len)) == NULL)
 		return -1;
 
 	if ((*lst = malloc(sizeof **lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error1;
 	}
 
@@ -1953,7 +1904,7 @@ sbk_get_reactions_from_column(struct sbk_ctx *ctx,
 
 	for (i = 0; i < msg->n_reactions; i++) {
 		if ((rct = malloc(sizeof *rct)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error1;
 		}
 
@@ -1964,7 +1915,7 @@ sbk_get_reactions_from_column(struct sbk_ctx *ctx,
 			goto error2;
 
 		if ((rct->emoji = strdup(msg->reactions[i]->emoji)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error2;
 		}
 
@@ -2011,7 +1962,7 @@ sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	struct sbk_reaction *rct;
 
 	if ((rct = calloc(1, sizeof *rct)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -2044,7 +1995,7 @@ sbk_get_reactions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	int				 ret;
 
 	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
@@ -2441,13 +2392,12 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_COLUMN_QUOTE_MENTIONS	12
 
 static Signal__BodyRangeList *
-sbk_unpack_quote_mention_list_message(struct sbk_ctx *ctx, const void *buf,
-    size_t len)
+sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
 {
 	Signal__BodyRangeList *msg;
 
 	if ((msg = signal__body_range_list__unpack(NULL, len, buf)) == NULL)
-		sbk_error_setx(ctx, "Cannot unpack quoted mention list");
+		warnx("Cannot unpack quoted mention list");
 
 	return msg;
 }
@@ -2478,21 +2428,20 @@ sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 	}
 
 	if ((blob = sqlite3_column_blob(stm, idx)) == NULL) {
-		sbk_error_sqlite_set(ctx, "Cannot get quoted mentions column");
+		sbk_sqlite_warn(ctx, "Cannot get quoted mentions column");
 		return -1;
 	}
 
 	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
-		sbk_error_sqlite_set(ctx, "Cannot get quoted mentions size");
+		sbk_sqlite_warn(ctx, "Cannot get quoted mentions size");
 		return -1;
 	}
 
-	msg = sbk_unpack_quote_mention_list_message(ctx, blob, len);
-	if (msg == NULL)
+	if ((msg = sbk_unpack_quote_mention_list_message(blob, len)) == NULL)
 		return -1;
 
 	if ((*lst = malloc(sizeof **lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
@@ -2517,7 +2466,7 @@ sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 			    mid->type, mid->rowid);
 
 		if ((mnt = malloc(sizeof *mnt)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error;
 		}
 
@@ -2547,7 +2496,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 	}
 
 	if ((qte = malloc(sizeof *qte)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return -1;
 	}
 
@@ -2573,8 +2522,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 	    SBK_MESSAGES_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
 		goto error;
 
-	if (sbk_insert_mentions(ctx, &qte->text, qte->mentions, &msg->id) ==
-	    -1)
+	if (sbk_insert_mentions(&qte->text, qte->mentions, &msg->id) == -1)
 		goto error;
 
 	msg->quote = qte;
@@ -2591,7 +2539,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	struct sbk_message *msg;
 
 	if ((msg = malloc(sizeof *msg)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -2636,8 +2584,8 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_mentions(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_insert_mentions(ctx, &msg->text, msg->mentions,
-		    &msg->id) == -1)
+		if (sbk_insert_mentions(&msg->text, msg->mentions, &msg->id) ==
+		    -1)
 			goto error;
 
 		if (sbk_get_quote(ctx, msg, stm) == -1)
@@ -2668,7 +2616,7 @@ sbk_get_messages(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	int			 ret;
 
 	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		goto error;
 	}
 
@@ -2798,7 +2746,7 @@ sbk_get_threads(struct sbk_ctx *ctx)
 		return NULL;
 
 	if ((lst = malloc(sizeof *lst)) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn(NULL);
 		return NULL;
 	}
 
@@ -2814,7 +2762,7 @@ sbk_get_threads(struct sbk_ctx *ctx)
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((thd = malloc(sizeof *thd)) == NULL) {
-			sbk_error_set(ctx, NULL);
+			warn(NULL);
 			goto error;
 		}
 
@@ -2896,7 +2844,7 @@ sbk_compute_keys(struct sbk_ctx *ctx, const char *passphr,
 	goto out;
 
 error:
-	sbk_error_setx(ctx, "Cannot compute keys");
+	warnx("Cannot compute keys");
 	ret = -1;
 
 out:
@@ -2912,21 +2860,26 @@ sbk_ctx_new(void)
 {
 	struct sbk_ctx *ctx;
 
-	if ((ctx = malloc(sizeof *ctx)) == NULL)
+	if ((ctx = malloc(sizeof *ctx)) == NULL) {
+		warn(NULL);
 		return NULL;
+	}
 
 	ctx->hmac_ctx = NULL;
 	ctx->ibuf = NULL;
 	ctx->obuf = NULL;
 	ctx->ibufsize = 0;
 	ctx->obufsize = 0;
-	ctx->error = NULL;
 
-	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL)
+	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL) {
+		warnx("Cannot create cipher context");
 		goto error;
+	}
 
-	if ((ctx->hmac_ctx = HMAC_CTX_new()) == NULL)
+	if ((ctx->hmac_ctx = HMAC_CTX_new()) == NULL) {
+		warnx("Cannot create MAC context");
 		goto error;
+	}
 
 	if (sbk_enlarge_buffers(ctx, 1024) == -1)
 		goto error;
@@ -2942,7 +2895,6 @@ void
 sbk_ctx_free(struct sbk_ctx *ctx)
 {
 	if (ctx != NULL) {
-		sbk_error_clear(ctx);
 		EVP_CIPHER_CTX_free(ctx->cipher_ctx);
 		HMAC_CTX_free(ctx->hmac_ctx);
 		free(ctx->ibuf);
@@ -2959,7 +2911,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	size_t			 saltlen;
 
 	if ((ctx->fp = fopen(path, "rb")) == NULL) {
-		sbk_error_set(ctx, NULL);
+		warn("%s", path);
 		return -1;
 	}
 
@@ -2970,17 +2922,17 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		goto error;
 
 	if (frm->header == NULL) {
-		sbk_error_setx(ctx, "Missing header frame");
+		warnx("Missing header frame");
 		goto error;
 	}
 
 	if (!frm->header->has_iv) {
-		sbk_error_setx(ctx, "Missing IV");
+		warnx("Missing IV");
 		goto error;
 	}
 
 	if (frm->header->iv.len != SBK_IV_LEN) {
-		sbk_error_setx(ctx, "Invalid IV size");
+		warnx("Invalid IV size");
 		goto error;
 	}
 
@@ -3002,13 +2954,13 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 
 	if (!EVP_DecryptInit_ex(ctx->cipher_ctx, EVP_aes_256_ctr(), NULL, NULL,
 	    NULL)) {
-		sbk_error_setx(ctx, "Cannot initialise cipher");
+		warnx("Cannot initialise cipher context");
 		goto error;
 	}
 
 	if (!HMAC_Init_ex(ctx->hmac_ctx, ctx->mac_key, SBK_MAC_KEY_LEN,
 	    EVP_sha256(), NULL)) {
-		sbk_error_setx(ctx, "Cannot initialise MAC");
+		warnx("Cannot initialise MAC context");
 		goto error;
 	}
 
@@ -3045,7 +2997,7 @@ int
 sbk_rewind(struct sbk_ctx *ctx)
 {
 	if (fseek(ctx->fp, 0, SEEK_SET) == -1) {
-		sbk_error_set(ctx, "Cannot seek");
+		warn("Cannot seek");
 		return -1;
 	}
 
@@ -3059,10 +3011,4 @@ int
 sbk_eof(struct sbk_ctx *ctx)
 {
 	return ctx->eof;
-}
-
-const char *
-sbk_error(struct sbk_ctx *ctx)
-{
-	return (ctx->error != NULL) ? ctx->error : "Unknown error";
 }

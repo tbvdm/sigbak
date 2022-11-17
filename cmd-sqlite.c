@@ -81,7 +81,7 @@ cmd_sqlite(int argc, char **argv)
 	close(fd);
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		errx(1, "Cannot create backup context");
+		return 1;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
@@ -89,7 +89,6 @@ cmd_sqlite(int argc, char **argv)
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
-		warnx("%s: %s", argv[0], sbk_error(ctx));
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return 1;
@@ -101,9 +100,7 @@ cmd_sqlite(int argc, char **argv)
 	    pledge("stdio rpath wpath cpath flock", NULL) == -1)
 		err(1, "pledge");
 
-	if ((ret = sbk_write_database(ctx, argv[1])) == -1)
-		warnx("%s", sbk_error(ctx));
-
+	ret = sbk_write_database(ctx, argv[1]);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == 0) ? 0 : 1;
