@@ -29,6 +29,14 @@
 
 #include "sigbak.h"
 
+static enum cmd_status cmd_attachments(int, char **);
+
+const struct cmd_entry cmd_attachments_entry = {
+	.name = "attachments",
+	.usage = "[-p passfile] [-t thread] backup [directory]",
+	.exec = cmd_attachments
+};
+
 /*
  * Create a file with a unique name. If a file with the specified name already
  * exists, a new, unique name is used. Given a name of the form "base[.ext]",
@@ -158,12 +166,12 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 			continue;
 
 		if ((fp = get_file(att)) == NULL) {
-			ret = 1;
+			ret = -1;
 			continue;
 		}
 
 		if (sbk_write_file(ctx, att->file, fp) == -1)
-			ret = 1;
+			ret = -1;
 
 		fclose(fp);
 	}
@@ -171,14 +179,14 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 	return ret;
 }
 
-int
+static enum cmd_status
 cmd_attachments(int argc, char **argv)
 {
 	struct sbk_ctx			*ctx;
 	struct sbk_attachment_list	*lst;
 	char				*passfile, passphr[128];
 	const char			*errstr, *outdir;
-	int				 c, ret, thread;
+	int				 c, thread;
 
 	passfile = NULL;
 	thread = -1;
@@ -190,11 +198,13 @@ cmd_attachments(int argc, char **argv)
 			break;
 		case 't':
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg, errstr);
+			if (errstr != NULL) {
+				warnx("%s: Thread id is %s", optarg, errstr);
+				return CMD_ERROR;
+			}
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
@@ -206,11 +216,13 @@ cmd_attachments(int argc, char **argv)
 		break;
 	case 2:
 		outdir = argv[1];
-		if (mkdir(outdir, 0777) == -1 && errno != EEXIST)
-			err(1, "mkdir: %s", outdir);
+		if (mkdir(outdir, 0777) == -1 && errno != EEXIST) {
+			warn("mkdir: %s", outdir);
+			return CMD_ERROR;
+		}
 		break;
 	default:
-		goto usage;
+		return CMD_USAGE;
 	}
 
 	if (unveil(argv[0], "r") == -1)
@@ -239,17 +251,17 @@ cmd_attachments(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -258,7 +270,7 @@ cmd_attachments(int argc, char **argv)
 		warn("chdir: %s", outdir);
 		sbk_close(ctx);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
@@ -269,17 +281,21 @@ cmd_attachments(int argc, char **argv)
 	else
 		lst = sbk_get_attachments_for_thread(ctx, thread);
 
-	if (lst == NULL)
-		ret = 1;
-	else {
-		ret = write_attachments(ctx, lst);
-		sbk_free_attachment_list(lst);
+	if (lst == NULL) {
+		sbk_close(ctx);
+		sbk_ctx_free(ctx);
+		return CMD_ERROR;
 	}
 
+	if (write_attachments(ctx, lst) == -1) {
+		sbk_free_attachment_list(lst);
+		sbk_close(ctx);
+		sbk_ctx_free(ctx);
+		return CMD_ERROR;
+	}
+
+	sbk_free_attachment_list(lst);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return ret;
-
-usage:
-	usage("attachments", "[-p passfile] [-t thread] backup [directory]");
+	return CMD_OK;
 }

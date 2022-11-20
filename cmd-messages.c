@@ -32,6 +32,14 @@
 
 #include "sigbak.h"
 
+static enum cmd_status cmd_messages(int, char **);
+
+const struct cmd_entry cmd_messages_entry = {
+	.name = "messages",
+	.usage = "[-f format] [-p passfile] [-t thread] backup dest",
+	.exec = cmd_messages
+};
+
 enum {
 	FORMAT_CSV,
 	FORMAT_MAILDIR,
@@ -582,7 +590,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 	return ret;
 }
 
-int
+static enum cmd_status
 cmd_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
@@ -603,19 +611,23 @@ cmd_messages(int argc, char **argv)
 				format = FORMAT_MAILDIR;
 			else if (strcmp(optarg, "text") == 0)
 				format = FORMAT_TEXT;
-			else
-				errx(1, "%s: invalid format", optarg);
+			else {
+				warnx("%s: Invalid format", optarg);
+				return CMD_ERROR;
+			}
 			break;
 		case 'p':
 			passfile = optarg;
 			break;
 		case 't':
 			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg, errstr);
+			if (errstr != NULL) {
+				warnx("%s: Thread id is %s", optarg, errstr);
+				return CMD_ERROR;
+			}
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
@@ -624,7 +636,7 @@ cmd_messages(int argc, char **argv)
 	switch (argc) {
 	case 1:
 		if (format == FORMAT_MAILDIR)
-			goto usage;
+			return CMD_USAGE;
 		dest = NULL;
 		break;
 	case 2:
@@ -635,7 +647,7 @@ cmd_messages(int argc, char **argv)
 			err(1, "unveil: %s", dest);
 		break;
 	default:
-		goto usage;
+		return CMD_USAGE;
 	}
 
 	if (unveil(argv[0], "r") == -1)
@@ -661,15 +673,17 @@ cmd_messages(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
-	if (get_passphrase(passfile, passphr, sizeof passphr) == -1)
-		return 1;
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
+		sbk_ctx_free(ctx);
+		return CMD_ERROR;
+	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -691,8 +705,5 @@ cmd_messages(int argc, char **argv)
 
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == 0) ? 0 : 1;
-
-usage:
-	usage("messages", "[-f format] [-p passfile] [-t thread] backup dest");
+	return (ret == -1) ? CMD_ERROR : CMD_OK;
 }

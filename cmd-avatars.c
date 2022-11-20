@@ -26,6 +26,21 @@
 
 #include "sigbak.h"
 
+static enum cmd_status cmd_avatars(int, char **);
+static enum cmd_status cmd_stickers(int, char **);
+
+const struct cmd_entry cmd_avatars_entry = {
+	.name = "avatars",
+	.usage = "[-p passfile] backup [directory]",
+	.exec = cmd_avatars
+};
+
+const struct cmd_entry cmd_stickers_entry = {
+	.name = "stickers",
+	.usage = "[-p passfile] backup [directory]",
+	.exec = cmd_stickers
+};
+
 enum type {
 	AVATAR,
 	STICKER
@@ -152,11 +167,10 @@ write_files(int argc, char **argv, enum type type)
 	struct sbk_ctx		*ctx;
 	struct sbk_file		*file;
 	Signal__BackupFrame	*frm;
-	char			*cmd, *passfile, passphr[128];
+	char			*passfile, passphr[128];
 	const char		*outdir;
 	int			 c, ret;
 
-	cmd = argv[0];
 	passfile = NULL;
 
 	while ((c = getopt(argc, argv, "p:")) != -1)
@@ -165,7 +179,7 @@ write_files(int argc, char **argv, enum type type)
 			passfile = optarg;
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
@@ -181,7 +195,7 @@ write_files(int argc, char **argv, enum type type)
 			err(1, "mkdir: %s", outdir);
 		break;
 	default:
-		goto usage;
+		return CMD_USAGE;
 	}
 
 	if (unveil(argv[0], "r") == -1)
@@ -202,17 +216,17 @@ write_files(int argc, char **argv, enum type type)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -221,44 +235,41 @@ write_files(int argc, char **argv, enum type type)
 		warn("chdir: %s", outdir);
 		sbk_close(ctx);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (pledge("stdio wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = 0;
+	ret = CMD_OK;
 
 	while ((frm = sbk_get_frame(ctx, &file)) != NULL) {
 		if (frm->avatar != NULL && type == AVATAR) {
 			if (write_avatar(ctx, frm->avatar, file) == -1)
-				ret = 1;
+				ret = CMD_ERROR;
 		} else if (frm->sticker != NULL && type == STICKER) {
 			if (write_sticker(ctx, frm->sticker, file) == -1)
-				ret = 1;
+				ret = CMD_ERROR;
 		}
 		sbk_free_frame(frm);
 		sbk_free_file(file);
 	}
 
 	if (!sbk_eof(ctx))
-		ret = 1;
+		ret = CMD_ERROR;
 
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
-
-usage:
-	usage(cmd, "[-p passfile] backup [directory]");
 }
 
-int
+static enum cmd_status
 cmd_avatars(int argc, char **argv)
 {
 	return write_files(argc, argv, AVATAR);
 }
 
-int
+static enum cmd_status
 cmd_stickers(int argc, char **argv)
 {
 	return write_files(argc, argv, STICKER);

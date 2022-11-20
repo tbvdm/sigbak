@@ -20,7 +20,15 @@
 
 #include "sigbak.h"
 
-int
+static enum cmd_status cmd_check(int, char **);
+
+const struct cmd_entry cmd_check_entry = {
+	.name = "check",
+	.usage = "[-p passfile] backup",
+	.exec = cmd_check
+};
+
+static enum cmd_status
 cmd_check(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
@@ -38,14 +46,14 @@ cmd_check(int argc, char **argv)
 			passfile = optarg;
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 1)
-		goto usage;
+		return CMD_USAGE;
 
 	if (unveil(argv[0], "r") == -1)
 		err(1, "unveil: %s", argv[0]);
@@ -62,17 +70,17 @@ cmd_check(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -96,13 +104,10 @@ cmd_check(int argc, char **argv)
 
 	if (!sbk_eof(ctx) || ret == -1) {
 		warnx("Error in frame %llu", n);
-		ret = 1;
+		ret = -1;
 	}
 
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return ret;
-
-usage:
-	usage("check", "[-p passfile] backup");
+	return (ret == -1) ? CMD_ERROR : CMD_OK;
 }

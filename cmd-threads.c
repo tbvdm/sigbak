@@ -22,14 +22,22 @@
 
 #include "sigbak.h"
 
-int
+static enum cmd_status cmd_threads(int, char **);
+
+const struct cmd_entry cmd_threads_entry = {
+	.name = "threads",
+	.usage = "[-p passfile] backup",
+	.exec = cmd_threads
+};
+
+enum cmd_status
 cmd_threads(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
 	char			*passfile, passphr[128];
-	int			 c, ret;
+	int			 c;
 
 	passfile = NULL;
 
@@ -39,14 +47,14 @@ cmd_threads(int argc, char **argv)
 			passfile = optarg;
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 1)
-		goto usage;
+		return CMD_USAGE;
 
 	if (unveil(argv[0], "r") == -1)
 		err(1, "unveil: %s", argv[0]);
@@ -71,17 +79,17 @@ cmd_threads(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	if (sbk_open(ctx, argv[0], passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -89,23 +97,18 @@ cmd_threads(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = -1;
-
-	if ((lst = sbk_get_threads(ctx)) == NULL)
-		goto out;
+	if ((lst = sbk_get_threads(ctx)) == NULL) {
+		sbk_close(ctx);
+		sbk_ctx_free(ctx);
+		return CMD_ERROR;
+	}
 
 	SIMPLEQ_FOREACH(thd, lst, entries)
 		printf("%4" PRIu64 ": %s\n", thd->id,
 		    sbk_get_recipient_display_name(thd->recipient));
 
 	sbk_free_thread_list(lst);
-	ret = 0;
-
-out:
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == 0) ? 0 : 1;
-
-usage:
-	usage("threads", "[-p passfile] backup");
+	return CMD_OK;
 }
