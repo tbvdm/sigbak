@@ -596,7 +596,7 @@ static enum cmd_status
 cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*dest, *passfile, passphr[128];
+	char		*backup, *dest, *passfile, passphr[128];
 	const char	*errstr;
 	int		 c, format, ret, thread;
 
@@ -639,9 +639,11 @@ cmd_export_messages(int argc, char **argv)
 	case 1:
 		if (format == FORMAT_MAILDIR)
 			return CMD_USAGE;
+		backup = argv[0];
 		dest = NULL;
 		break;
 	case 2:
+		backup = argv[0];
 		dest = argv[1];
 		if (format == FORMAT_MAILDIR)
 			maildir_create(dest);
@@ -652,8 +654,8 @@ cmd_export_messages(int argc, char **argv)
 		return CMD_USAGE;
 	}
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
@@ -682,7 +684,7 @@ cmd_export_messages(int argc, char **argv)
 		return CMD_ERROR;
 	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return CMD_ERROR;

@@ -171,7 +171,7 @@ write_files(int argc, char **argv, enum type type)
 	struct sbk_ctx		*ctx;
 	struct sbk_file		*file;
 	Signal__BackupFrame	*frm;
-	char			*passfile, passphr[128];
+	char			*backup, *passfile, passphr[128];
 	const char		*outdir;
 	int			 c, ret;
 
@@ -191,9 +191,11 @@ write_files(int argc, char **argv, enum type type)
 
 	switch (argc) {
 	case 1:
+		backup = argv[0];
 		outdir = ".";
 		break;
 	case 2:
+		backup = argv[0];
 		outdir = argv[1];
 		if (mkdir(outdir, 0777) == -1 && errno != EEXIST)
 			err(1, "mkdir: %s", outdir);
@@ -202,8 +204,8 @@ write_files(int argc, char **argv, enum type type)
 		return CMD_USAGE;
 	}
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
 
 	if (unveil(outdir, "rwc") == -1)
 		err(1, "unveil: %s", outdir);
@@ -227,7 +229,7 @@ write_files(int argc, char **argv, enum type type)
 		return CMD_ERROR;
 	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return CMD_ERROR;

@@ -38,7 +38,7 @@ cmd_list_threads(int argc, char **argv)
 	struct sbk_ctx		*ctx;
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
-	char			*passfile, passphr[128];
+	char			*backup, *passfile, passphr[128];
 	int			 c;
 
 	passfile = NULL;
@@ -58,8 +58,10 @@ cmd_list_threads(int argc, char **argv)
 	if (argc != 1)
 		return CMD_USAGE;
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	backup = argv[0];
+
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
@@ -88,7 +90,7 @@ cmd_list_threads(int argc, char **argv)
 		return CMD_ERROR;
 	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
 		return CMD_ERROR;
