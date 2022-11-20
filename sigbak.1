@@ -43,6 +43,21 @@ Whitespace in the passphrase is ignored.
 .Pp
 The commands are as follows:
 .Bl -tag -width Ds
+.Tg check
+.It Ic check-backup Oo Fl p Ar passfile Oc Ar backup
+.D1 Pq Alias: Ic check
+.Pp
+Check that the file
+.Ar backup
+can be decrypted and parsed correctly.
+The check is aborted after the first encountered error.
+.Tg dump
+.It Ic dump-backup Oo Fl p Ar passfile Oc Ar backup
+.D1 Pq Alias: Ic dump
+.Pp
+Print the raw contents of the file
+.Ar backup
+in a readable format on standard output.
 .Tg att
 .It Xo
 .Ic export-attachments
@@ -82,21 +97,14 @@ to
 or to the current directory if
 .Ar directory
 is not specified.
-.Tg check
-.It Ic check-backup Oo Fl p Ar passfile Oc Ar backup
-.D1 Pq Alias: Ic check
+.Tg db
+.It Ic export-database Oo Fl p Ar passfile Oc Ar backup Ar database
+.D1 Pq Alias: Ic db
 .Pp
-Check that the file
+Export the SQLite database in the file
 .Ar backup
-can be decrypted and parsed correctly.
-The check is aborted after the first encountered error.
-.Tg dump
-.It Ic dump-backup Oo Fl p Ar passfile Oc Ar backup
-.D1 Pq Alias: Ic dump
-.Pp
-Print the raw contents of the file
-.Ar backup
-in a readable format on standard output.
+to the file
+.Ar database .
 .Tg msg
 .It Xo
 .Ic export-messages
@@ -161,14 +169,6 @@ argument should be a number.
 The
 .Ic list-conversations
 command can be used to view a list of conversation threads.
-.Tg db
-.It Ic export-database Oo Fl p Ar passfile Oc Ar backup Ar database
-.D1 Pq Alias: Ic db
-.Pp
-Export the SQLite database in the file
-.Ar backup
-to the file
-.Ar database .
 .Tg stk
 .It Ic export-stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic stk
