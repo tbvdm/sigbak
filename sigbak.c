@@ -26,24 +26,24 @@
 
 #include "sigbak.h"
 
-extern const struct cmd_entry cmd_attachments_entry;
-extern const struct cmd_entry cmd_avatars_entry;
-extern const struct cmd_entry cmd_check_entry;
-extern const struct cmd_entry cmd_dump_entry;
-extern const struct cmd_entry cmd_messages_entry;
-extern const struct cmd_entry cmd_sqlite_entry;
-extern const struct cmd_entry cmd_stickers_entry;
-extern const struct cmd_entry cmd_threads_entry;
+extern const struct cmd_entry cmd_check_backup_entry;
+extern const struct cmd_entry cmd_dump_backup_entry;
+extern const struct cmd_entry cmd_export_attachments_entry;
+extern const struct cmd_entry cmd_export_avatars_entry;
+extern const struct cmd_entry cmd_export_database_entry;
+extern const struct cmd_entry cmd_export_messages_entry;
+extern const struct cmd_entry cmd_export_stickers_entry;
+extern const struct cmd_entry cmd_list_threads_entry;
 
 static const struct cmd_entry *commands[] = {
-	&cmd_attachments_entry,
-	&cmd_avatars_entry,
-	&cmd_check_entry,
-	&cmd_dump_entry,
-	&cmd_messages_entry,
-	&cmd_sqlite_entry,
-	&cmd_stickers_entry,
-	&cmd_threads_entry
+	&cmd_check_backup_entry,
+	&cmd_dump_backup_entry,
+	&cmd_export_attachments_entry,
+	&cmd_export_avatars_entry,
+	&cmd_export_database_entry,
+	&cmd_export_messages_entry,
+	&cmd_export_stickers_entry,
+	&cmd_list_threads_entry
 };
 
 __dead static void
@@ -159,7 +159,17 @@ main(int argc, char **argv)
 	cmd = NULL;
 
 	for (i = 0; i < nitems(commands); i++) {
-		if (strcmp(argv[0], commands[i]->name) == 0) {
+		if (strcmp(argv[0], commands[i]->name) == 0 ||
+		    strcmp(argv[0], commands[i]->alias) == 0) {
+			cmd = commands[i];
+			break;
+		}
+		if (commands[i]->oldname != NULL &&
+		    strcmp(argv[0], commands[i]->oldname) == 0) {
+			warnx("The command \"%s\" has been renamed to \"%s\"",
+			    commands[i]->oldname, commands[i]->name);
+			warnx("The old name is deprecated and will be removed "
+			    "in the future");
 			cmd = commands[i];
 			break;
 		}

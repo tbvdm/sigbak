@@ -29,12 +29,14 @@
 
 #include "sigbak.h"
 
-static enum cmd_status cmd_attachments(int, char **);
+static enum cmd_status cmd_export_attachments(int, char **);
 
-const struct cmd_entry cmd_attachments_entry = {
-	.name = "attachments",
+const struct cmd_entry cmd_export_attachments_entry = {
+	.name = "export-attachments",
+	.alias = "att",
 	.usage = "[-p passfile] [-t thread] backup [directory]",
-	.exec = cmd_attachments
+	.oldname = "attachments",
+	.exec = cmd_export_attachments
 };
 
 /*
@@ -180,7 +182,7 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 }
 
 static enum cmd_status
-cmd_attachments(int argc, char **argv)
+cmd_export_attachments(int argc, char **argv)
 {
 	struct sbk_ctx			*ctx;
 	struct sbk_attachment_list	*lst;

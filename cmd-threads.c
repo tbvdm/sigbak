@@ -22,16 +22,18 @@
 
 #include "sigbak.h"
 
-static enum cmd_status cmd_threads(int, char **);
+static enum cmd_status cmd_list_threads(int, char **);
 
-const struct cmd_entry cmd_threads_entry = {
-	.name = "threads",
+const struct cmd_entry cmd_list_threads_entry = {
+	.name = "list-conversations",
+	.alias = "lsc",
 	.usage = "[-p passfile] backup",
-	.exec = cmd_threads
+	.oldname = "threads",
+	.exec = cmd_list_threads
 };
 
 enum cmd_status
-cmd_threads(int argc, char **argv)
+cmd_list_threads(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	struct sbk_thread_list	*lst;

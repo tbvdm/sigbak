@@ -32,12 +32,14 @@
 
 #include "sigbak.h"
 
-static enum cmd_status cmd_messages(int, char **);
+static enum cmd_status cmd_export_messages(int, char **);
 
-const struct cmd_entry cmd_messages_entry = {
-	.name = "messages",
+const struct cmd_entry cmd_export_messages_entry = {
+	.name = "export-messages",
+	.alias = "msg",
 	.usage = "[-f format] [-p passfile] [-t thread] backup dest",
-	.exec = cmd_messages
+	.oldname = "messages",
+	.exec = cmd_export_messages
 };
 
 enum {
@@ -591,7 +593,7 @@ text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
 }
 
 static enum cmd_status
-cmd_messages(int argc, char **argv)
+cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*dest, *passfile, passphr[128];

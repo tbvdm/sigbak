@@ -20,16 +20,18 @@
 
 #include "sigbak.h"
 
-static enum cmd_status cmd_check(int, char **);
+static enum cmd_status cmd_check_backup(int, char **);
 
-const struct cmd_entry cmd_check_entry = {
-	.name = "check",
+const struct cmd_entry cmd_check_backup_entry = {
+	.name = "check-backup",
+	.alias = "check",
 	.usage = "[-p passfile] backup",
-	.exec = cmd_check
+	.oldname = NULL,
+	.exec = cmd_check_backup
 };
 
 static enum cmd_status
-cmd_check(int argc, char **argv)
+cmd_check_backup(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	struct sbk_file		*file;

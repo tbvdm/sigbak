@@ -26,19 +26,23 @@
 
 #include "sigbak.h"
 
-static enum cmd_status cmd_avatars(int, char **);
-static enum cmd_status cmd_stickers(int, char **);
+static enum cmd_status cmd_export_avatars(int, char **);
+static enum cmd_status cmd_export_stickers(int, char **);
 
-const struct cmd_entry cmd_avatars_entry = {
-	.name = "avatars",
+const struct cmd_entry cmd_export_avatars_entry = {
+	.name = "export-avatars",
+	.alias = "avt",
 	.usage = "[-p passfile] backup [directory]",
-	.exec = cmd_avatars
+	.oldname = "avatars",
+	.exec = cmd_export_avatars
 };
 
-const struct cmd_entry cmd_stickers_entry = {
-	.name = "stickers",
+const struct cmd_entry cmd_export_stickers_entry = {
+	.name = "export-stickers",
+	.alias = "stk",
 	.usage = "[-p passfile] backup [directory]",
-	.exec = cmd_stickers
+	.oldname = "stickers",
+	.exec = cmd_export_stickers
 };
 
 enum type {
@@ -264,13 +268,13 @@ write_files(int argc, char **argv, enum type type)
 }
 
 static enum cmd_status
-cmd_avatars(int argc, char **argv)
+cmd_export_avatars(int argc, char **argv)
 {
 	return write_files(argc, argv, AVATAR);
 }
 
 static enum cmd_status
-cmd_stickers(int argc, char **argv)
+cmd_export_stickers(int argc, char **argv)
 {
 	return write_files(argc, argv, STICKER);
 }
