@@ -35,7 +35,7 @@ static enum cmd_status cmd_export_attachments(int, char **);
 const struct cmd_entry cmd_export_attachments_entry = {
 	.name = "export-attachments",
 	.alias = "att",
-	.usage = "[-p passfile] [-t thread] backup [directory]",
+	.usage = "[-p passfile] backup [directory]",
 	.oldname = "attachments",
 	.exec = cmd_export_attachments
 };
@@ -231,7 +231,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 }
 
 static int
-export_attachments(struct sbk_ctx *ctx, const char *outdir, int thd_id)
+export_attachments(struct sbk_ctx *ctx, const char *outdir)
 {
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
@@ -249,9 +249,6 @@ export_attachments(struct sbk_ctx *ctx, const char *outdir, int thd_id)
 
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
-		if (thd_id >= 0 && thd->id != (unsigned int)thd_id)
-			continue;
-
 		if (export_thread_attachments(ctx, thd, dfd) == -1)
 			return -1;
 	}
@@ -266,23 +263,15 @@ cmd_export_attachments(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*backup, *passfile, passphr[128];
-	const char	*errstr, *outdir;
-	int		 c, ret, thread;
+	const char	*outdir;
+	int		 c, ret;
 
 	passfile = NULL;
-	thread = -1;
 
-	while ((c = getopt(argc, argv, "p:t:")) != -1)
+	while ((c = getopt(argc, argv, "p:")) != -1)
 		switch (c) {
 		case 'p':
 			passfile = optarg;
-			break;
-		case 't':
-			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL) {
-				warnx("%s: Thread id is %s", optarg, errstr);
-				return CMD_ERROR;
-			}
 			break;
 		default:
 			return CMD_USAGE;
@@ -352,7 +341,7 @@ cmd_export_attachments(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = export_attachments(ctx, outdir, thread);
+	ret = export_attachments(ctx, outdir);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == -1) ? CMD_ERROR : CMD_OK;

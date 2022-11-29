@@ -38,7 +38,7 @@ static enum cmd_status cmd_export_messages(int, char **);
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
 	.alias = "msg",
-	.usage = "[-f format] [-p passfile] [-t thread] backup [directory]",
+	.usage = "[-f format] [-p passfile] backup [directory]",
 	.oldname = "messages",
 	.exec = cmd_export_messages
 };
@@ -647,8 +647,7 @@ text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 }
 
 static int
-export_messages(struct sbk_ctx *ctx, const char *outdir, int format,
-    int thd_id)
+export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 {
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
@@ -666,9 +665,6 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format,
 
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
-		if (thd_id >= 0 && thd->id != (unsigned int)thd_id)
-			continue;
-
 		switch (format) {
 		case FORMAT_CSV:
 			if (csv_export_thread_messages(ctx, thd, dfd) == -1)
@@ -696,14 +692,12 @@ cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*backup, *outdir, *passfile, passphr[128];
-	const char	*errstr;
-	int		 c, format, ret, thread;
+	int		 c, format, ret;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
-	thread = -1;
 
-	while ((c = getopt(argc, argv, "f:p:t:")) != -1)
+	while ((c = getopt(argc, argv, "f:p:")) != -1)
 		switch (c) {
 		case 'f':
 			if (strcmp(optarg, "csv") == 0)
@@ -719,13 +713,6 @@ cmd_export_messages(int argc, char **argv)
 			break;
 		case 'p':
 			passfile = optarg;
-			break;
-		case 't':
-			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL) {
-				warnx("%s: Thread id is %s", optarg, errstr);
-				return CMD_ERROR;
-			}
 			break;
 		default:
 			return CMD_USAGE;
@@ -795,7 +782,7 @@ cmd_export_messages(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = export_messages(ctx, outdir, format, thread);
+	ret = export_messages(ctx, outdir, format);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == -1) ? CMD_ERROR : CMD_OK;
