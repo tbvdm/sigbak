@@ -1,8 +1,7 @@
 PROG=		sigbak
 SRCS=		cmd-check-backup.c cmd-dump-backup.c cmd-export-attachments.c \
 		cmd-export-avatars.c cmd-export-database.c \
-		cmd-export-messages.c cmd-list-conversations.c mime.c sbk.c \
-		sigbak.c
+		cmd-export-messages.c mime.c sbk.c sigbak.c
 PROTOS=		backup.proto database.proto
 
 SRCS+=		${PROTOS:.proto=.pb-c.c}

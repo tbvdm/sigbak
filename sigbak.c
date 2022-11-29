@@ -33,7 +33,6 @@ extern const struct cmd_entry cmd_export_avatars_entry;
 extern const struct cmd_entry cmd_export_database_entry;
 extern const struct cmd_entry cmd_export_messages_entry;
 extern const struct cmd_entry cmd_export_stickers_entry;
-extern const struct cmd_entry cmd_list_threads_entry;
 
 static const struct cmd_entry *commands[] = {
 	&cmd_check_backup_entry,
@@ -42,8 +41,7 @@ static const struct cmd_entry *commands[] = {
 	&cmd_export_avatars_entry,
 	&cmd_export_database_entry,
 	&cmd_export_messages_entry,
-	&cmd_export_stickers_entry,
-	&cmd_list_threads_entry
+	&cmd_export_stickers_entry
 };
 
 __dead static void
