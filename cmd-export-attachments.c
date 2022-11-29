@@ -19,6 +19,7 @@
 
 #include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,19 +46,20 @@ const struct cmd_entry cmd_export_attachments_entry = {
  * the new name is of the form "base-n[.ext]" where 1 < n < 1000.
  */
 static FILE *
-create_unique_file(const char *name)
+create_unique_file(int dfd, const char *name)
 {
 	FILE		*fp;
 	char		*buf;
 	const char	*base, *ext, *oldname;
 	size_t		 baselen, bufsize, namelen;
-	int		 i;
+	int		 fd, i;
 
 	buf = NULL;
 	oldname = name;
 
 	for (i = 2; i <= 1000; i++) {
-		if ((fp = fopen(name, "wx")) != NULL)
+		fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
+		if (fd != -1)
 			goto out;
 		if (errno != EEXIST) {
 			warn("%s", name);
@@ -98,12 +100,19 @@ create_unique_file(const char *name)
 	warnx("%s: Cannot generate unique name", oldname);
 
 out:
+	if (fd == -1)
+		fp = NULL;
+	else if ((fp = fdopen(fd, "w")) == NULL) {
+		warn("%s", name);
+		close(fd);
+	}
+
 	free(buf);
 	return fp;
 }
 
 static FILE *
-get_file(struct sbk_attachment *att)
+get_file(int dfd, struct sbk_attachment *att)
 {
 	FILE		*fp;
 	struct tm	*tm;
@@ -149,25 +158,63 @@ get_file(struct sbk_attachment *att)
 		}
 	}
 
-	fp = create_unique_file(name);
+	fp = create_unique_file(dfd, name);
 	free(name);
 	return fp;
 }
 
 static int
-write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
+get_thread_directory(int dfd, struct sbk_thread *thd)
 {
-	struct sbk_attachment	*att;
-	FILE			*fp;
-	int			 ret;
+	char	*name;
+	int	 thd_dfd;
+
+	if ((name = get_recipient_filename(thd->recipient, NULL)) == NULL)
+		return -1;
+
+	if (mkdirat(dfd, name, 0777) == -1 && errno != EEXIST) {
+		warn("%s", name);
+		free(name);
+		return -1;
+	}
+
+	if ((thd_dfd = openat(dfd, name, O_RDONLY | O_DIRECTORY)) == -1) {
+		warn("%s", name);
+		free(name);
+		return -1;
+	}
+
+	free(name);
+	return thd_dfd;
+}
+
+static int
+export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
+{
+	struct sbk_attachment_list	*lst;
+	struct sbk_attachment		*att;
+	FILE				*fp;
+	int				 ret, thd_dfd;
+
+	if ((lst = sbk_get_attachments_for_thread(ctx, thd->id)) == NULL)
+		return -1;
+
+	if (TAILQ_EMPTY(lst)) {
+		sbk_free_attachment_list(lst);
+		return 0;
+	}
+
+	if ((thd_dfd = get_thread_directory(dfd, thd)) == -1) {
+		sbk_free_attachment_list(lst);
+		return -1;
+	}
 
 	ret = 0;
-
 	TAILQ_FOREACH(att, lst, entries) {
 		if (att->file == NULL)
 			continue;
 
-		if ((fp = get_file(att)) == NULL) {
+		if ((fp = get_file(thd_dfd, att)) == NULL) {
 			ret = -1;
 			continue;
 		}
@@ -178,17 +225,49 @@ write_attachments(struct sbk_ctx *ctx, struct sbk_attachment_list *lst)
 		fclose(fp);
 	}
 
+	close(thd_dfd);
+	sbk_free_attachment_list(lst);
+	return ret;
+}
+
+static int
+export_attachments(struct sbk_ctx *ctx, const char *outdir, int thd_id)
+{
+	struct sbk_thread_list	*lst;
+	struct sbk_thread	*thd;
+	int			 dfd, ret;
+
+	if ((dfd = open(outdir, O_RDONLY | O_DIRECTORY)) == -1) {
+		warn("%s", outdir);
+		return -1;
+	}
+
+	if ((lst = sbk_get_threads(ctx)) == NULL) {
+		close(dfd);
+		return -1;
+	}
+
+	ret = 0;
+	SIMPLEQ_FOREACH(thd, lst, entries) {
+		if (thd_id >= 0 && thd->id != (unsigned int)thd_id)
+			continue;
+
+		if (export_thread_attachments(ctx, thd, dfd) == -1)
+			return -1;
+	}
+
+	sbk_free_thread_list(lst);
+	close(dfd);
 	return ret;
 }
 
 static enum cmd_status
 cmd_export_attachments(int argc, char **argv)
 {
-	struct sbk_ctx			*ctx;
-	struct sbk_attachment_list	*lst;
-	char				*backup, *passfile, passphr[128];
-	const char			*errstr, *outdir;
-	int				 c, thread;
+	struct sbk_ctx	*ctx;
+	char		*backup, *passfile, passphr[128];
+	const char	*errstr, *outdir;
+	int		 c, ret, thread;
 
 	passfile = NULL;
 	thread = -1;
@@ -270,36 +349,11 @@ cmd_export_attachments(int argc, char **argv)
 
 	explicit_bzero(passphr, sizeof passphr);
 
-	if (chdir(outdir) == -1) {
-		warn("chdir: %s", outdir);
-		sbk_close(ctx);
-		sbk_ctx_free(ctx);
-		return CMD_ERROR;
-	}
-
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	if (thread == -1)
-		lst = sbk_get_all_attachments(ctx);
-	else
-		lst = sbk_get_attachments_for_thread(ctx, thread);
-
-	if (lst == NULL) {
-		sbk_close(ctx);
-		sbk_ctx_free(ctx);
-		return CMD_ERROR;
-	}
-
-	if (write_attachments(ctx, lst) == -1) {
-		sbk_free_attachment_list(lst);
-		sbk_close(ctx);
-		sbk_ctx_free(ctx);
-		return CMD_ERROR;
-	}
-
-	sbk_free_attachment_list(lst);
+	ret = export_attachments(ctx, outdir, thread);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return CMD_OK;
+	return (ret == -1) ? CMD_ERROR : CMD_OK;
 }

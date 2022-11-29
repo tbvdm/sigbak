@@ -259,5 +259,6 @@ const char	*mime_get_extension(const char *);
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 sanitise_filename(char *);
+char		*get_recipient_filename(struct sbk_recipient *, const char *);
 
 #endif

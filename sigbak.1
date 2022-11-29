@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd November 20, 2022
+.Dd November 29, 2022
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -67,11 +67,13 @@ in a readable format on standard output.
 .Xc
 .D1 Pq Alias: Ic att
 .Pp
-Export all attachments in the file
-.Ar backup
-to
+Export the attachments in the file
+.Ar backup .
+The attachment files are created in separate directories, one for each
+conversation.
+These directories are created in
 .Ar directory ,
-or to the current directory if
+or in the current directory if
 .Ar directory
 is not specified.
 .Pp
@@ -111,14 +113,18 @@ to the file
 .Oo Fl f Ar format Oc
 .Oo Fl p Ar passfile Oc
 .Oo Fl t Ar thread Oc
-.Ar backup Ar dest
+.Ar backup Op Ar directory
 .Xc
 .D1 Pq Alias: Ic msg
 .Pp
-Export all messages in the file
-.Ar backup
-to
-.Ar dest .
+Export the messages in the file
+.Ar backup .
+The messages are written to separate files, one for each conversation.
+These files are created in
+.Ar directory ,
+or in the current directory if
+.Ar directory
+is not specified.
 .Pp
 The
 .Fl f
@@ -133,30 +139,23 @@ and
 With the
 .Cm csv
 format,
-messages are written in CSV (comma-separated values) format to the file
-.Ar dest .
-If
-.Ar dest
-is omitted, messages are written to standard output instead.
+messages are written in CSV (comma-separated values) format.
 See the
 .Sx CSV FORMAT
 section below for details.
 .Pp
 With the
 .Cm maildir
-format, messages are written as emails in maildir format to the directory
-.Ar dest .
+format, messages are written as emails in maildir format.
+In this case, conversations are not written to separate files, but to separate
+maildir directories.
 As a precaution,
 .Nm
 will refuse to write to an existing maildir.
 .Pp
 With the
 .Cm text
-format, messages are written as plain text to the file
-.Ar dest .
-If
-.Ar dest
-is omitted, messages are written to standard output instead.
+format, messages are written as plain text.
 .Pp
 By default, all messages are exported.
 The
@@ -237,16 +236,16 @@ field is a string containing the message text or reaction emoji.
 .Sh EXAMPLES
 Export all messages in the file
 .Pa signal.backup
-to the file
-.Pa messages.txt :
+to the directory
+.Pa messages :
 .Pp
-.Dl $ sigbak export-messages signal.backup messages.txt
+.Dl $ sigbak export-messages signal.backup messages
 .Pp
-First create a passphrase file, then export all messages as plain text, fold
-long lines for readability and view the result:
+First create a passphrase file, then export all messages and attachments:
 .Bd -literal -offset indent
 $ echo 01234 56789 01234 56789 01234 56789 > passfile
-$ sigbak export-messages -p passfile signal.backup | fold -s | less
+$ sigbak export-messages -p passfile signal.backup messages
+$ sigbak export-attachments -p passfile signal.backup attachments
 .Ed
 .Pp
 Export all messages and attachments from the conversation with Charlie:
@@ -256,7 +255,7 @@ $ sigbak list-conversations signal.backup
    1: Alice
    2: Bob
    3: Charlie
-$ sigbak export-messages -t 3 signal.backup charlie.txt
+$ sigbak export-messages -t 3 signal.backup
 $ sigbak export-attachments -t 3 signal.backup
 .Ed
 .Pp

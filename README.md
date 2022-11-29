@@ -101,7 +101,7 @@ You can access your Windows drives through the `/cygdrive` directory. For
 example:
 
 	cd /cygdrive/c/Users/Alice/Documents
-	sigbak export-messages signal.backup messages.txt
+	sigbak export-messages signal.backup messages
 
 Reporting problems
 ------------------

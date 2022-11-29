@@ -145,6 +145,37 @@ sanitise_filename(char *name)
 			*c = '_';
 }
 
+char *
+get_recipient_filename(struct sbk_recipient *rcp, const char *ext)
+{
+	char		*fname;
+	const char	*detail, *name;
+	int		 ret;
+
+	name = sbk_get_recipient_display_name(rcp);
+
+	if (rcp->type == SBK_GROUP)
+		detail = "group";
+	else
+		detail = rcp->contact->phone;
+
+	if (ext == NULL)
+		ext = "";
+
+	if (detail != NULL)
+		ret = asprintf(&fname, "%s (%s)%s", name, detail, ext);
+	else
+		ret = asprintf(&fname, "%s%s", name, ext);
+
+	if (ret == -1) {
+		warnx("asprintf() failed");
+		return NULL;
+	}
+
+	sanitise_filename(fname);
+	return fname;
+}
+
 int
 main(int argc, char **argv)
 {
