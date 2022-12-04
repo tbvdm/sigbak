@@ -237,12 +237,10 @@ char		*sbk_get_file_data(struct sbk_ctx *, struct sbk_file *,
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
-struct sbk_attachment_list *sbk_get_all_attachments(struct sbk_ctx *);
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
 		    int);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
-struct sbk_message_list *sbk_get_all_messages(struct sbk_ctx *);
 struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
 void		 sbk_free_message_list(struct sbk_message_list *);
 int		 sbk_is_outgoing_message(const struct sbk_message *);

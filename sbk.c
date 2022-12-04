@@ -1443,10 +1443,6 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 #define SBK_ATTACHMENTS_ORDER						\
 	"ORDER BY p.unique_id, p._id"
 
-#define SBK_ATTACHMENTS_QUERY_ALL					\
-	SBK_ATTACHMENTS_SELECT_2					\
-	SBK_ATTACHMENTS_ORDER
-
 #define SBK_ATTACHMENTS_QUERY_THREAD					\
 	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_WHERE_THREAD					\
@@ -1558,20 +1554,6 @@ error:
 	sbk_free_attachment_list(lst);
 	sqlite3_finalize(stm);
 	return NULL;
-}
-
-struct sbk_attachment_list *
-sbk_get_all_attachments(struct sbk_ctx *ctx)
-{
-	sqlite3_stmt *stm;
-
-	if (sbk_create_database(ctx) == -1)
-		return NULL;
-
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_ATTACHMENTS_QUERY_ALL) == -1)
-		return NULL;
-
-	return sbk_get_attachments(ctx, stm);
 }
 
 struct sbk_attachment_list *
@@ -2330,28 +2312,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"ORDER BY date_received"
 
 /* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
-#define SBK_MESSAGES_QUERY_ALL_1					\
-	SBK_MESSAGES_SELECT_SMS_1					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_1					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions < SBK_DB_VERSION_REACTIONS */
-#define SBK_MESSAGES_QUERY_ALL_2					\
-	SBK_MESSAGES_SELECT_SMS_1					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_2					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
-#define SBK_MESSAGES_QUERY_ALL_3					\
-	SBK_MESSAGES_SELECT_SMS_2					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_3					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
-#define SBK_MESSAGES_QUERY_THREAD_1					\
+#define SBK_MESSAGES_QUERY_1						\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
@@ -2360,7 +2321,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_ORDER
 
 /* For database versions < SBK_DB_VERSION_REACTIONS */
-#define SBK_MESSAGES_QUERY_THREAD_2					\
+#define SBK_MESSAGES_QUERY_2						\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
@@ -2369,7 +2330,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_ORDER
 
 /* For database versions >= SBK_DB_VERSION_REACTIONS */
-#define SBK_MESSAGES_QUERY_THREAD_3					\
+#define SBK_MESSAGES_QUERY_3						\
 	SBK_MESSAGES_SELECT_SMS_2					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
@@ -2641,28 +2602,6 @@ error:
 }
 
 struct sbk_message_list *
-sbk_get_all_messages(struct sbk_ctx *ctx)
-{
-	sqlite3_stmt	*stm;
-	const char	*query;
-
-	if (sbk_create_database(ctx) == -1)
-		return NULL;
-
-	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
-		query = SBK_MESSAGES_QUERY_ALL_1;
-	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
-		query = SBK_MESSAGES_QUERY_ALL_2;
-	else
-		query = SBK_MESSAGES_QUERY_ALL_3;
-
-	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
-		return NULL;
-
-	return sbk_get_messages(ctx, stm);
-}
-
-struct sbk_message_list *
 sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 {
 	sqlite3_stmt	*stm;
@@ -2672,11 +2611,11 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 		return NULL;
 
 	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
-		query = SBK_MESSAGES_QUERY_THREAD_1;
+		query = SBK_MESSAGES_QUERY_1;
 	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
-		query = SBK_MESSAGES_QUERY_THREAD_2;
+		query = SBK_MESSAGES_QUERY_2;
 	else
-		query = SBK_MESSAGES_QUERY_THREAD_3;
+		query = SBK_MESSAGES_QUERY_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
