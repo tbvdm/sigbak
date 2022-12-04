@@ -12,23 +12,23 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd November 29, 2022
+.Dd December 4, 2022
 .Dt SIGBAK 1
 .Os
 .Sh NAME
 .Nm sigbak
-.Nd read encrypted Signal backups
+.Nd export messages from Signal Android backups
 .Sh SYNOPSIS
 .Nm sigbak
 .Ar command
 .Op Ar argument ...
 .Sh DESCRIPTION
 .Nm
-is a utility to read the encrypted backups created by the Signal messaging app.
-It can be used to extract messages, attachments and other data.
+is a utility to read the backups created by the Signal Android app.
+It can be used to export messages, attachments and other data.
 .Pp
 A Signal backup consists primarily of an SQLite database.
-This database contains the backed-up messages, amongst other things.
+This database contains the messages, amongst other things.
 Attachments, avatars and stickers, however, are stored as separate files in the
 backup.
 .Pp
@@ -38,7 +38,7 @@ By default,
 prompts for the passphrase.
 Alternatively, the
 .Fl p
-option may be used to specify a file that contains the passphrase.
+option (see below) may be used to specify a file that contains the passphrase.
 Whitespace in the passphrase is ignored.
 .Pp
 The commands are as follows:
@@ -115,33 +115,21 @@ is not specified.
 The
 .Fl f
 option may be used to specify the output format.
-Supported values are
-.Cm csv ,
-.Cm maildir
-and
-.Cm text
-(the default).
-.Pp
-With the
-.Cm csv
-format,
-messages are written in CSV (comma-separated values) format.
+The following output formats are supported:
+.Bl -tag -width Ds
+.It Cm csv
+Messages are written in CSV (comma-separated values) format.
 See the
 .Sx CSV FORMAT
 section below for details.
-.Pp
-With the
-.Cm maildir
-format, messages are written as emails in maildir format.
+.It Cm maildir
+Messages are written as emails in maildir format.
 In this case, conversations are not written to separate files, but to separate
 maildir directories.
-As a precaution,
-.Nm
-will refuse to write to an existing maildir.
-.Pp
-With the
-.Cm text
-format, messages are written as plain text.
+.It Cm text
+Messages are written as plain text.
+This is the default.
+.El
 .Tg stk
 .It Ic export-stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic stk
@@ -227,8 +215,7 @@ $ sigbak export-database signal.backup signal.db
 $ sqlite3 signal.db 'select * from sms' | less
 .Ed
 .Sh SEE ALSO
-.Lk https://www.kariliq.nl/sigbak/ ,
-.Lk https://www.signal.org/
+.Lk https://github.com/tbvdm/sigbak
 .Sh AUTHORS
 The
 .Nm
