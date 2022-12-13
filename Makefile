@@ -27,7 +27,7 @@ PROTO_OBJS=	${PROTO_SRCS:.c=.o}
 COMPAT_OBJS=	compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/fopen.o compat/getprogname.o compat/hkdf.o \
 		compat/hmac_ctx_new.o compat/pledge.o compat/readpassphrase.o \
-		compat/reallocarray.o compat/strtonum.o compat/unveil.o
+		compat/reallocarray.o compat/unveil.o
 
 OBJS=		cmd-check-backup.o cmd-dump-backup.o cmd-export-attachments.o \
 		cmd-export-avatars.o cmd-export-database.o \

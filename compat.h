@@ -116,10 +116,6 @@ int	 pledge(const char *, const char *);
 void	*reallocarray(void *, size_t, size_t);
 #endif
 
-#ifndef HAVE_STRTONUM
-long long strtonum(const char *, long long, long long, const char **);
-#endif
-
 #ifndef HAVE_UNVEIL
 int	 unveil(const char *, const char *);
 #endif

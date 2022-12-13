@@ -29,9 +29,6 @@
 /* Define if you have reallocarray(). */
 /* #define HAVE_REALLOCARRAY */
 
-/* Define if you have strtonum(). */
-/* #define HAVE_STRTONUM */
-
 /* Define if your struct tm has a tm_gmtoff member. */
 /* #define HAVE_TM_GMTOFF */
 
@@ -85,7 +82,6 @@
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE_STRTONUM
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -103,7 +99,6 @@
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE_STRTONUM
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -121,7 +116,6 @@
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPROGNAME
 #define HAVE_REALLOCARRAY
-#define HAVE_STRTONUM
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -140,7 +134,6 @@
 #define HAVE_PLEDGE
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
-#define HAVE_STRTONUM
 #define HAVE_TM_GMTOFF
 #define HAVE_UNVEIL
 
