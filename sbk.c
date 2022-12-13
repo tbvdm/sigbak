@@ -1093,7 +1093,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	}
 }
 
-/* For database versions < SBK_DB_VERSION_RECIPIENT_IDS */
+/* For database versions < RECIPIENT_IDS */
 #define SBK_RECIPIENTS_QUERY_1						\
 	"SELECT "							\
 	"r.recipient_ids, "						\
@@ -1111,7 +1111,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	"LEFT JOIN groups AS g "					\
 	"ON r.recipient_ids = g.group_id"
 
-/* For database versions < SBK_DB_VERSION_SPLIT_PROFILE_NAMES */
+/* For database versions [RECIPIENT_IDS, SPLIT_PROFILE_NAMES) */
 #define SBK_RECIPIENTS_QUERY_2						\
 	"SELECT "							\
 	"r._id, "							\
@@ -1129,7 +1129,7 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	"LEFT JOIN groups AS g "					\
 	"ON r._id = g.recipient_id"
 
-/* For database versions >= SBK_DB_VERSION_SPLIT_PROFILE_NAMES */
+/* For database versions >= SPLIT_PROFILE_NAMES */
 #define SBK_RECIPIENTS_QUERY_3						\
 	"SELECT "							\
 	"r._id, "							\
@@ -1400,7 +1400,7 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
-/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions < QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_SELECT_1					\
 	"SELECT "							\
 	"p.file_name, "							\
@@ -1416,7 +1416,7 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
 
-/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions >= QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_SELECT_2					\
 	"SELECT "							\
 	"p.file_name, "							\
@@ -1448,13 +1448,13 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	SBK_ATTACHMENTS_WHERE_THREAD					\
 	SBK_ATTACHMENTS_ORDER
 
-/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions < QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_QUERY_MESSAGE_1					\
 	SBK_ATTACHMENTS_SELECT_1					\
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
-/* For database versions >= SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions >= QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_QUERY_MESSAGE_2					\
 	SBK_ATTACHMENTS_SELECT_2					\
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
@@ -1825,7 +1825,7 @@ sbk_free_reaction_list(struct sbk_reaction_list *lst)
 }
 
 /*
- * For database versions < SBK_DB_VERSION_REACTION_REFACTOR
+ * For database versions < REACTION_REFACTOR
  */
 
 static Signal__ReactionList *
@@ -1920,7 +1920,7 @@ error1:
 }
 
 /*
- * For database versions >= SBK_DB_VERSION_REACTION_REFACTOR
+ * For database versions >= REACTION_REFACTOR
  */
 
 #define SBK_REACTIONS_QUERY						\
@@ -2215,7 +2215,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	}
 }
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions < REACTIONS */
 #define SBK_MESSAGES_SELECT_SMS_1					\
 	"SELECT "							\
 	"0, "								\
@@ -2233,7 +2233,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL "				/* mms.quote_mentions */	\
 	"FROM sms "
 
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
+/* For database versions >= REACTIONS */
 #define SBK_MESSAGES_SELECT_SMS_2					\
 	"SELECT "							\
 	"0, "								\
@@ -2251,7 +2251,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL "				/* mms.quote_mentions */	\
 	"FROM sms "
 
-/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions < QUOTED_REPLIES */
 #define SBK_MESSAGES_SELECT_MMS_1					\
 	"SELECT "							\
 	"1, "								\
@@ -2269,7 +2269,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"NULL "				/* quote_mentions */		\
 	"FROM mms "
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions [QUOTED_REPLIES, REACTIONS) */
 #define SBK_MESSAGES_SELECT_MMS_2					\
 	"SELECT "							\
 	"1, "								\
@@ -2287,7 +2287,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"quote_mentions "						\
 	"FROM mms "
 
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
+/* For database versions >= REACTIONS */
 #define SBK_MESSAGES_SELECT_MMS_3					\
 	"SELECT "							\
 	"1, "								\
@@ -2311,7 +2311,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_ORDER						\
 	"ORDER BY date_received"
 
-/* For database versions < SBK_DB_VERSION_QUOTED_REPLIES */
+/* For database versions < QUOTED_REPLIES */
 #define SBK_MESSAGES_QUERY_1						\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
@@ -2320,7 +2320,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions < SBK_DB_VERSION_REACTIONS */
+/* For database versions [QUOTED_REPLIES, REACTIONS) */
 #define SBK_MESSAGES_QUERY_2						\
 	SBK_MESSAGES_SELECT_SMS_1					\
 	SBK_MESSAGES_WHERE_THREAD					\
@@ -2329,7 +2329,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= SBK_DB_VERSION_REACTIONS */
+/* For database versions >= REACTIONS */
 #define SBK_MESSAGES_QUERY_3						\
 	SBK_MESSAGES_SELECT_SMS_2					\
 	SBK_MESSAGES_WHERE_THREAD					\
@@ -2647,7 +2647,7 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	}
 }
 
-/* For database versions < SBK_DB_VERSION_THREAD_AUTOINCREMENT */
+/* For database versions < THREAD_AUTOINCREMENT */
 #define SBK_THREADS_QUERY_1						\
 	"SELECT "							\
 	"recipient_ids, "						\
@@ -2657,7 +2657,7 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 	"FROM thread "							\
 	"ORDER BY _id"
 
-/* For database versions >= SBK_DB_VERSION_THREAD_AUTOINCREMENT */
+/* For database versions >= THREAD_AUTOINCREMENT */
 #define SBK_THREADS_QUERY_2						\
 	"SELECT "							\
 	"thread_recipient_id, "						\
