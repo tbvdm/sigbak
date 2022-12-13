@@ -29,9 +29,10 @@ COMPAT_OBJS=	compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 		compat/hmac_ctx_new.o compat/pledge.o compat/readpassphrase.o \
 		compat/reallocarray.o compat/strtonum.o compat/unveil.o
 
-OBJS=		cmd-attachments.o cmd-avatars.o cmd-check.o cmd-dump.o \
-		cmd-messages.o cmd-sqlite.o cmd-threads.o mime.o sbk.o \
-		sigbak.o ${PROTO_OBJS} ${COMPAT_OBJS}
+OBJS=		cmd-check-backup.o cmd-dump-backup.o cmd-export-attachments.o \
+		cmd-export-avatars.o cmd-export-database.o \
+		cmd-export-messages.o cmd-threads.o mime.o sbk.o sigbak.o \
+		${PROTO_OBJS} ${COMPAT_OBJS}
 
 .PHONY: all clean install
 
