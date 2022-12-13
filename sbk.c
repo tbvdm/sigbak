@@ -2353,11 +2353,29 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"quote_id, "							\
 	"quote_author, "						\
 	"quote_body, "							\
-	"quote_mentions "						\
+	"NULL "				/* quote_mentions */		\
 	"FROM mms "
 
-/* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+/* For database versions [REACTIONS, MENTIONS) */
 #define SBK_MESSAGES_SELECT_MMS_3					\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"address, "							\
+	"body, "							\
+	"date, "			/* sms.date_sent */		\
+	"date_received, "						\
+	"msg_box, "			/* sms.type */			\
+	"thread_id, "							\
+	"reactions, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"NULL "				/* quote_mentions */		\
+	"FROM mms "
+
+/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+#define SBK_MESSAGES_SELECT_MMS_4					\
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
@@ -2375,7 +2393,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"FROM mms "
 
 /* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
-#define SBK_MESSAGES_SELECT_MMS_4					\
+#define SBK_MESSAGES_SELECT_MMS_5					\
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
@@ -2416,7 +2434,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+/* For database versions [REACTIONS, MENTIONS) */
 #define SBK_MESSAGES_QUERY_3						\
 	SBK_MESSAGES_SELECT_SMS_2					\
 	SBK_MESSAGES_WHERE_THREAD					\
@@ -2425,12 +2443,21 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
 #define SBK_MESSAGES_QUERY_4						\
-	SBK_MESSAGES_SELECT_SMS_3					\
+	SBK_MESSAGES_SELECT_SMS_2					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
 	SBK_MESSAGES_SELECT_MMS_4					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+#define SBK_MESSAGES_QUERY_5						\
+	SBK_MESSAGES_SELECT_SMS_3					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	"UNION ALL "							\
+	SBK_MESSAGES_SELECT_MMS_5					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
@@ -2710,11 +2737,13 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 		query = SBK_MESSAGES_QUERY_1;
 	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
 		query = SBK_MESSAGES_QUERY_2;
+	else if (ctx->db_version < SBK_DB_VERSION_MENTIONS)
+		query = SBK_MESSAGES_QUERY_3;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_MESSAGES_QUERY_3;
-	else
 		query = SBK_MESSAGES_QUERY_4;
+	else
+		query = SBK_MESSAGES_QUERY_5;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
