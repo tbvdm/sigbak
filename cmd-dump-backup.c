@@ -26,6 +26,16 @@
 
 #include "sigbak.h"
 
+static enum cmd_status cmd_dump_backup(int, char **);
+
+const struct cmd_entry cmd_dump_backup_entry = {
+	.name = "dump-backup",
+	.alias = "dump",
+	.usage = "[-p passfile] backup",
+	.oldname = NULL,
+	.exec = cmd_dump_backup
+};
+
 static void
 dump_var(unsigned int ind, const char *name, const char *type, const char *fmt,
     ...)
@@ -264,12 +274,12 @@ dump_frame(Signal__BackupFrame *frm)
 		dump_keyvalue(1, "keyValue", frm->keyvalue);
 }
 
-int
-cmd_dump(int argc, char **argv)
+static enum cmd_status
+cmd_dump_backup(int argc, char **argv)
 {
 	struct sbk_ctx		*ctx;
 	Signal__BackupFrame	*frm;
-	char			*passfile, passphr[128];
+	char			*backup, *passfile, passphr[128];
 	int			 c, ret;
 
 	passfile = NULL;
@@ -280,17 +290,19 @@ cmd_dump(int argc, char **argv)
 			passfile = optarg;
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 1)
-		goto usage;
+		return CMD_USAGE;
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	backup = argv[0];
+
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
 
 	if (passfile == NULL) {
 		if (pledge("stdio rpath tty", NULL) == -1)
@@ -304,17 +316,17 @@ cmd_dump(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -327,11 +339,8 @@ cmd_dump(int argc, char **argv)
 		sbk_free_frame(frm);
 	}
 
-	ret = sbk_eof(ctx) ? 0 : 1;
+	ret = sbk_eof(ctx) ? CMD_OK : CMD_ERROR;
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ret;
-
-usage:
-	usage("dump", "[-p passfile] backup");
 }

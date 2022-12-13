@@ -22,11 +22,21 @@
 
 #include "sigbak.h"
 
-int
-cmd_sqlite(int argc, char **argv)
+static enum cmd_status cmd_export_database(int, char **);
+
+const struct cmd_entry cmd_export_database_entry = {
+	.name = "export-database",
+	.alias = "db",
+	.usage = "[-p passfile] backup database",
+	.oldname = "sqlite",
+	.exec = cmd_export_database
+};
+
+static enum cmd_status
+cmd_export_database(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*passfile, passphr[128];
+	char		*db, *backup, *passfile, passphr[128];
 	int		 c, fd, ret;
 
 	passfile = NULL;
@@ -37,24 +47,27 @@ cmd_sqlite(int argc, char **argv)
 			passfile = optarg;
 			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 2)
-		goto usage;
+		return CMD_USAGE;
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	backup = argv[0];
+	db = argv[1];
 
-	if (unveil(argv[1], "rwc") == -1)
-		err(1, "unveil: %s", argv[1]);
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
+
+	if (unveil(db, "rwc") == -1)
+		err(1, "unveil: %s", db);
 
 	/* SQLite creates temporary files in the same dir as the database */
-	if (unveil_dirname(argv[1], "rwc") == -1)
-		return 1;
+	if (unveil_dirname(db, "rwc") == -1)
+		return CMD_ERROR;
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
@@ -76,23 +89,25 @@ cmd_sqlite(int argc, char **argv)
 	}
 
 	/* Prevent SQLite from writing to an existing file */
-	if ((fd = open(argv[1], O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1)
-		err(1, "%s", argv[1]);
+	if ((fd = open(db, O_RDONLY | O_CREAT | O_EXCL, 0666)) == -1) {
+		warn("%s", db);
+		return CMD_ERROR;
+	}
 
 	close(fd);
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
 	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -101,11 +116,8 @@ cmd_sqlite(int argc, char **argv)
 	    pledge("stdio rpath wpath cpath flock", NULL) == -1)
 		err(1, "pledge");
 
-	ret = sbk_write_database(ctx, argv[1]);
+	ret = sbk_write_database(ctx, db);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == 0) ? 0 : 1;
-
-usage:
-	usage("sqlite", "[-p passfile] backup database");
+	return (ret == -1) ? CMD_ERROR : CMD_OK;
 }

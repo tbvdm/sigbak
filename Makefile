@@ -31,8 +31,8 @@ COMPAT_OBJS=	compat/asprintf.o compat/err.o compat/explicit_bzero.o \
 
 OBJS=		cmd-check-backup.o cmd-dump-backup.o cmd-export-attachments.o \
 		cmd-export-avatars.o cmd-export-database.o \
-		cmd-export-messages.o cmd-threads.o mime.o sbk.o sigbak.o \
-		${PROTO_OBJS} ${COMPAT_OBJS}
+		cmd-export-messages.o mime.o sbk.o sigbak.o ${PROTO_OBJS} \
+		${COMPAT_OBJS}
 
 .PHONY: all clean install
 

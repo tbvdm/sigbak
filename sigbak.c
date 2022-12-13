@@ -26,7 +26,25 @@
 
 #include "sigbak.h"
 
-void
+extern const struct cmd_entry cmd_check_backup_entry;
+extern const struct cmd_entry cmd_dump_backup_entry;
+extern const struct cmd_entry cmd_export_attachments_entry;
+extern const struct cmd_entry cmd_export_avatars_entry;
+extern const struct cmd_entry cmd_export_database_entry;
+extern const struct cmd_entry cmd_export_messages_entry;
+extern const struct cmd_entry cmd_export_stickers_entry;
+
+static const struct cmd_entry *commands[] = {
+	&cmd_check_backup_entry,
+	&cmd_dump_backup_entry,
+	&cmd_export_attachments_entry,
+	&cmd_export_avatars_entry,
+	&cmd_export_database_entry,
+	&cmd_export_messages_entry,
+	&cmd_export_stickers_entry
+};
+
+__dead static void
 usage(const char *cmd, const char *args)
 {
 	fprintf(stderr, "usage: %s %s %s\n", getprogname(), cmd, args);
@@ -125,9 +143,43 @@ sanitise_filename(char *name)
 			*c = '_';
 }
 
+char *
+get_recipient_filename(struct sbk_recipient *rcp, const char *ext)
+{
+	char		*fname;
+	const char	*detail, *name;
+	int		 ret;
+
+	name = sbk_get_recipient_display_name(rcp);
+
+	if (rcp->type == SBK_GROUP)
+		detail = "group";
+	else
+		detail = rcp->contact->phone;
+
+	if (ext == NULL)
+		ext = "";
+
+	if (detail != NULL)
+		ret = asprintf(&fname, "%s (%s)%s", name, detail, ext);
+	else
+		ret = asprintf(&fname, "%s%s", name, ext);
+
+	if (ret == -1) {
+		warnx("asprintf() failed");
+		return NULL;
+	}
+
+	sanitise_filename(fname);
+	return fname;
+}
+
 int
 main(int argc, char **argv)
 {
+	const struct cmd_entry	*cmd;
+	size_t			 i;
+
 	setprogname(argv[0]);
 
 	if (argc < 2)
@@ -135,23 +187,35 @@ main(int argc, char **argv)
 
 	argc--;
 	argv++;
+	cmd = NULL;
 
-	if (strcmp(argv[0], "attachments") == 0)
-		return cmd_attachments(argc, argv);
-	if (strcmp(argv[0], "avatars") == 0)
-		return cmd_avatars(argc, argv);
-	if (strcmp(argv[0], "check") == 0)
-		return cmd_check(argc, argv);
-	if (strcmp(argv[0], "dump") == 0)
-		return cmd_dump(argc, argv);
-	if (strcmp(argv[0], "messages") == 0)
-		return cmd_messages(argc, argv);
-	if (strcmp(argv[0], "sqlite") == 0)
-		return cmd_sqlite(argc, argv);
-	if (strcmp(argv[0], "stickers") == 0)
-		return cmd_stickers(argc, argv);
-	if (strcmp(argv[0], "threads") == 0)
-		return cmd_threads(argc, argv);
+	for (i = 0; i < nitems(commands); i++) {
+		if (strcmp(argv[0], commands[i]->name) == 0 ||
+		    strcmp(argv[0], commands[i]->alias) == 0) {
+			cmd = commands[i];
+			break;
+		}
+		if (commands[i]->oldname != NULL &&
+		    strcmp(argv[0], commands[i]->oldname) == 0) {
+			warnx("The command \"%s\" has been renamed to \"%s\"",
+			    commands[i]->oldname, commands[i]->name);
+			warnx("The old name is deprecated and will be removed "
+			    "in the future");
+			cmd = commands[i];
+			break;
+		}
+	}
 
-	errx(1, "%s: Invalid command", argv[0]);
+	if (cmd == NULL)
+		errx(1, "%s: Invalid command", argv[0]);
+
+	switch (cmd->exec(argc, argv)) {
+	case CMD_OK:
+		return 0;
+	case CMD_ERROR:
+		return 1;
+	case CMD_USAGE:
+		usage(cmd->name, cmd->usage);
+		return 1;
+	}
 }

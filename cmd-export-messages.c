@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -33,11 +34,49 @@
 
 #include "sigbak.h"
 
+static enum cmd_status cmd_export_messages(int, char **);
+
+const struct cmd_entry cmd_export_messages_entry = {
+	.name = "export-messages",
+	.alias = "msg",
+	.usage = "[-f format] [-p passfile] backup [directory]",
+	.oldname = "messages",
+	.exec = cmd_export_messages
+};
+
 enum {
 	FORMAT_CSV,
 	FORMAT_MAILDIR,
 	FORMAT_TEXT
 };
+
+static FILE *
+get_thread_file(struct sbk_thread *thd, int dfd, const char *ext)
+{
+	FILE	*fp;
+	char	*name;
+	int	 fd;
+
+	if ((name = get_recipient_filename(thd->recipient, ext)) == NULL)
+		return NULL;
+
+	fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
+	if (fd == -1) {
+		warn("%s", name);
+		free(name);
+		return NULL;
+	}
+
+	if ((fp = fdopen(fd, "w")) == NULL) {
+		warn("%s", name);
+		close(fd);
+		free(name);
+		return NULL;
+	}
+
+	free(name);
+	return fp;
+}
 
 static void
 csv_print_quoted_string(FILE *fp, const char *str)
@@ -116,72 +155,84 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 }
 
 static int
-csv_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
+csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
+    int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
 	FILE			*fp;
 	int			 ret;
 
-	if (outfile == NULL)
-		fp = stdout;
-	else if ((fp = fopen(outfile, "wx")) == NULL) {
-		warn("fopen: %s", outfile);
+	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+		return -1;
+
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
 		return -1;
 	}
 
-	if (thread == -1)
-		lst = sbk_get_all_messages(ctx);
-	else
-		lst = sbk_get_messages_for_thread(ctx, thread);
-
-	if (lst == NULL) {
-		fclose(fp);
+	if ((fp = get_thread_file(thd, dfd, ".csv")) == NULL) {
+		sbk_free_message_list(lst);
 		return -1;
 	}
 
 	ret = 0;
-
 	SIMPLEQ_FOREACH(msg, lst, entries)
 		if (csv_write_message(fp, msg) == -1)
 			ret = -1;
 
+	fclose(fp);
 	sbk_free_message_list(lst);
-
-	if (fp != stdout)
-		fclose(fp);
-
 	return ret;
 }
 
-static void
-maildir_create(const char *path)
+static int
+maildir_create(int dfd, const char *path)
 {
-	int fd;
+	int maildir_dfd, ret;
 
-	if (mkdir(path, 0777) == -1)
-		err(1, "mkdir: %s", path);
+	maildir_dfd = -1;
+	ret = -1;
 
-	if ((fd = open(path, O_RDONLY | O_DIRECTORY)) == -1)
-		err(1, "open: %s", path);
+	if (mkdirat(dfd, path, 0777) == -1) {
+		warn("mkdir: %s", path);
+		goto out;
+	}
 
-	if (mkdirat(fd, "cur", 0777) == -1)
-		err(1, "mkdirat: %s/%s", path, "cur");
+	if ((maildir_dfd = openat(dfd, path, O_RDONLY | O_DIRECTORY)) == -1) {
+		warn("open: %s", path);
+		goto out;
+	}
 
-	if (mkdirat(fd, "new", 0777) == -1)
-		err(1, "mkdirat: %s/%s", path, "new");
+	if (mkdirat(maildir_dfd, "cur", 0777) == -1) {
+		warn("mkdirat: %s/%s", path, "cur");
+		goto out;
+	}
 
-	if (mkdirat(fd, "tmp", 0777) == -1)
-		err(1, "mkdirat: %s/%s", path, "tmp");
+	if (mkdirat(maildir_dfd, "new", 0777) == -1) {
+		warn("mkdirat: %s/%s", path, "new");
+		goto out;
+	}
 
-	close(fd);
+	if (mkdirat(maildir_dfd, "tmp", 0777) == -1) {
+		warn("mkdirat: %s/%s", path, "tmp");
+		goto out;
+	}
+
+	ret = 0;
+
+out:
+	if (maildir_dfd != -1)
+		close(maildir_dfd);
+	return ret;
 }
 
 static FILE *
-maildir_open_file(const char *maildir, const struct sbk_message *msg)
+maildir_open_file(int dfd, const char *maildir, const struct sbk_message *msg)
 {
 	FILE	*fp;
 	char	*path;
+	int	 fd;
 
 	/* Intentionally create deterministic filenames */
 	/* XXX Shouldn't write directly into cur */
@@ -191,8 +242,18 @@ maildir_open_file(const char *maildir, const struct sbk_message *msg)
 		return NULL;
 	}
 
-	if ((fp = fopen(path, "wx")) == NULL)
-		warn("fopen: %s", path);
+	fd = openat(dfd, path, O_WRONLY | O_CREAT | O_EXCL, 0666);
+	if (fd == -1) {
+		warn("%s", path);
+		return NULL;
+	}
+
+	if ((fp = fdopen(fd, "w")) == NULL) {
+		warn("%s", path);
+		close(fd);
+		free(path);
+		return NULL;
+	}
 
 	free(path);
 	return fp;
@@ -347,7 +408,7 @@ maildir_write_attachment(struct sbk_ctx *ctx, FILE *fp,
 }
 
 static int
-maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
+maildir_write_message(struct sbk_ctx *ctx, int dfd, const char *maildir,
     struct sbk_message *msg)
 {
 	FILE			*fp;
@@ -360,7 +421,7 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 	    maildir_generate_boundary(msg, boundary, sizeof boundary) == -1)
 		return -1;
 
-	if ((fp = maildir_open_file(maildir, msg)) == NULL)
+	if ((fp = maildir_open_file(dfd, maildir, msg)) == NULL)
 		return -1;
 
 	name = sbk_get_recipient_display_name(msg->recipient);
@@ -427,26 +488,36 @@ maildir_write_message(struct sbk_ctx *ctx, const char *maildir,
 }
 
 static int
-maildir_write_messages(struct sbk_ctx *ctx, const char *maildir, int thread)
+maildir_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
+    int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
+	char			*maildir;
 	int			 ret;
 
-	if (thread == -1)
-		lst = sbk_get_all_messages(ctx);
-	else
-		lst = sbk_get_messages_for_thread(ctx, thread);
-
-	if (lst == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
 		return -1;
 
-	ret = 0;
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
+		return -1;
+	}
 
+	if ((maildir = get_recipient_filename(thd->recipient, NULL)) == NULL)
+		return -1;
+
+	if (maildir_create(dfd, maildir) == -1) {
+		free(maildir);
+		return -1;
+	}
+
+	ret = 0;
 	SIMPLEQ_FOREACH(msg, lst, entries)
-		if (maildir_write_message(ctx, maildir, msg) == -1)
+		if (maildir_write_message(ctx, dfd, maildir, msg) == -1)
 			ret = -1;
 
+	free(maildir);
 	sbk_free_message_list(lst);
 	return ret;
 }
@@ -557,57 +628,89 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 }
 
 static int
-text_write_messages(struct sbk_ctx *ctx, const char *outfile, int thread)
+text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
+    int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
 	FILE			*fp;
 	int			 ret;
 
-	if (outfile == NULL)
-		fp = stdout;
-	else if ((fp = fopen(outfile, "wx")) == NULL) {
-		warn("fopen: %s", outfile);
+	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
 		return -1;
+
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
+		return 0;
 	}
 
-	if (thread == -1)
-		lst = sbk_get_all_messages(ctx);
-	else
-		lst = sbk_get_messages_for_thread(ctx, thread);
-
-	if (lst == NULL) {
-		fclose(fp);
+	if ((fp = get_thread_file(thd, dfd, ".txt")) == NULL) {
+		sbk_free_message_list(lst);
 		return -1;
 	}
 
 	ret = 0;
-
 	SIMPLEQ_FOREACH(msg, lst, entries)
 		if (text_write_message(fp, msg) == -1)
 			ret = -1;
 
+	fclose(fp);
 	sbk_free_message_list(lst);
-
-	if (fp != stdout)
-		fclose(fp);
-
 	return ret;
 }
 
-int
-cmd_messages(int argc, char **argv)
+static int
+export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
+{
+	struct sbk_thread_list	*lst;
+	struct sbk_thread	*thd;
+	int			 dfd, ret;
+
+	if ((dfd = open(outdir, O_RDONLY | O_DIRECTORY)) == -1) {
+		warn("%s", outdir);
+		return -1;
+	}
+
+	if ((lst = sbk_get_threads(ctx)) == NULL) {
+		close(dfd);
+		return -1;
+	}
+
+	ret = 0;
+	SIMPLEQ_FOREACH(thd, lst, entries) {
+		switch (format) {
+		case FORMAT_CSV:
+			if (csv_export_thread_messages(ctx, thd, dfd) == -1)
+				ret = -1;
+			break;
+		case FORMAT_MAILDIR:
+			if (maildir_export_thread_messages(ctx, thd, dfd) ==
+			    -1)
+				ret = -1;
+			break;
+		case FORMAT_TEXT:
+			if (text_export_thread_messages(ctx, thd, dfd) == -1)
+				ret = -1;
+			break;
+		}
+	}
+
+	sbk_free_thread_list(lst);
+	close(dfd);
+	return ret;
+}
+
+static enum cmd_status
+cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*dest, *passfile, passphr[128];
-	const char	*errstr;
-	int		 c, format, ret, thread;
+	char		*backup, *outdir, *passfile, passphr[128];
+	int		 c, format, ret;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
-	thread = -1;
 
-	while ((c = getopt(argc, argv, "f:p:t:")) != -1)
+	while ((c = getopt(argc, argv, "f:p:")) != -1)
 		switch (c) {
 		case 'f':
 			if (strcmp(optarg, "csv") == 0)
@@ -616,19 +719,16 @@ cmd_messages(int argc, char **argv)
 				format = FORMAT_MAILDIR;
 			else if (strcmp(optarg, "text") == 0)
 				format = FORMAT_TEXT;
-			else
-				errx(1, "%s: invalid format", optarg);
+			else {
+				warnx("%s: Invalid format", optarg);
+				return CMD_ERROR;
+			}
 			break;
 		case 'p':
 			passfile = optarg;
 			break;
-		case 't':
-			thread = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(1, "%s: thread id is %s", optarg, errstr);
-			break;
 		default:
-			goto usage;
+			return CMD_USAGE;
 		}
 
 	argc -= optind;
@@ -636,23 +736,26 @@ cmd_messages(int argc, char **argv)
 
 	switch (argc) {
 	case 1:
-		if (format == FORMAT_MAILDIR)
-			goto usage;
-		dest = NULL;
+		backup = argv[0];
+		outdir = ".";
 		break;
 	case 2:
-		dest = argv[1];
-		if (format == FORMAT_MAILDIR)
-			maildir_create(dest);
-		if (unveil(dest, "wc") == -1)
-			err(1, "unveil: %s", dest);
+		backup = argv[0];
+		outdir = argv[1];
+		if (mkdir(outdir, 0777) == -1 && errno != EEXIST) {
+			warn("mkdir: %s", outdir);
+			return CMD_ERROR;
+		}
 		break;
 	default:
-		goto usage;
+		return CMD_USAGE;
 	}
 
-	if (unveil(argv[0], "r") == -1)
-		err(1, "unveil: %s", argv[0]);
+	if (unveil(backup, "r") == -1)
+		err(1, "unveil: %s", backup);
+
+	if (unveil(outdir, "rwc") == -1)
+		err(1, "unveil: %s", outdir);
 
 	/* For SQLite */
 	if (unveil("/dev/urandom", "r") == -1)
@@ -674,15 +777,17 @@ cmd_messages(int argc, char **argv)
 	}
 
 	if ((ctx = sbk_ctx_new()) == NULL)
-		return 1;
+		return CMD_ERROR;
 
-	if (get_passphrase(passfile, passphr, sizeof passphr) == -1)
-		return 1;
+	if (get_passphrase(passfile, passphr, sizeof passphr) == -1) {
+		sbk_ctx_free(ctx);
+		return CMD_ERROR;
+	}
 
-	if (sbk_open(ctx, argv[0], passphr) == -1) {
+	if (sbk_open(ctx, backup, passphr) == -1) {
 		explicit_bzero(passphr, sizeof passphr);
 		sbk_ctx_free(ctx);
-		return 1;
+		return CMD_ERROR;
 	}
 
 	explicit_bzero(passphr, sizeof passphr);
@@ -690,22 +795,8 @@ cmd_messages(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	switch (format) {
-	case FORMAT_CSV:
-		ret = csv_write_messages(ctx, dest, thread);
-		break;
-	case FORMAT_MAILDIR:
-		ret = maildir_write_messages(ctx, dest, thread);
-		break;
-	case FORMAT_TEXT:
-		ret = text_write_messages(ctx, dest, thread);
-		break;
-	}
-
+	ret = export_messages(ctx, outdir, format);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == 0) ? 0 : 1;
-
-usage:
-	usage("messages", "[-f format] [-p passfile] [-t thread] backup dest");
+	return (ret == -1) ? CMD_ERROR : CMD_OK;
 }

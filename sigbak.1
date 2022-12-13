@@ -12,23 +12,23 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd February 3, 2022
+.Dd December 4, 2022
 .Dt SIGBAK 1
 .Os
 .Sh NAME
 .Nm sigbak
-.Nd read encrypted Signal backups
+.Nd export messages from Signal Android backups
 .Sh SYNOPSIS
 .Nm sigbak
 .Ar command
 .Op Ar argument ...
 .Sh DESCRIPTION
 .Nm
-is a utility to read the encrypted backups created by the Signal messaging app.
-It can be used to extract messages, attachments and other data.
+is a utility to read the backups created by the Signal Android app.
+It can be used to export messages, attachments and other data.
 .Pp
 A Signal backup consists primarily of an SQLite database.
-This database contains the backed-up messages, amongst other things.
+This database contains the messages, amongst other things.
 Attachments, avatars and stickers, however, are stored as separate files in the
 backup.
 .Pp
@@ -38,37 +38,47 @@ By default,
 prompts for the passphrase.
 Alternatively, the
 .Fl p
-option may be used to specify a file that contains the passphrase.
+option (see below) may be used to specify a file that contains the passphrase.
 Whitespace in the passphrase is ignored.
 .Pp
-The commands are as follows.
+The commands are as follows:
 .Bl -tag -width Ds
+.Tg check
+.It Ic check-backup Oo Fl p Ar passfile Oc Ar backup
+.D1 Pq Alias: Ic check
+.Pp
+Check that the file
+.Ar backup
+can be decrypted and parsed correctly.
+The check is aborted after the first encountered error.
+.Tg dump
+.It Ic dump-backup Oo Fl p Ar passfile Oc Ar backup
+.D1 Pq Alias: Ic dump
+.Pp
+Print the raw contents of the file
+.Ar backup
+in a readable format on standard output.
+.Tg att
 .It Xo
-.Ic attachments
+.Ic export-attachments
 .Oo Fl p Ar passfile Oc
-.Oo Fl t Ar thread Oc
 .Ar backup Op Ar directory
 .Xc
-Export all attachments in the file
-.Ar backup
-to
+.D1 Pq Alias: Ic att
+.Pp
+Export the attachments in the file
+.Ar backup .
+The attachment files are created in separate directories, one for each
+conversation.
+These directories are created in
 .Ar directory ,
-or to the current directory if
+or in the current directory if
 .Ar directory
 is not specified.
+.Tg avt
+.It Ic export-avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+.D1 Pq Alias: Ic avt
 .Pp
-By default, all attachments are exported.
-The
-.Fl t
-option may be used to export only the attachments from a single conversation
-thread.
-The
-.Ar thread
-argument should be a number.
-The
-.Ic threads
-command can be used to view a list of conversation threads.
-.It Ic avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 Export all avatars in the file
 .Ar backup
 to
@@ -76,82 +86,54 @@ to
 or to the current directory if
 .Ar directory
 is not specified.
-.It Ic check Oo Fl p Ar passfile Oc Ar backup
-Check that the file
-.Ar backup
-can be decrypted and parsed correctly.
-The check is aborted after the first encountered error.
-.It Ic dump Oo Fl p Ar passfile Oc Ar backup
-Print the raw contents of the file
-.Ar backup
-in a readable format on standard output.
-.It Xo
-.Ic messages
-.Oo Fl f Ar format Oc
-.Oo Fl p Ar passfile Oc
-.Oo Fl t Ar thread Oc
-.Ar backup Ar dest
-.Xc
-Export all messages in the file
-.Ar backup
-to
-.Ar dest .
+.Tg db
+.It Ic export-database Oo Fl p Ar passfile Oc Ar backup Ar database
+.D1 Pq Alias: Ic db
 .Pp
-The
-.Fl f
-option may be used to specify the output format.
-Supported values are
-.Cm csv ,
-.Cm maildir
-and
-.Cm text
-(the default).
-.Pp
-With the
-.Cm csv
-format,
-messages are written in CSV (comma-separated values) format to the file
-.Ar dest .
-If
-.Ar dest
-is omitted, messages are written to standard output instead.
-See the
-.Sx CSV FORMAT
-section below for details.
-.Pp
-With the
-.Cm maildir
-format, messages are written as emails in maildir format to the directory
-.Ar dest .
-As a precaution,
-.Nm
-will refuse to write to an existing maildir.
-.Pp
-With the
-.Cm text
-format, messages are written as plain text to the file
-.Ar dest .
-If
-.Ar dest
-is omitted, messages are written to standard output instead.
-.Pp
-By default, all messages are exported.
-The
-.Fl t
-option may be used to export only the messages from a single conversation
-thread.
-The
-.Ar thread
-argument should be a number.
-The
-.Ic threads
-command can be used to view a list of conversation threads.
-.It Ic sqlite Oo Fl p Ar passfile Oc Ar backup Ar database
 Export the SQLite database in the file
 .Ar backup
 to the file
 .Ar database .
-.It Ic stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+.Tg msg
+.It Xo
+.Ic export-messages
+.Oo Fl f Ar format Oc
+.Oo Fl p Ar passfile Oc
+.Ar backup Op Ar directory
+.Xc
+.D1 Pq Alias: Ic msg
+.Pp
+Export the messages in the file
+.Ar backup .
+The messages are written to separate files, one for each conversation.
+These files are created in
+.Ar directory ,
+or in the current directory if
+.Ar directory
+is not specified.
+.Pp
+The
+.Fl f
+option may be used to specify the output format.
+The following output formats are supported:
+.Bl -tag -width Ds
+.It Cm csv
+Messages are written in CSV (comma-separated values) format.
+See the
+.Sx CSV FORMAT
+section below for details.
+.It Cm maildir
+Messages are written as emails in maildir format.
+In this case, conversations are not written to separate files, but to separate
+maildir directories.
+.It Cm text
+Messages are written as plain text.
+This is the default.
+.El
+.Tg stk
+.It Ic export-stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
+.D1 Pq Alias: Ic stk
+.Pp
 Export all stickers in the file
 .Ar backup
 to
@@ -159,12 +141,10 @@ to
 or to the current directory if
 .Ar directory
 is not specified.
-.It Ic threads Oo Fl p Ar passfile Oc Ar backup
-Print a list of all conversation threads.
 .El
 .Sh CSV FORMAT
 The
-.Ic messages
+.Ic export-messages
 command can export messages in CSV format.
 In this format, each record describes either a message or a message reaction,
 and consists of the following eight fields.
@@ -211,29 +191,18 @@ field is a string containing the message text or reaction emoji.
 .Sh EXIT STATUS
 .Ex -std
 .Sh EXAMPLES
-Dump the raw contents of
+Export all messages in the file
 .Pa signal.backup
-to
-.Pa signal.dump :
+to the directory
+.Pa messages :
 .Pp
-.Dl $ sigbak dump signal.backup > signal.dump
+.Dl $ sigbak export-messages signal.backup messages
 .Pp
-First create a passphrase file, then export all messages as plain text, fold
-long lines for readability and view the result:
+First create a passphrase file, then export all messages and attachments:
 .Bd -literal -offset indent
 $ echo 01234 56789 01234 56789 01234 56789 > passfile
-$ sigbak messages -p passfile signal.backup | fold -s | less
-.Ed
-.Pp
-Export all messages and attachments from the conversation with Charlie:
-.Bd -literal -offset indent
-$ sigbak threads signal.backup
-[...]
-   1: Alice
-   2: Bob
-   3: Charlie
-$ sigbak messages -t 3 signal.backup charlie.txt
-$ sigbak attachments -t 3 signal.backup
+$ sigbak export-messages -p passfile signal.backup messages
+$ sigbak export-attachments -p passfile signal.backup attachments
 .Ed
 .Pp
 Export the SQLite database and use
@@ -242,12 +211,11 @@ to view the contents of the
 .Sq sms
 table:
 .Bd -literal -offset indent
-$ sigbak sqlite signal.backup signal.db
+$ sigbak export-database signal.backup signal.db
 $ sqlite3 signal.db 'select * from sms' | less
 .Ed
 .Sh SEE ALSO
-.Lk https://www.kariliq.nl/sigbak/ ,
-.Lk https://www.signal.org/
+.Lk https://github.com/tbvdm/sigbak
 .Sh AUTHORS
 The
 .Nm

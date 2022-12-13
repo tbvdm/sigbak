@@ -105,6 +105,20 @@
 #define nitems(a) (sizeof (a) / sizeof (a)[0])
 #endif
 
+enum cmd_status {
+	CMD_OK,
+	CMD_ERROR,
+	CMD_USAGE
+};
+
+struct cmd_entry {
+	const char	*name;
+	const char	*alias;
+	const char	*usage;
+	const char	*oldname;
+	enum cmd_status	 (*exec)(int, char **);
+};
+
 struct sbk_ctx;
 
 struct sbk_file;
@@ -223,12 +237,10 @@ char		*sbk_get_file_data(struct sbk_ctx *, struct sbk_file *,
 void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
-struct sbk_attachment_list *sbk_get_all_attachments(struct sbk_ctx *);
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
 		    int);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
-struct sbk_message_list *sbk_get_all_messages(struct sbk_ctx *);
 struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
 void		 sbk_free_message_list(struct sbk_message_list *);
 int		 sbk_is_outgoing_message(const struct sbk_message *);
@@ -245,15 +257,6 @@ const char	*mime_get_extension(const char *);
 int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 sanitise_filename(char *);
-void		 usage(const char *, const char *) __dead;
-
-int		 cmd_attachments(int, char **);
-int		 cmd_avatars(int, char **);
-int		 cmd_check(int, char **);
-int		 cmd_dump(int, char **);
-int		 cmd_messages(int, char **);
-int		 cmd_sqlite(int, char **);
-int		 cmd_stickers(int, char **);
-int		 cmd_threads(int, char **);
+char		*get_recipient_filename(struct sbk_recipient *, const char *);
 
 #endif
