@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd December 4, 2022
+.Dd December 15, 2022
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -61,6 +61,7 @@ in a readable format on standard output.
 .Tg att
 .It Xo
 .Ic export-attachments
+.Op Fl a
 .Oo Fl p Ar passfile Oc
 .Ar backup Op Ar directory
 .Xc
@@ -75,6 +76,12 @@ These directories are created in
 or in the current directory if
 .Ar directory
 is not specified.
+.Pp
+By default, long-message attachments are not exported.
+Long-message attachments contain the text of longer messages.
+The
+.Fl a
+option may be used to export these attachments, too.
 .Tg avt
 .It Ic export-avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic avt
