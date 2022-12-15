@@ -36,7 +36,7 @@ static enum cmd_status cmd_export_attachments(int, char **);
 const struct cmd_entry cmd_export_attachments_entry = {
 	.name = "export-attachments",
 	.alias = "att",
-	.usage = "[-p passfile] backup [directory]",
+	.usage = "[-a] [-p passfile] backup [directory]",
 	.oldname = "attachments",
 	.exec = cmd_export_attachments
 };
@@ -190,15 +190,24 @@ get_thread_directory(int dfd, struct sbk_thread *thd)
 }
 
 static int
-export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
+export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
+    int all)
 {
 	struct sbk_attachment_list	*lst;
-	struct sbk_attachment		*att;
+	struct sbk_attachment		*att, *tmp;
 	FILE				*fp;
 	int				 ret, thd_dfd;
 
 	if ((lst = sbk_get_attachments_for_thread(ctx, thd->id)) == NULL)
 		return -1;
+
+	if (!all) {
+		/* Skip long-message attachments */
+		TAILQ_FOREACH_SAFE(att, lst, entries, tmp)
+			if (att->content_type != NULL &&
+			    strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0)
+				TAILQ_REMOVE(lst, att, entries);
+	}
 
 	if (TAILQ_EMPTY(lst)) {
 		sbk_free_attachment_list(lst);
@@ -232,7 +241,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 }
 
 static int
-export_attachments(struct sbk_ctx *ctx, const char *outdir)
+export_attachments(struct sbk_ctx *ctx, const char *outdir, int all)
 {
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
@@ -250,7 +259,7 @@ export_attachments(struct sbk_ctx *ctx, const char *outdir)
 
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
-		if (export_thread_attachments(ctx, thd, dfd) == -1)
+		if (export_thread_attachments(ctx, thd, dfd, all) == -1)
 			return -1;
 	}
 
@@ -265,12 +274,16 @@ cmd_export_attachments(int argc, char **argv)
 	struct sbk_ctx	*ctx;
 	char		*backup, *passfile, passphr[128];
 	const char	*outdir;
-	int		 c, ret;
+	int		 aflag, c, ret;
 
+	aflag = 0;
 	passfile = NULL;
 
-	while ((c = getopt(argc, argv, "p:")) != -1)
+	while ((c = getopt(argc, argv, "ap:")) != -1)
 		switch (c) {
+		case 'a':
+			aflag = 1;
+			break;
 		case 'p':
 			passfile = optarg;
 			break;
@@ -342,7 +355,7 @@ cmd_export_attachments(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = export_attachments(ctx, outdir);
+	ret = export_attachments(ctx, outdir, aflag);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == -1) ? CMD_ERROR : CMD_OK;
