@@ -259,7 +259,7 @@ export_attachments(struct sbk_ctx *ctx, const char *outdir, int all)
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
 		if (export_thread_attachments(ctx, thd, dfd, all) == -1)
-			return -1;
+			ret = -1;
 	}
 
 	sbk_free_thread_list(lst);
