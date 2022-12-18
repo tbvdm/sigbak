@@ -590,9 +590,6 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	if (!sbk_is_outgoing_message(msg))
 		text_write_time_field(fp, "Received", msg->time_recv);
 
-	fprintf(fp, "Message id: %d-%d\n", msg->id.type, msg->id.rowid);
-	fprintf(fp, "Thread: %d\n", msg->thread);
-
 	if (msg->attachments != NULL)
 		TAILQ_FOREACH(att, msg->attachments, entries)
 			text_write_attachment_field(fp, att);
