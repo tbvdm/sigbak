@@ -56,6 +56,12 @@
 #define SBK_DB_VERSION_REACTION_REFACTOR		121
 #define SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS	166
 
+enum sbk_frame_state {
+	SBK_FIRST_FRAME,	/* We're about to read the first frame */
+	SBK_LAST_FRAME,		/* We've read the last frame */
+	SBK_OTHER_FRAME		/* We're somewhere in between */
+};
+
 struct sbk_file {
 	long		 pos;
 	uint32_t	 len;
@@ -96,12 +102,11 @@ struct sbk_ctx {
 	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	uint32_t	 counter;
+	enum sbk_frame_state state;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
 	unsigned char	*obuf;
 	size_t		 obufsize;
-	int		 firstframe;
-	int		 eof;
 };
 
 static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
@@ -392,15 +397,15 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	if (file != NULL)
 		*file = NULL;
 
-	if (ctx->eof)
+	if (ctx->state == SBK_LAST_FRAME)
 		return NULL;
 
 	if (sbk_read_frame(ctx, &ibuflen) == -1)
 		return NULL;
 
 	/* The first frame is not encrypted */
-	if (ctx->firstframe) {
-		ctx->firstframe = 0;
+	if (ctx->state == SBK_FIRST_FRAME) {
+		ctx->state = SBK_OTHER_FRAME;
 		return sbk_unpack_frame(ctx->ibuf, ibuflen);
 	}
 
@@ -425,7 +430,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 		return NULL;
 
 	if (frm->has_end)
-		ctx->eof = 1;
+		ctx->state = SBK_LAST_FRAME;
 
 	ctx->counter++;
 
@@ -972,7 +977,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (sbk_sqlite_exec(ctx, "END TRANSACTION") == -1)
 		goto error;
 
-	if (!ctx->eof)
+	if (ctx->state != SBK_LAST_FRAME)
 		goto error;
 
 	return 0;
@@ -2999,8 +3004,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		return -1;
 	}
 
-	ctx->firstframe = 1;
-	ctx->eof = 0;
+	ctx->state = SBK_FIRST_FRAME;
 
 	if ((frm = sbk_get_frame(ctx, NULL)) == NULL)
 		goto error;
@@ -3086,13 +3090,12 @@ sbk_rewind(struct sbk_ctx *ctx)
 	}
 
 	clearerr(ctx->fp);
-	ctx->eof = 0;
-	ctx->firstframe = 1;
+	ctx->state = SBK_FIRST_FRAME;
 	return 0;
 }
 
 int
 sbk_eof(struct sbk_ctx *ctx)
 {
-	return ctx->eof;
+	return ctx->state == SBK_LAST_FRAME;
 }
