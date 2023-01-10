@@ -1593,7 +1593,7 @@ error:
 }
 
 struct sbk_attachment_list *
-sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
+sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 {
 	sqlite3_stmt	*stm;
 	const char	*query;
@@ -1609,7 +1609,7 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
@@ -2725,7 +2725,7 @@ error:
 }
 
 struct sbk_message_list *
-sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
+sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 {
 	sqlite3_stmt	*stm;
 	const char	*query;
@@ -2748,12 +2748,12 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
 
-	if (sbk_sqlite_bind_int(ctx, stm, 2, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 2, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}

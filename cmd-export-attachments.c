@@ -197,7 +197,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 	FILE				*fp;
 	int				 ret, thd_dfd;
 
-	if ((lst = sbk_get_attachments_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_attachments_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (!all) {

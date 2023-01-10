@@ -162,7 +162,7 @@ csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	FILE			*fp;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {
@@ -483,7 +483,7 @@ maildir_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	char			*maildir;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {
@@ -620,7 +620,7 @@ text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	FILE			*fp;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {
