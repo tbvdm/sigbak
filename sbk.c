@@ -1507,7 +1507,7 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 #define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	3
 #define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	4
 #define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	5
-#define SBK_ATTACHMENTS_COLUMN_DATE		6
+#define SBK_ATTACHMENTS_COLUMN_DATE_SENT	6
 #define SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED	7
 
 static struct sbk_attachment *
@@ -1540,7 +1540,7 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	att->size = sqlite3_column_int64(stm,
 	    SBK_ATTACHMENTS_COLUMN_DATA_SIZE);
 	att->time_sent = sqlite3_column_int64(stm,
-	    SBK_ATTACHMENTS_COLUMN_DATE);
+	    SBK_ATTACHMENTS_COLUMN_DATE_SENT);
 	att->time_recv = sqlite3_column_int64(stm,
 	    SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED);
 	att->file = sbk_get_attachment_file(ctx, att->rowid,
