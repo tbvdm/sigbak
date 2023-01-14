@@ -26,9 +26,7 @@
 #include "compat.h"
 
 /*
- * Types for sms and mms messages
- *
- * Based on src/org/thoughtcrime/securesms/database/MmsSmsColumns.java in the
+ * Types for sms and mms messages; based on MessageTypes.java in the
  * Signal-Android repository
  */
 
@@ -238,10 +236,11 @@ void		 sbk_free_frame(Signal__BackupFrame *);
 void		 sbk_free_file(struct sbk_file *);
 
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
-		    int);
+		    struct sbk_thread *);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
 
-struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *, int);
+struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *,
+		    struct sbk_thread *);
 void		 sbk_free_message_list(struct sbk_message_list *);
 int		 sbk_is_outgoing_message(const struct sbk_message *);
 

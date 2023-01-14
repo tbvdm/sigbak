@@ -198,7 +198,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 	FILE				*fp;
 	int				 ret, thd_dfd;
 
-	if ((lst = sbk_get_attachments_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_attachments_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (!all) {
@@ -260,7 +260,7 @@ export_attachments(struct sbk_ctx *ctx, const char *outdir, int all)
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
 		if (export_thread_attachments(ctx, thd, dfd, all) == -1)
-			return -1;
+			ret = -1;
 	}
 
 	sbk_free_thread_list(lst);

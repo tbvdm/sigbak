@@ -163,7 +163,7 @@ csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	FILE			*fp;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {
@@ -496,7 +496,7 @@ maildir_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	char			*maildir;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {
@@ -603,9 +603,6 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	if (!sbk_is_outgoing_message(msg))
 		text_write_time_field(fp, "Received", msg->time_recv);
 
-	fprintf(fp, "Message id: %d-%d\n", msg->id.type, msg->id.rowid);
-	fprintf(fp, "Thread: %d\n", msg->thread);
-
 	if (msg->attachments != NULL)
 		TAILQ_FOREACH(att, msg->attachments, entries)
 			text_write_attachment_field(fp, att);
@@ -636,7 +633,7 @@ text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	FILE			*fp;
 	int			 ret;
 
-	if ((lst = sbk_get_messages_for_thread(ctx, thd->id)) == NULL)
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
 
 	if (SIMPLEQ_EMPTY(lst)) {

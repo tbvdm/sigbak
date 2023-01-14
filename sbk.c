@@ -55,6 +55,13 @@
 #define SBK_DB_VERSION_THREAD_AUTOINCREMENT		108
 #define SBK_DB_VERSION_REACTION_REFACTOR		121
 #define SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS	166
+#define SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION	168
+
+enum sbk_frame_state {
+	SBK_FIRST_FRAME,	/* We're about to read the first frame */
+	SBK_LAST_FRAME,		/* We've read the last frame */
+	SBK_OTHER_FRAME		/* We're somewhere in between */
+};
 
 struct sbk_file {
 	long		 pos;
@@ -101,12 +108,11 @@ struct sbk_ctx {
 	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	uint32_t	 counter;
+	enum sbk_frame_state state;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
 	unsigned char	*obuf;
 	size_t		 obufsize;
-	int		 firstframe;
-	int		 eof;
 };
 
 static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
@@ -422,15 +428,15 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	if (file != NULL)
 		*file = NULL;
 
-	if (ctx->eof)
+	if (ctx->state == SBK_LAST_FRAME)
 		return NULL;
 
 	if (sbk_read_frame(ctx, &ibuflen) == -1)
 		return NULL;
 
 	/* The first frame is not encrypted */
-	if (ctx->firstframe) {
-		ctx->firstframe = 0;
+	if (ctx->state == SBK_FIRST_FRAME) {
+		ctx->state = SBK_OTHER_FRAME;
 		return sbk_unpack_frame(ctx->ibuf, ibuflen);
 	}
 
@@ -455,7 +461,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 		return NULL;
 
 	if (frm->has_end)
-		ctx->eof = 1;
+		ctx->state = SBK_LAST_FRAME;
 
 	ctx->counter++;
 
@@ -1016,7 +1022,7 @@ sbk_create_database(struct sbk_ctx *ctx)
 	if (sbk_sqlite_exec(ctx, "END TRANSACTION") == -1)
 		goto error;
 
-	if (!ctx->eof)
+	if (ctx->state != SBK_LAST_FRAME)
 		goto error;
 
 	return 0;
@@ -1033,6 +1039,7 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 {
 	sqlite3		*db;
 	sqlite3_backup	*bak;
+	int		 ret;
 
 	if (sbk_create_database(ctx) == -1)
 		return -1;
@@ -1045,8 +1052,8 @@ sbk_write_database(struct sbk_ctx *ctx, const char *path)
 		goto error;
 	}
 
-	if (sqlite3_backup_step(bak, -1) != SQLITE_DONE) {
-		sbk_sqlite_warnd(db, "Cannot write database");
+	if ((ret = sqlite3_backup_step(bak, -1)) != SQLITE_DONE) {
+		warnx("Cannot write database: %s", sqlite3_errstr(ret));
 		sqlite3_backup_finish(bak);
 		goto error;
 	}
@@ -1551,7 +1558,7 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 #define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	3
 #define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	4
 #define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	5
-#define SBK_ATTACHMENTS_COLUMN_DATE		6
+#define SBK_ATTACHMENTS_COLUMN_DATE_SENT	6
 #define SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED	7
 
 static struct sbk_attachment *
@@ -1584,7 +1591,7 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	att->size = sqlite3_column_int64(stm,
 	    SBK_ATTACHMENTS_COLUMN_DATA_SIZE);
 	att->time_sent = sqlite3_column_int64(stm,
-	    SBK_ATTACHMENTS_COLUMN_DATE);
+	    SBK_ATTACHMENTS_COLUMN_DATE_SENT);
 	att->time_recv = sqlite3_column_int64(stm,
 	    SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED);
 	att->file = sbk_get_attachment_file(ctx, att->rowid,
@@ -1637,7 +1644,7 @@ error:
 }
 
 struct sbk_attachment_list *
-sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
+sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 {
 	sqlite3_stmt	*stm;
 	const char	*query;
@@ -1653,7 +1660,7 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, int thread_id)
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
@@ -2018,15 +2025,36 @@ error1:
  * For database versions >= REACTION_REFACTOR
  */
 
-#define SBK_REACTIONS_QUERY						\
+#define SBK_REACTIONS_SELECT						\
 	"SELECT "							\
 	"author_id, "							\
 	"date_sent, "							\
 	"date_received, "						\
 	"emoji "							\
-	"FROM reaction "						\
-	"WHERE message_id = ? AND is_mms = ? "				\
+	"FROM reaction "
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_WHERE_1						\
+	"WHERE message_id = ? AND is_mms = ? "
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_WHERE_2						\
+	"WHERE message_id = ? "
+
+#define SBK_REACTIONS_ORDER						\
 	"ORDER BY date_sent"
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_QUERY_1						\
+	SBK_REACTIONS_SELECT						\
+	SBK_REACTIONS_WHERE_1						\
+	SBK_REACTIONS_ORDER
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_QUERY_2						\
+	SBK_REACTIONS_SELECT						\
+	SBK_REACTIONS_WHERE_2						\
+	SBK_REACTIONS_ORDER
 
 #define SBK_REACTIONS_COLUMN_AUTHOR_ID		0
 #define SBK_REACTIONS_COLUMN_DATE_SENT		1
@@ -2099,9 +2127,15 @@ error:
 static int
 sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
-	sqlite3_stmt *stm;
+	sqlite3_stmt	*stm;
+	const char	*query;
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_REACTIONS_QUERY) == -1)
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		query = SBK_REACTIONS_QUERY_1;
+	else
+		query = SBK_REACTIONS_QUERY_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
@@ -2109,11 +2143,12 @@ sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return -1;
 	}
 
-	if (sbk_sqlite_bind_int(ctx, stm, 2, msg->id.type == SBK_MESSAGE_MMS)
-	    == -1) {
-		sqlite3_finalize(stm);
-		return -1;
-	}
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		if (sbk_sqlite_bind_int(ctx, stm, 2,
+		    msg->id.type == SBK_MESSAGE_MMS) == -1) {
+			sqlite3_finalize(stm);
+			return -1;
+		}
 
 	if ((msg->reactions = sbk_get_reactions(ctx, stm)) == NULL)
 		return -1;
@@ -2455,7 +2490,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"FROM mms "
 
 #define SBK_MESSAGES_WHERE_THREAD					\
-	"WHERE thread_id = ? "
+	"WHERE thread_id = ?1 "
 
 #define SBK_MESSAGES_ORDER						\
 	"ORDER BY date_received"
@@ -2496,11 +2531,20 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
 #define SBK_MESSAGES_QUERY_5						\
 	SBK_MESSAGES_SELECT_SMS_3					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
+	SBK_MESSAGES_SELECT_MMS_5					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_MESSAGES_QUERY_6						\
 	SBK_MESSAGES_SELECT_MMS_5					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
@@ -2769,7 +2813,7 @@ error:
 }
 
 struct sbk_message_list *
-sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
+sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 {
 	sqlite3_stmt	*stm;
 	const char	*query;
@@ -2786,18 +2830,16 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, int thread_id)
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_MESSAGES_QUERY_4;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
 		query = SBK_MESSAGES_QUERY_5;
+	else
+		query = SBK_MESSAGES_QUERY_6;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, thread_id) == -1) {
-		sqlite3_finalize(stm);
-		return NULL;
-	}
-
-	if (sbk_sqlite_bind_int(ctx, stm, 2, thread_id) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
@@ -3068,8 +3110,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		return -1;
 	}
 
-	ctx->firstframe = 1;
-	ctx->eof = 0;
+	ctx->state = SBK_FIRST_FRAME;
 
 	if ((frm = sbk_get_frame(ctx, NULL)) == NULL)
 		goto error;
@@ -3163,13 +3204,12 @@ sbk_rewind(struct sbk_ctx *ctx)
 	}
 
 	clearerr(ctx->fp);
-	ctx->eof = 0;
-	ctx->firstframe = 1;
+	ctx->state = SBK_FIRST_FRAME;
 	return 0;
 }
 
 int
 sbk_eof(struct sbk_ctx *ctx)
 {
-	return ctx->eof;
+	return ctx->state == SBK_LAST_FRAME;
 }
