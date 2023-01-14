@@ -2417,7 +2417,7 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"FROM mms "
 
 #define SBK_MESSAGES_WHERE_THREAD					\
-	"WHERE thread_id = ? "
+	"WHERE thread_id = ?1 "
 
 #define SBK_MESSAGES_ORDER						\
 	"ORDER BY date_received"
@@ -2755,11 +2755,6 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 		return NULL;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, thd->id) == -1) {
-		sqlite3_finalize(stm);
-		return NULL;
-	}
-
-	if (sbk_sqlite_bind_int(ctx, stm, 2, thd->id) == -1) {
 		sqlite3_finalize(stm);
 		return NULL;
 	}
