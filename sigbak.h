@@ -26,9 +26,7 @@
 #include "database.pb-c.h"
 
 /*
- * Types for sms and mms messages
- *
- * Based on src/org/thoughtcrime/securesms/database/MmsSmsColumns.java in the
+ * Types for sms and mms messages; based on MessageTypes.java in the
  * Signal-Android repository
  */
 
