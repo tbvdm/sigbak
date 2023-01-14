@@ -55,6 +55,7 @@
 #define SBK_DB_VERSION_THREAD_AUTOINCREMENT		108
 #define SBK_DB_VERSION_REACTION_REFACTOR		121
 #define SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS	166
+#define SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION	168
 
 enum sbk_frame_state {
 	SBK_FIRST_FRAME,	/* We're about to read the first frame */
@@ -1980,15 +1981,36 @@ error1:
  * For database versions >= REACTION_REFACTOR
  */
 
-#define SBK_REACTIONS_QUERY						\
+#define SBK_REACTIONS_SELECT						\
 	"SELECT "							\
 	"author_id, "							\
 	"date_sent, "							\
 	"date_received, "						\
 	"emoji "							\
-	"FROM reaction "						\
-	"WHERE message_id = ? AND is_mms = ? "				\
+	"FROM reaction "
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_WHERE_1						\
+	"WHERE message_id = ? AND is_mms = ? "
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_WHERE_2						\
+	"WHERE message_id = ? "
+
+#define SBK_REACTIONS_ORDER						\
 	"ORDER BY date_sent"
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_QUERY_1						\
+	SBK_REACTIONS_SELECT						\
+	SBK_REACTIONS_WHERE_1						\
+	SBK_REACTIONS_ORDER
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_REACTIONS_QUERY_2						\
+	SBK_REACTIONS_SELECT						\
+	SBK_REACTIONS_WHERE_2						\
+	SBK_REACTIONS_ORDER
 
 #define SBK_REACTIONS_COLUMN_AUTHOR_ID		0
 #define SBK_REACTIONS_COLUMN_DATE_SENT		1
@@ -2061,9 +2083,15 @@ error:
 static int
 sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
-	sqlite3_stmt *stm;
+	sqlite3_stmt	*stm;
+	const char	*query;
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_REACTIONS_QUERY) == -1)
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		query = SBK_REACTIONS_QUERY_1;
+	else
+		query = SBK_REACTIONS_QUERY_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
@@ -2071,11 +2099,12 @@ sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return -1;
 	}
 
-	if (sbk_sqlite_bind_int(ctx, stm, 2, msg->id.type == SBK_MESSAGE_MMS)
-	    == -1) {
-		sqlite3_finalize(stm);
-		return -1;
-	}
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		if (sbk_sqlite_bind_int(ctx, stm, 2,
+		    msg->id.type == SBK_MESSAGE_MMS) == -1) {
+			sqlite3_finalize(stm);
+			return -1;
+		}
 
 	if ((msg->reactions = sbk_get_reactions(ctx, stm)) == NULL)
 		return -1;
@@ -2458,11 +2487,20 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
 #define SBK_MESSAGES_QUERY_5						\
 	SBK_MESSAGES_SELECT_SMS_3					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	"UNION ALL "							\
+	SBK_MESSAGES_SELECT_MMS_5					\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_MESSAGES_QUERY_6						\
 	SBK_MESSAGES_SELECT_MMS_5					\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
@@ -2748,8 +2786,11 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_MESSAGES_QUERY_4;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
 		query = SBK_MESSAGES_QUERY_5;
+	else
+		query = SBK_MESSAGES_QUERY_6;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
