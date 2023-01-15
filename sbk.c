@@ -103,6 +103,7 @@ struct sbk_ctx {
 	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	uint32_t	 counter;
+	uint32_t	 counter_start;
 	enum sbk_frame_state state;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
@@ -3061,7 +3062,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	}
 
 	memcpy(ctx->iv, frm->header->iv.data, SBK_IV_LEN);
-	ctx->counter =
+	ctx->counter = ctx->counter_start =
 	    ((uint32_t)ctx->iv[0] << 24) | ((uint32_t)ctx->iv[1] << 16) |
 	    ((uint32_t)ctx->iv[2] <<  8) | ctx->iv[3];
 
@@ -3126,6 +3127,7 @@ sbk_rewind(struct sbk_ctx *ctx)
 	}
 
 	clearerr(ctx->fp);
+	ctx->counter = ctx->counter_start;
 	ctx->state = SBK_FIRST_FRAME;
 	return 0;
 }
