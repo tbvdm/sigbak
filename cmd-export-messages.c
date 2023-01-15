@@ -319,8 +319,10 @@ maildir_generate_random_boundary(char *buf, size_t bufsize)
 	 */
 	buf[0] = '_';
 
-	for (i = 1; i < bufsize - 1; i++)
-		buf[i] = chars[rand() % (sizeof chars - 1)];
+	for (i = 1; i < bufsize - 1; i++) {
+		/* Subtract 1 to exclude the NUL */
+		buf[i] = chars[arc4random_uniform(sizeof chars - 1)];
+	}
 
 	buf[i] = '\0';
 	return 0;
