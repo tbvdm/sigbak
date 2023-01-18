@@ -1523,14 +1523,10 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_attachment *att;
 
-	if ((att = malloc(sizeof *att)) == NULL) {
+	if ((att = calloc(1, sizeof *att)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-	att->filename = NULL;
-	att->content_type = NULL;
-	att->file = NULL;
 
 	if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm,
 	    SBK_ATTACHMENTS_COLUMN_FILE_NAME) == -1)
@@ -2624,16 +2620,12 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		return 0;
 	}
 
-	if ((qte = malloc(sizeof *qte)) == NULL) {
+	if ((qte = calloc(1, sizeof *qte)) == NULL) {
 		warn(NULL);
 		return -1;
 	}
 
 	qte->id = sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID);
-	qte->recipient = NULL;
-	qte->text = NULL;
-	qte->attachments = NULL;
-	qte->mentions = NULL;
 
 	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
 	    SBK_MESSAGES_COLUMN_QUOTE_AUTHOR);
@@ -2667,17 +2659,10 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_message *msg;
 
-	if ((msg = malloc(sizeof *msg)) == NULL) {
+	if ((msg = calloc(1, sizeof *msg)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-	msg->recipient = NULL;
-	msg->text = NULL;
-	msg->attachments = NULL;
-	msg->mentions = NULL;
-	msg->reactions = NULL;
-	msg->quote = NULL;
 
 	msg->id.type =
 	    (sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TABLE) == 0) ?
@@ -2986,16 +2971,10 @@ sbk_ctx_new(void)
 {
 	struct sbk_ctx *ctx;
 
-	if ((ctx = malloc(sizeof *ctx)) == NULL) {
+	if ((ctx = calloc(1, sizeof *ctx)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-	ctx->hmac_ctx = NULL;
-	ctx->ibuf = NULL;
-	ctx->obuf = NULL;
-	ctx->ibufsize = 0;
-	ctx->obufsize = 0;
 
 	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL) {
 		warnx("Cannot create cipher context");
