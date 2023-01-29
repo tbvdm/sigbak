@@ -56,6 +56,7 @@
 #define SBK_DB_VERSION_REACTION_REFACTOR		121
 #define SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS	166
 #define SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION	168
+#define SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION	174
 
 enum sbk_frame_state {
 	SBK_FIRST_FRAME,	/* We're about to read the first frame */
@@ -108,6 +109,7 @@ struct sbk_ctx {
 	unsigned char	 mac_key[SBK_MAC_KEY_LEN];
 	unsigned char	 iv[SBK_IV_LEN];
 	uint32_t	 counter;
+	uint32_t	 counter_start;
 	enum sbk_frame_state state;
 	unsigned char	*ibuf;
 	size_t		 ibufsize;
@@ -1455,12 +1457,12 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 /* For database versions < QUOTED_REPLIES */
 #define SBK_ATTACHMENTS_SELECT_1					\
 	"SELECT "							\
-	"p.file_name, "							\
-	"p.ct, "							\
 	"p._id, "							\
-	"p.unique_id, "							\
+	"p.ct, "							\
 	"p.pending_push, "						\
 	"p.data_size, "							\
+	"p.file_name, "							\
+	"p.unique_id, "							\
 	"m.date, "							\
 	"m.date_received, "						\
 	"0 AS quote "							\
@@ -1471,12 +1473,12 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 /* For database versions [QUOTED_REPLIES, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
 #define SBK_ATTACHMENTS_SELECT_2					\
 	"SELECT "							\
-	"p.file_name, "							\
-	"p.ct, "							\
 	"p._id, "							\
-	"p.unique_id, "							\
+	"p.ct, "							\
 	"p.pending_push, "						\
 	"p.data_size, "							\
+	"p.file_name, "							\
+	"p.unique_id, "							\
 	"m.date, "							\
 	"m.date_received "						\
 	"FROM part AS p "						\
@@ -1486,12 +1488,12 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 /* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
 #define SBK_ATTACHMENTS_SELECT_3					\
 	"SELECT "							\
-	"p.file_name, "							\
-	"p.ct, "							\
 	"p._id, "							\
-	"p.unique_id, "							\
+	"p.ct, "							\
 	"p.pending_push, "						\
 	"p.data_size, "							\
+	"p.file_name, "							\
+	"p.unique_id, "							\
 	"m.date_sent, "							\
 	"m.date_received "						\
 	"FROM part AS p "						\
@@ -1552,12 +1554,12 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	SBK_ATTACHMENTS_WHERE_QUOTE					\
 	SBK_ATTACHMENTS_ORDER
 
-#define SBK_ATTACHMENTS_COLUMN_FILE_NAME	0
+#define SBK_ATTACHMENTS_COLUMN__ID		0
 #define SBK_ATTACHMENTS_COLUMN_CT		1
-#define SBK_ATTACHMENTS_COLUMN__ID		2
-#define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	3
-#define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	4
-#define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	5
+#define SBK_ATTACHMENTS_COLUMN_PENDING_PUSH	2
+#define SBK_ATTACHMENTS_COLUMN_DATA_SIZE	3
+#define SBK_ATTACHMENTS_COLUMN_FILE_NAME	4
+#define SBK_ATTACHMENTS_COLUMN_UNIQUE_ID	5
 #define SBK_ATTACHMENTS_COLUMN_DATE_SENT	6
 #define SBK_ATTACHMENTS_COLUMN_DATE_RECEIVED	7
 
@@ -1566,14 +1568,10 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_attachment *att;
 
-	if ((att = malloc(sizeof *att)) == NULL) {
+	if ((att = calloc(1, sizeof *att)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-	att->filename = NULL;
-	att->content_type = NULL;
-	att->file = NULL;
 
 	if (sbk_sqlite_column_text_copy(ctx, &att->filename, stm,
 	    SBK_ATTACHMENTS_COLUMN_FILE_NAME) == -1)
@@ -2028,9 +2026,9 @@ error1:
 #define SBK_REACTIONS_SELECT						\
 	"SELECT "							\
 	"author_id, "							\
+	"emoji, "							\
 	"date_sent, "							\
-	"date_received, "						\
-	"emoji "							\
+	"date_received "						\
 	"FROM reaction "
 
 /* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
@@ -2057,9 +2055,9 @@ error1:
 	SBK_REACTIONS_ORDER
 
 #define SBK_REACTIONS_COLUMN_AUTHOR_ID		0
-#define SBK_REACTIONS_COLUMN_DATE_SENT		1
-#define SBK_REACTIONS_COLUMN_DATE_RECEIVED	2
-#define SBK_REACTIONS_COLUMN_EMOJI		3
+#define SBK_REACTIONS_COLUMN_EMOJI		1
+#define SBK_REACTIONS_COLUMN_DATE_SENT		2
+#define SBK_REACTIONS_COLUMN_DATE_RECEIVED	3
 
 static struct sbk_reaction *
 sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -2350,17 +2348,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"0, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
 	"date_sent, "							\
 	"date AS date_received, "					\
-	"type, "							\
 	"thread_id, "							\
-	"NULL, "			/* reactions */			\
+	"address, "			/* recipient_id */		\
+	"type, "							\
+	"body, "							\
 	"0, "				/* mms.quote_id */		\
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
-	"NULL "				/* mms.quote_mentions */	\
+	"NULL, "			/* mms.quote_mentions */	\
+	"NULL "				/* reactions */			\
 	"FROM sms "
 
 /* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
@@ -2368,17 +2366,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"0, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
 	"date_sent, "							\
 	"date AS date_received, "					\
-	"type, "							\
 	"thread_id, "							\
-	"reactions, "							\
+	"address, "			/* recipient_id */		\
+	"type, "							\
+	"body, "							\
 	"0, "				/* mms.quote_id */		\
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
-	"NULL "				/* mms.quote_mentions */	\
+	"NULL, "			/* mms.quote_mentions */	\
+	"reactions "							\
 	"FROM sms "
 
 /* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
@@ -2386,17 +2384,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"0, "								\
 	"_id, "								\
-	"recipient_id, "						\
-	"body, "							\
 	"date_sent, "							\
 	"date_received, "						\
-	"type, "							\
 	"thread_id, "							\
-	"NULL, "			/* reactions */			\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
 	"0, "				/* mms.quote_id */		\
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
-	"NULL "				/* mms.quote_mentions */	\
+	"NULL, "			/* mms.quote_mentions */	\
+	"NULL "				/* reactions */			\
 	"FROM sms "
 
 /* For database versions < QUOTED_REPLIES */
@@ -2404,17 +2402,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
-	"date, "			/* sms.date_sent */		\
+	"date, "			/* date_sent */			\
 	"date_received, "						\
-	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
-	"NULL, "			/* reactions */			\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
 	"0, "				/* quote_id */			\
 	"NULL, "			/* quote_author */		\
 	"NULL, "			/* quote_body */		\
-	"NULL "				/* quote_mentions */		\
+	"NULL, "			/* quote_mentions */		\
+	"NULL "				/* reactions */			\
 	"FROM mms "
 
 /* For database versions [QUOTED_REPLIES, REACTIONS) */
@@ -2422,17 +2420,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
-	"date, "			/* sms.date_sent */		\
+	"date, "			/* date_sent */			\
 	"date_received, "						\
-	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
-	"NULL, "			/* reactions */			\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
 	"quote_id, "							\
 	"quote_author, "						\
 	"quote_body, "							\
-	"NULL "				/* quote_mentions */		\
+	"NULL, "			/* quote_mentions */		\
+	"NULL "				/* reactions */			\
 	"FROM mms "
 
 /* For database versions [REACTIONS, MENTIONS) */
@@ -2440,17 +2438,17 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
-	"date, "			/* sms.date_sent */		\
+	"date, "			/* date_sent */			\
 	"date_received, "						\
-	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
-	"reactions, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
 	"quote_id, "							\
 	"quote_author, "						\
 	"quote_body, "							\
-	"NULL "				/* quote_mentions */		\
+	"NULL, "			/* quote_mentions */		\
+	"reactions "							\
 	"FROM mms "
 
 /* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
@@ -2458,36 +2456,64 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
-	"address, "							\
-	"body, "							\
-	"date, "			/* sms.date_sent */		\
+	"date, "			/* date_sent */			\
 	"date_received, "						\
-	"msg_box, "			/* sms.type */			\
 	"thread_id, "							\
-	"reactions, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
 	"quote_id, "							\
 	"quote_author, "						\
 	"quote_body, "							\
-	"quote_mentions "						\
+	"quote_mentions, "						\
+	"reactions "							\
 	"FROM mms "
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
 #define SBK_MESSAGES_SELECT_MMS_5					\
 	"SELECT "							\
 	"1, "								\
 	"_id, "								\
-	"recipient_id, "						\
-	"body, "							\
 	"date_sent, "							\
 	"date_received, "						\
-	"type, "							\
 	"thread_id, "							\
-	"NULL, "			/* reactions */			\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
 	"quote_id, "							\
 	"quote_author, "						\
 	"quote_body, "							\
-	"quote_mentions "						\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
 	"FROM mms "
+
+/*
+ * For database versions
+ * [SINGLE_MESSAGE_TABLE_MIGRATION, REACTION_FOREIGN_KEY_MIGRATION)
+ */
+#define SBK_MESSAGES_SELECT_1						\
+	SBK_MESSAGES_SELECT_MMS_5
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_MESSAGES_SELECT_2						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
+	"FROM message "
 
 #define SBK_MESSAGES_WHERE_THREAD					\
 	"WHERE thread_id = ?1 "
@@ -2543,25 +2569,34 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+/*
+ * For database versions
+ * [SINGLE_MESSAGE_TABLE_MIGRATION, REACTION_FOREIGN_KEY_MIGRATION)
+ */
 #define SBK_MESSAGES_QUERY_6						\
-	SBK_MESSAGES_SELECT_MMS_5					\
+	SBK_MESSAGES_SELECT_1						\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_MESSAGES_QUERY_7						\
+	SBK_MESSAGES_SELECT_2						\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
 #define SBK_MESSAGES_COLUMN_TABLE		0
 #define SBK_MESSAGES_COLUMN__ID			1
-#define SBK_MESSAGES_COLUMN_RECIPIENT_ID	2
-#define SBK_MESSAGES_COLUMN_BODY		3
-#define SBK_MESSAGES_COLUMN_DATE_SENT		4
-#define SBK_MESSAGES_COLUMN_DATE_RECEIVED	5
+#define SBK_MESSAGES_COLUMN_DATE_SENT		2
+#define SBK_MESSAGES_COLUMN_DATE_RECEIVED	3
+#define SBK_MESSAGES_COLUMN_THREAD_ID		4
+#define SBK_MESSAGES_COLUMN_RECIPIENT_ID	5
 #define SBK_MESSAGES_COLUMN_TYPE		6
-#define SBK_MESSAGES_COLUMN_THREAD_ID		7
-#define SBK_MESSAGES_COLUMN_REACTIONS		8
-#define SBK_MESSAGES_COLUMN_QUOTE_ID		9
-#define SBK_MESSAGES_COLUMN_QUOTE_AUTHOR	10
-#define SBK_MESSAGES_COLUMN_QUOTE_BODY		11
-#define SBK_MESSAGES_COLUMN_QUOTE_MENTIONS	12
+#define SBK_MESSAGES_COLUMN_BODY		7
+#define SBK_MESSAGES_COLUMN_QUOTE_ID		8
+#define SBK_MESSAGES_COLUMN_QUOTE_AUTHOR	9
+#define SBK_MESSAGES_COLUMN_QUOTE_BODY		10
+#define SBK_MESSAGES_COLUMN_QUOTE_MENTIONS	11
+#define SBK_MESSAGES_COLUMN_REACTIONS		12
 
 static Signal__BodyRangeList *
 sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
@@ -2667,16 +2702,12 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		return 0;
 	}
 
-	if ((qte = malloc(sizeof *qte)) == NULL) {
+	if ((qte = calloc(1, sizeof *qte)) == NULL) {
 		warn(NULL);
 		return -1;
 	}
 
 	qte->id = sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID);
-	qte->recipient = NULL;
-	qte->text = NULL;
-	qte->attachments = NULL;
-	qte->mentions = NULL;
 
 	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
 	    SBK_MESSAGES_COLUMN_QUOTE_AUTHOR);
@@ -2710,17 +2741,10 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_message *msg;
 
-	if ((msg = malloc(sizeof *msg)) == NULL) {
+	if ((msg = calloc(1, sizeof *msg)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-	msg->recipient = NULL;
-	msg->text = NULL;
-	msg->attachments = NULL;
-	msg->mentions = NULL;
-	msg->reactions = NULL;
-	msg->quote = NULL;
 
 	msg->id.type =
 	    (sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TABLE) == 0) ?
@@ -2833,8 +2857,11 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
 		query = SBK_MESSAGES_QUERY_5;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_MESSAGES_QUERY_6;
+	else
+		query = SBK_MESSAGES_QUERY_7;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
@@ -2864,10 +2891,10 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 /* For database versions < THREAD_AUTOINCREMENT */
 #define SBK_THREADS_QUERY_1						\
 	"SELECT "							\
-	"recipient_ids, "						\
 	"_id, "								\
 	"date, "							\
-	"message_count "						\
+	"message_count, "		/* meaningful_messages */	\
+	"recipient_ids "		/* recipient_id */		\
 	"FROM thread "							\
 	"ORDER BY _id"
 
@@ -2877,27 +2904,27 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
  */
 #define SBK_THREADS_QUERY_2						\
 	"SELECT "							\
-	"thread_recipient_id, "						\
 	"_id, "								\
 	"date, "							\
-	"message_count "						\
+	"message_count, "		/* meaningful_messages */	\
+	"thread_recipient_id "		/* recipient_id */		\
 	"FROM thread "							\
 	"ORDER BY _id"
 
 /* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
 #define SBK_THREADS_QUERY_3						\
 	"SELECT "							\
-	"recipient_id, "						\
 	"_id, "								\
 	"date, "							\
-	"meaningful_messages "						\
+	"meaningful_messages, "						\
+	"recipient_id "							\
 	"FROM thread "							\
 	"ORDER BY _id"
 
-#define SBK_THREADS_COLUMN_RECIPIENT_ID		0
-#define SBK_THREADS_COLUMN__ID			1
-#define SBK_THREADS_COLUMN_DATE			2
-#define SBK_THREADS_COLUMN_MEANINGFUL_MESSAGES	3
+#define SBK_THREADS_COLUMN__ID			0
+#define SBK_THREADS_COLUMN_DATE			1
+#define SBK_THREADS_COLUMN_MEANINGFUL_MESSAGES	2
+#define SBK_THREADS_COLUMN_RECIPIENT_ID		3
 
 struct sbk_thread_list *
 sbk_get_threads(struct sbk_ctx *ctx)
@@ -3032,20 +3059,10 @@ sbk_ctx_new(void)
 	EVP_MAC *mac;
 #endif
 
-	if ((ctx = malloc(sizeof *ctx)) == NULL) {
+	if ((ctx = calloc(1, sizeof *ctx)) == NULL) {
 		warn(NULL);
 		return NULL;
 	}
-
-#ifdef HAVE_EVP_MAC
-	ctx->mac_ctx = NULL;
-#else
-	ctx->hmac_ctx = NULL;
-#endif
-	ctx->ibuf = NULL;
-	ctx->obuf = NULL;
-	ctx->ibufsize = 0;
-	ctx->obufsize = 0;
 
 	if ((ctx->cipher_ctx = EVP_CIPHER_CTX_new()) == NULL) {
 		warnx("Cannot create cipher context");
@@ -3131,7 +3148,7 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 	}
 
 	memcpy(ctx->iv, frm->header->iv.data, SBK_IV_LEN);
-	ctx->counter =
+	ctx->counter = ctx->counter_start =
 	    ((uint32_t)ctx->iv[0] << 24) | ((uint32_t)ctx->iv[1] << 16) |
 	    ((uint32_t)ctx->iv[2] <<  8) | ctx->iv[3];
 
@@ -3204,6 +3221,7 @@ sbk_rewind(struct sbk_ctx *ctx)
 	}
 
 	clearerr(ctx->fp);
+	ctx->counter = ctx->counter_start;
 	ctx->state = SBK_FIRST_FRAME;
 	return 0;
 }
