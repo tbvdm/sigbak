@@ -1441,7 +1441,10 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, REACTION_FOREIGN_KEY_MIGRATION)
+ */
 #define SBK_ATTACHMENTS_SELECT_3					\
 	"SELECT "							\
 	"p._id, "							\
@@ -1456,8 +1459,28 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
 
-#define SBK_ATTACHMENTS_WHERE_THREAD					\
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_SELECT_4					\
+	"SELECT "							\
+	"p._id, "							\
+	"p.ct, "							\
+	"p.pending_push, "						\
+	"p.data_size, "							\
+	"p.file_name, "							\
+	"p.unique_id, "							\
+	"m.date_sent, "							\
+	"m.date_received "						\
+	"FROM part AS p "						\
+	"LEFT JOIN message AS m "					\
+	"ON p.mid = m._id "
+
+/* For database versions < REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_WHERE_THREAD_1					\
 	"WHERE p.mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_WHERE_THREAD_2					\
+	"WHERE p.mid IN (SELECT _id FROM message WHERE thread_id = ?) "
 
 #define SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	"WHERE p.mid = ? AND quote = 0 "
@@ -1471,13 +1494,22 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 /* For database versions < THREAD_AND_MESSAGE_FOREIGN_KEYS */
 #define SBK_ATTACHMENTS_QUERY_THREAD_1					\
 	SBK_ATTACHMENTS_SELECT_2					\
-	SBK_ATTACHMENTS_WHERE_THREAD					\
+	SBK_ATTACHMENTS_WHERE_THREAD_1					\
 	SBK_ATTACHMENTS_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, REACTION_FOREIGN_KEY_MIGRATION)
+ */
 #define SBK_ATTACHMENTS_QUERY_THREAD_2					\
 	SBK_ATTACHMENTS_SELECT_3					\
-	SBK_ATTACHMENTS_WHERE_THREAD					\
+	SBK_ATTACHMENTS_WHERE_THREAD_1					\
+	SBK_ATTACHMENTS_ORDER
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_QUERY_THREAD_3					\
+	SBK_ATTACHMENTS_SELECT_4					\
+	SBK_ATTACHMENTS_WHERE_THREAD_2					\
 	SBK_ATTACHMENTS_ORDER
 
 /* For database versions < QUOTED_REPLIES */
@@ -1492,9 +1524,18 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
+ * REACTION_FOREIGN_KEY_MIGRATION)
+ */
 #define SBK_ATTACHMENTS_QUERY_MESSAGE_3					\
 	SBK_ATTACHMENTS_SELECT_3					\
+	SBK_ATTACHMENTS_WHERE_MESSAGE					\
+	SBK_ATTACHMENTS_ORDER
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_QUERY_MESSAGE_4					\
+	SBK_ATTACHMENTS_SELECT_4					\
 	SBK_ATTACHMENTS_WHERE_MESSAGE					\
 	SBK_ATTACHMENTS_ORDER
 
@@ -1504,9 +1545,18 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	SBK_ATTACHMENTS_WHERE_QUOTE					\
 	SBK_ATTACHMENTS_ORDER
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
+ * REACTION_FOREIGN_KEY_MIGRATION)
+ */
 #define SBK_ATTACHMENTS_QUERY_QUOTE_2					\
 	SBK_ATTACHMENTS_SELECT_3					\
+	SBK_ATTACHMENTS_WHERE_QUOTE					\
+	SBK_ATTACHMENTS_ORDER
+
+/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+#define SBK_ATTACHMENTS_QUERY_QUOTE_3					\
+	SBK_ATTACHMENTS_SELECT_4					\
 	SBK_ATTACHMENTS_WHERE_QUOTE					\
 	SBK_ATTACHMENTS_ORDER
 
@@ -1608,8 +1658,11 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 
 	if (ctx->db_version < SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_ATTACHMENTS_QUERY_THREAD_1;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_ATTACHMENTS_QUERY_THREAD_2;
+	else
+		query = SBK_ATTACHMENTS_QUERY_THREAD_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
@@ -1631,8 +1684,11 @@ sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
 
 	if (ctx->db_version < SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_ATTACHMENTS_QUERY_QUOTE_1;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_ATTACHMENTS_QUERY_QUOTE_2;
+	else
+		query = SBK_ATTACHMENTS_QUERY_QUOTE_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
@@ -1662,8 +1718,11 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_ATTACHMENTS_QUERY_MESSAGE_2;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_ATTACHMENTS_QUERY_MESSAGE_3;
+	else
+		query = SBK_ATTACHMENTS_QUERY_MESSAGE_4;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
@@ -2335,7 +2394,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"reactions "							\
 	"FROM sms "
 
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+/*
+ * For database versions
+ * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
 #define SBK_MESSAGES_SELECT_SMS_3					\
 	"SELECT "							\
 	"0, "								\
