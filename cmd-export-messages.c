@@ -538,10 +538,10 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 {
 	fputs("Attachment: ", fp);
 
-	if (att->filename == NULL)
+	if (att->filename == NULL || *att->filename == '\0')
 		fputs("no filename", fp);
 	else
-		fprintf(fp, "\"%s\"", att->filename);
+		fprintf(fp, "%s", att->filename);
 
 	fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64 "-%" PRId64 ")\n",
 	    (att->content_type != NULL) ?
@@ -569,7 +569,7 @@ text_write_quote(FILE *fp, struct sbk_quote *qte)
 			text_write_attachment_field(fp, att);
 		}
 
-	if (qte->text != NULL) {
+	if (qte->text != NULL && *qte->text != '\0') {
 		fputs(">\n", fp);
 		for (s = qte->text; (t = strchr(s, '\n')) != NULL; s = t + 1)
 			fprintf(fp, "> %.*s\n", (int)(t - s), s);
@@ -583,9 +583,10 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	struct sbk_attachment	*att;
 	struct sbk_reaction	*rct;
 
-	text_write_recipient_field(fp,
-	    sbk_is_outgoing_message(msg) ? "To" : "From",
-	    msg->recipient);
+	if (sbk_is_outgoing_message(msg))
+		fputs("From: You\n", fp);
+	else
+		text_write_recipient_field(fp, "From", msg->recipient);
 
 	text_write_time_field(fp, "Sent", msg->time_sent);
 
@@ -605,7 +606,7 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 	if (msg->quote != NULL)
 		text_write_quote(fp, msg->quote);
 
-	if (msg->text != NULL)
+	if (msg->text != NULL && *msg->text != '\0')
 		fprintf(fp, "\n%s\n\n", msg->text);
 	else
 		fputs("\n", fp);
@@ -634,6 +635,9 @@ text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 		sbk_free_message_list(lst);
 		return -1;
 	}
+
+	text_write_recipient_field(fp, "Conversation", thd->recipient);
+	putc('\n', fp);
 
 	ret = 0;
 	SIMPLEQ_FOREACH(msg, lst, entries)
