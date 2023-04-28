@@ -2256,6 +2256,10 @@ sbk_get_body(struct sbk_message *msg)
 		case SBK_GV1_MIGRATION_TYPE:
 			fmt = "This group was updated to a new group";
 			break;
+		case SBK_BOOST_REQUEST_TYPE:
+			fmt = "Like this new feature? Help support Signal "
+			    "with a one-time donation.";
+			break;
 		}
 
 	if (fmt == NULL)
