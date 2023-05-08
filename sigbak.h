@@ -26,8 +26,7 @@
 #include "compat.h"
 
 /*
- * Types for sms and mms messages; based on MessageTypes.java in the
- * Signal-Android repository
+ * Message types, based on MessageTypes.java in the Signal-Android repository
  */
 
 /* Base types */
@@ -44,6 +43,13 @@
 #define SBK_GV1_MIGRATION_TYPE			9
 #define SBK_INCOMING_VIDEO_CALL_TYPE		10
 #define SBK_OUTGOING_VIDEO_CALL_TYPE		11
+#define SBK_GROUP_CALL_TYPE			12
+#define SBK_BAD_DECRYPT_TYPE			13
+#define SBK_CHANGE_NUMBER_TYPE			14
+#define SBK_BOOST_REQUEST_TYPE			15
+#define SBK_THREAD_MERGE_TYPE			16
+#define SBK_SMS_EXPORT_TYPE			17
+#define SBK_SESSION_SWITCHOVER_TYPE		18
 
 #define SBK_BASE_INBOX_TYPE			20
 #define SBK_BASE_OUTBOX_TYPE			21

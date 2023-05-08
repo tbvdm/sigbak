@@ -36,7 +36,7 @@ static enum cmd_status
 cmd_export_database(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
-	char		*db, *backup, *passfile, passphr[128];
+	char		*backup, *db, *passfile, passphr[128];
 	int		 c, fd, ret;
 
 	passfile = NULL;
@@ -62,10 +62,7 @@ cmd_export_database(int argc, char **argv)
 	if (unveil(backup, "r") == -1)
 		err(1, "unveil: %s", backup);
 
-	if (unveil(db, "rwc") == -1)
-		err(1, "unveil: %s", db);
-
-	/* SQLite creates temporary files in the same dir as the database */
+	/* For the export database and its temporary files */
 	if (unveil_dirname(db, "rwc") == -1)
 		return CMD_ERROR;
 
