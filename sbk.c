@@ -57,6 +57,10 @@
 #define SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS	166
 #define SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION	168
 #define SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION	174
+#define SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION 185
+
+#define XSTRINGIFY(x)	#x
+#define STRINGIFY(x)	XSTRINGIFY(x)
 
 enum sbk_frame_state {
 	SBK_FIRST_FRAME,	/* We're about to read the first frame */
@@ -2519,7 +2523,10 @@ sbk_free_message_list(struct sbk_message_list *lst)
 #define SBK_MESSAGES_SELECT_1						\
 	SBK_MESSAGES_SELECT_MMS_5
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
 #define SBK_MESSAGES_SELECT_2						\
 	"SELECT "							\
 	"1, "								\
@@ -2528,6 +2535,39 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	"date_received, "						\
 	"thread_id, "							\
 	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
+	"FROM message "
+
+/*
+ * For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION
+ *
+ * The iif() expression below is based on the outgoingClause variable in
+ * V185_MessageRecipientsAndEditMessageMigration.kt in the Signal-Android
+ * repository.
+ */
+#define SBK_MESSAGES_SELECT_3						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"iif(type & " STRINGIFY(SBK_BASE_TYPE_MASK) " IN ("		\
+	    STRINGIFY(SBK_OUTGOING_AUDIO_CALL_TYPE) ", "		\
+	    STRINGIFY(SBK_OUTGOING_VIDEO_CALL_TYPE) ", "		\
+	    STRINGIFY(SBK_BASE_OUTBOX_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_SENDING_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_SENT_TYPE) ", "				\
+	    STRINGIFY(SBK_BASE_SENT_FAILED_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_PENDING_SECURE_SMS_FALLBACK) ", "	\
+	    STRINGIFY(SBK_BASE_PENDING_INSECURE_SMS_FALLBACK) "), "	\
+	    "to_recipient_id, from_recipient_id), "			\
 	"type, "							\
 	"body, "							\
 	"quote_id, "							\
@@ -2600,9 +2640,18 @@ sbk_free_message_list(struct sbk_message_list *lst)
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
 #define SBK_MESSAGES_QUERY_7						\
 	SBK_MESSAGES_SELECT_2						\
+	SBK_MESSAGES_WHERE_THREAD					\
+	SBK_MESSAGES_ORDER
+
+/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+#define SBK_MESSAGES_QUERY_8						\
+	SBK_MESSAGES_SELECT_3						\
 	SBK_MESSAGES_WHERE_THREAD					\
 	SBK_MESSAGES_ORDER
 
@@ -2882,8 +2931,11 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_MESSAGES_QUERY_6;
-	else
+	else if (ctx->db_version <
+	    SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
 		query = SBK_MESSAGES_QUERY_7;
+	else
+		query = SBK_MESSAGES_QUERY_8;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
