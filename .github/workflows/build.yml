@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{matrix.os}}
 
     steps:
     - name: checkout
@@ -38,7 +38,7 @@ jobs:
         os: [macos-11, macos-12, macos-13]
         ssl: [libressl, openssl@1.1, openssl@3.0, openssl@3.1]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{matrix.os}}
 
     steps:
     - name: checkout
@@ -48,14 +48,12 @@ jobs:
       # Also install make because Xcode provides GNU make 3.81 which is too old
       run: |
         brew update
-        brew install make pkg-config protobuf-c sqlite ${{ matrix.ssl }}
+        brew install make pkg-config protobuf-c sqlite ${{matrix.ssl}}
 
     - name: build
       # Set PKG_CONFIG_PATH as per the instructions from "brew install" and
       # https://docs.brew.sh/How-to-Build-Software-Outside-Homebrew-with-Homebrew-keg-only-Dependencies
-      run: |
-        PKG_CONFIG_PATH=$(brew --prefix ${{ matrix.ssl }})/lib/pkgconfig \
-          gmake
+      run: PKG_CONFIG_PATH=$(brew --prefix ${{matrix.ssl}})/lib/pkgconfig gmake
 
     - name: run
       # Run with bogus input files
@@ -101,7 +99,7 @@ jobs:
       uses: vmactions/freebsd-vm@v0
       with:
         usesh: true
-        prepare: pkg install -y pkgconf protobuf-c sqlite3 ${{ matrix.ssl }}
+        prepare: pkg install -y pkgconf protobuf-c sqlite3 ${{matrix.ssl}}
         run: |
           uname -a
           make
