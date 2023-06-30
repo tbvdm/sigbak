@@ -61,7 +61,7 @@ in a readable format on standard output.
 .Tg att
 .It Xo
 .Ic export-attachments
-.Op Fl a
+.Op Fl aI
 .Oo Fl p Ar passfile Oc
 .Ar backup Op Ar directory
 .Xc
@@ -82,6 +82,11 @@ Long-message attachments contain the text of longer messages.
 The
 .Fl a
 option may be used to export these attachments, too.
+.Pp
+If the
+.Fl I
+option is specified, the attachment id is prepended to the filename of each
+exported attachment.
 .Tg avt
 .It Ic export-avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic avt
