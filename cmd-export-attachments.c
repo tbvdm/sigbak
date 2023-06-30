@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -31,12 +32,15 @@
 
 #include "sigbak.h"
 
+#define FLAG_EXPORT_ALL		0x1
+#define FLAG_FILENAME_ID	0x2
+
 static enum cmd_status cmd_export_attachments(int, char **);
 
 const struct cmd_entry cmd_export_attachments_entry = {
 	.name = "export-attachments",
 	.alias = "att",
-	.usage = "[-a] [-p passfile] backup [directory]",
+	.usage = "[-aI] [-p passfile] backup [directory]",
 	.oldname = "attachments",
 	.exec = cmd_export_attachments
 };
@@ -113,11 +117,11 @@ out:
 }
 
 static FILE *
-get_file(int dfd, struct sbk_attachment *att)
+get_file(int dfd, struct sbk_attachment *att, int flags)
 {
 	FILE		*fp;
 	struct tm	*tm;
-	char		*name;
+	char		*name, *tmp;
 	const char	*ext;
 	time_t		 tt;
 	char		 base[40];
@@ -159,6 +163,17 @@ get_file(int dfd, struct sbk_attachment *att)
 		}
 	}
 
+	if (flags & FLAG_FILENAME_ID) {
+		if (asprintf(&tmp, "%" PRIu64 "-%" PRIu64 " %s", att->rowid,
+		    att->attachmentid, name) == -1) {
+			warnx("asprintf() failed");
+			free(name);
+			return NULL;
+		}
+		free(name);
+		name = tmp;
+	}
+
 	fp = create_unique_file(dfd, name);
 	free(name);
 	return fp;
@@ -191,7 +206,7 @@ get_thread_directory(int dfd, struct sbk_thread *thd)
 
 static int
 export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
-    int all)
+    int flags)
 {
 	struct sbk_attachment_list	*lst;
 	struct sbk_attachment		*att, *tmp;
@@ -201,7 +216,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 	if ((lst = sbk_get_attachments_for_thread(ctx, thd)) == NULL)
 		return -1;
 
-	if (!all) {
+	if (~flags & FLAG_EXPORT_ALL) {
 		/* Skip long-message attachments */
 		TAILQ_FOREACH_SAFE(att, lst, entries, tmp)
 			if (att->content_type != NULL &&
@@ -224,7 +239,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 		if (att->file == NULL)
 			continue;
 
-		if ((fp = get_file(thd_dfd, att)) == NULL) {
+		if ((fp = get_file(thd_dfd, att, flags)) == NULL) {
 			ret = -1;
 			continue;
 		}
@@ -241,7 +256,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 }
 
 static int
-export_attachments(struct sbk_ctx *ctx, const char *outdir, int all)
+export_attachments(struct sbk_ctx *ctx, const char *outdir, int flags)
 {
 	struct sbk_thread_list	*lst;
 	struct sbk_thread	*thd;
@@ -259,7 +274,7 @@ export_attachments(struct sbk_ctx *ctx, const char *outdir, int all)
 
 	ret = 0;
 	SIMPLEQ_FOREACH(thd, lst, entries) {
-		if (export_thread_attachments(ctx, thd, dfd, all) == -1)
+		if (export_thread_attachments(ctx, thd, dfd, flags) == -1)
 			ret = -1;
 	}
 
@@ -274,16 +289,18 @@ cmd_export_attachments(int argc, char **argv)
 	struct sbk_ctx	*ctx;
 	char		*backup, *passfile, passphr[128];
 	const char	*outdir;
-	int		 aflag, c, ret;
+	int		 c, flags, ret;
 
-	aflag = 0;
+	flags = 0;
 	passfile = NULL;
 
-	while ((c = getopt(argc, argv, "ap:")) != -1)
+	while ((c = getopt(argc, argv, "aIp:")) != -1)
 		switch (c) {
 		case 'a':
-			aflag = 1;
+			flags |= FLAG_EXPORT_ALL;
 			break;
+		case 'I':
+			flags |= FLAG_FILENAME_ID;
 		case 'p':
 			passfile = optarg;
 			break;
@@ -355,7 +372,7 @@ cmd_export_attachments(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = export_attachments(ctx, outdir, aflag);
+	ret = export_attachments(ctx, outdir, flags);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return (ret == -1) ? CMD_ERROR : CMD_OK;
