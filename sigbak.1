@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd December 15, 2022
+.Dd June 30, 2023
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -67,7 +67,7 @@ in a readable format on standard output.
 .Xc
 .D1 Pq Alias: Ic att
 .Pp
-Export the attachments in the file
+Export the attachments from the file
 .Ar backup .
 The attachment files are created in separate directories, one for each
 conversation.
@@ -86,7 +86,7 @@ option may be used to export these attachments, too.
 .It Ic export-avatars Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic avt
 .Pp
-Export all avatars in the file
+Export all avatars from the file
 .Ar backup
 to
 .Ar directory ,
@@ -97,7 +97,7 @@ is not specified.
 .It Ic export-database Oo Fl p Ar passfile Oc Ar backup Ar database
 .D1 Pq Alias: Ic db
 .Pp
-Export the SQLite database in the file
+Export the SQLite database from the file
 .Ar backup
 to the file
 .Ar database .
@@ -110,7 +110,7 @@ to the file
 .Xc
 .D1 Pq Alias: Ic msg
 .Pp
-Export the messages in the file
+Export the messages from the file
 .Ar backup .
 The messages are written to separate files, one for each conversation.
 These files are created in
@@ -141,7 +141,7 @@ This is the default.
 .It Ic export-stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
 .D1 Pq Alias: Ic stk
 .Pp
-Export all stickers in the file
+Export all stickers from the file
 .Ar backup
 to
 .Ar directory ,
@@ -198,7 +198,7 @@ field is a string containing the message text or reaction emoji.
 .Sh EXIT STATUS
 .Ex -std
 .Sh EXAMPLES
-Export all messages in the file
+Export all messages from the file
 .Pa signal.backup
 to the directory
 .Pa messages :
