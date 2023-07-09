@@ -300,6 +300,7 @@ cmd_export_attachments(int argc, char **argv)
 			break;
 		case 'I':
 			flags |= FLAG_FILENAME_ID;
+			break;
 		case 'p':
 			passfile = optarg;
 			break;
