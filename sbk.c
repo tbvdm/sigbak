@@ -1364,31 +1364,35 @@ sbk_get_recipient_from_uuid(struct sbk_ctx *ctx, const char *uuid)
 	return NULL;
 }
 
+#define ISEMPTY(s) ((s) == NULL || *(s) == '\0')
+
 const char *
 sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 {
 	if (rcp != NULL)
 		switch (rcp->type) {
 		case SBK_CONTACT:
-			if (rcp->contact->system_display_name != NULL)
+			if (!ISEMPTY(rcp->contact->system_display_name))
 				return rcp->contact->system_display_name;
-			if (rcp->contact->profile_joined_name != NULL)
+			if (!ISEMPTY(rcp->contact->profile_joined_name))
 				return rcp->contact->profile_joined_name;
-			if (rcp->contact->profile_given_name != NULL)
+			if (!ISEMPTY(rcp->contact->profile_given_name))
 				return rcp->contact->profile_given_name;
-			if (rcp->contact->phone != NULL)
+			if (!ISEMPTY(rcp->contact->phone))
 				return rcp->contact->phone;
-			if (rcp->contact->email != NULL)
+			if (!ISEMPTY(rcp->contact->email))
 				return rcp->contact->email;
 			break;
 		case SBK_GROUP:
-			if (rcp->group->name != NULL)
+			if (!ISEMPTY(rcp->group->name))
 				return rcp->group->name;
 			break;
 		}
 
 	return "Unknown";
 }
+
+#undef ISEMPTY
 
 static void
 sbk_free_attachment(struct sbk_attachment *att)
