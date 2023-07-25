@@ -3149,7 +3149,7 @@ sbk_ctx_new(void)
 		goto error;
 	}
 
-	if (sbk_enlarge_buffers(ctx, 1024) == -1)
+	if (sbk_enlarge_buffers(ctx, 8192) == -1)
 		goto error;
 
 	return ctx;
