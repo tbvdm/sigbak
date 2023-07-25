@@ -159,6 +159,8 @@ dump_header(unsigned int ind, const char *name, Signal__Header *hdr)
 		dump_binary(ind, "iv", &hdr->iv);
 	if (hdr->has_salt)
 		dump_binary(ind, "salt", &hdr->salt);
+	if (hdr->has_version)
+		dump_uint32(ind, "version", hdr->version);
 }
 
 static void
