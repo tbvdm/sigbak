@@ -99,6 +99,7 @@ RB_HEAD(sbk_recipient_tree, sbk_recipient_entry);
 struct sbk_ctx {
 	FILE		*fp;
 	sqlite3		*db;
+	unsigned int	 backup_version;
 	unsigned int	 db_version;
 	struct sbk_attachment_tree attachments;
 	struct sbk_recipient_tree recipients;
@@ -312,33 +313,6 @@ sbk_read(struct sbk_ctx *ctx, void *ptr, size_t size)
 }
 
 static int
-sbk_read_frame(struct sbk_ctx *ctx, size_t *frmlen)
-{
-	int32_t		len;
-	unsigned char	lenbuf[4];
-
-	if (sbk_read(ctx, lenbuf, sizeof lenbuf) == -1)
-		return -1;
-
-	len = (lenbuf[0] << 24) | (lenbuf[1] << 16) | (lenbuf[2] << 8) |
-	    lenbuf[3];
-
-	if (len <= 0) {
-		warnx("Invalid frame size");
-		return -1;
-	}
-
-	if (sbk_enlarge_buffers(ctx, len) == -1)
-		return -1;
-
-	if (sbk_read(ctx, ctx->ibuf, len) == -1)
-		return -1;
-
-	*frmlen = len;
-	return 0;
-}
-
-static int
 sbk_has_file_data(Signal__BackupFrame *frm)
 {
 	return frm->attachment != NULL || frm->avatar != NULL ||
@@ -424,52 +398,88 @@ error:
 	return NULL;
 }
 
-Signal__BackupFrame *
-sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
+static Signal__BackupFrame *
+sbk_get_first_frame(struct sbk_ctx *ctx)
 {
 	Signal__BackupFrame	*frm;
-	size_t			 ibuflen, obuflen;
+	uint32_t		 len;
+
+	if (sbk_read(ctx, &len, sizeof len) == -1)
+		return NULL;
+
+	len = be32toh(len);
+
+	if (len == 0) {
+		warnx("Invalid frame length");
+		return NULL;
+	}
+
+	if (sbk_enlarge_buffers(ctx, len) == -1)
+		return NULL;
+
+	if (sbk_read(ctx, ctx->ibuf, len) == -1)
+		return NULL;
+
+	if ((frm = sbk_unpack_frame(ctx->ibuf, len)) == NULL)
+		return NULL;
+
+	return frm;
+}
+
+static Signal__BackupFrame *
+sbk_get_encrypted_frame(struct sbk_ctx *ctx, struct sbk_file **file)
+{
+	Signal__BackupFrame	*frm;
 	unsigned char		*mac;
+	uint32_t		 elen;	/* Length of encrypted frame */
+	size_t			 dlen;	/* Length of decrypted data */
 
-	if (file != NULL)
-		*file = NULL;
-
-	if (ctx->state == SBK_LAST_FRAME)
+	if (sbk_decrypt_init(ctx, ctx->counter++) == -1)
 		return NULL;
 
-	if (sbk_read_frame(ctx, &ibuflen) == -1)
-		return NULL;
-
-	/* The first frame is not encrypted */
-	if (ctx->state == SBK_FIRST_FRAME) {
-		ctx->state = SBK_OTHER_FRAME;
-		return sbk_unpack_frame(ctx->ibuf, ibuflen);
+	/*
+	 * Get the length of the encrypted frame. In newer backups, the frame
+	 * length itself is encrypted, too.
+	 */
+	if (ctx->backup_version == 0) {
+		if (sbk_read(ctx, &elen, sizeof elen) == -1)
+			return NULL;
+	} else {
+		if (sbk_read(ctx, ctx->ibuf, sizeof elen) == -1)
+			return NULL;
+		if (sbk_decrypt_update(ctx, sizeof elen, &dlen) == -1)
+			return NULL;
+		if (dlen != sizeof elen) {
+			warnx("Cannot read frame length");
+			return NULL;
+		}
+		memcpy(&elen, ctx->obuf, sizeof elen);
 	}
 
-	if (ibuflen <= SBK_MAC_LEN) {
-		warnx("Invalid frame size");
+	elen = be32toh(elen);
+
+	if (elen <= SBK_MAC_LEN) {
+		warnx("Invalid frame length");
 		return NULL;
 	}
 
-	ibuflen -= SBK_MAC_LEN;
-	mac = ctx->ibuf + ibuflen;
-
-	if (sbk_decrypt_init(ctx, ctx->counter) == -1)
+	if (sbk_enlarge_buffers(ctx, elen) == -1)
 		return NULL;
 
-	if (sbk_decrypt_update(ctx, ibuflen, &obuflen) == -1)
+	if (sbk_read(ctx, ctx->ibuf, elen) == -1)
 		return NULL;
 
-	if (sbk_decrypt_final(ctx, &obuflen, mac) == -1)
+	elen -= SBK_MAC_LEN;
+	mac = ctx->ibuf + elen;
+
+	if (sbk_decrypt_update(ctx, elen, &dlen) == -1)
 		return NULL;
 
-	if ((frm = sbk_unpack_frame(ctx->obuf, obuflen)) == NULL)
+	if (sbk_decrypt_final(ctx, &dlen, mac) == -1)
 		return NULL;
 
-	if (frm->has_end)
-		ctx->state = SBK_LAST_FRAME;
-
-	ctx->counter++;
+	if ((frm = sbk_unpack_frame(ctx->obuf, dlen)) == NULL)
+		return NULL;
 
 	if (sbk_has_file_data(frm)) {
 		if (file == NULL) {
@@ -491,6 +501,30 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 	}
 
 	return frm;
+}
+
+Signal__BackupFrame *
+sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
+{
+	Signal__BackupFrame *frm;
+
+	if (file != NULL)
+		*file = NULL;
+
+	switch (ctx->state) {
+	case SBK_FIRST_FRAME:
+		frm = sbk_get_first_frame(ctx);
+		ctx->state = SBK_OTHER_FRAME;
+		return frm;
+	case SBK_OTHER_FRAME:
+		if ((frm = sbk_get_encrypted_frame(ctx, file)) == NULL)
+			return NULL;
+		if (frm->has_end)
+			ctx->state = SBK_LAST_FRAME;
+		return frm;
+	case SBK_LAST_FRAME:
+		return NULL;
+	}
 }
 
 void
@@ -1408,31 +1442,35 @@ sbk_get_recipient_from_uuid(struct sbk_ctx *ctx, const char *uuid)
 	return NULL;
 }
 
+#define ISEMPTY(s) ((s) == NULL || *(s) == '\0')
+
 const char *
 sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 {
 	if (rcp != NULL)
 		switch (rcp->type) {
 		case SBK_CONTACT:
-			if (rcp->contact->system_display_name != NULL)
+			if (!ISEMPTY(rcp->contact->system_display_name))
 				return rcp->contact->system_display_name;
-			if (rcp->contact->profile_joined_name != NULL)
+			if (!ISEMPTY(rcp->contact->profile_joined_name))
 				return rcp->contact->profile_joined_name;
-			if (rcp->contact->profile_given_name != NULL)
+			if (!ISEMPTY(rcp->contact->profile_given_name))
 				return rcp->contact->profile_given_name;
-			if (rcp->contact->phone != NULL)
+			if (!ISEMPTY(rcp->contact->phone))
 				return rcp->contact->phone;
-			if (rcp->contact->email != NULL)
+			if (!ISEMPTY(rcp->contact->email))
 				return rcp->contact->email;
 			break;
 		case SBK_GROUP:
-			if (rcp->group->name != NULL)
+			if (!ISEMPTY(rcp->group->name))
 				return rcp->group->name;
 			break;
 		}
 
 	return "Unknown";
 }
+
+#undef ISEMPTY
 
 static void
 sbk_free_attachment(struct sbk_attachment *att)
@@ -3207,7 +3245,7 @@ sbk_ctx_new(void)
 	}
 #endif
 
-	if (sbk_enlarge_buffers(ctx, 1024) == -1)
+	if (sbk_enlarge_buffers(ctx, 8192) == -1)
 		goto error;
 
 	return ctx;
@@ -3245,14 +3283,24 @@ sbk_open(struct sbk_ctx *ctx, const char *path, const char *passphr)
 		return -1;
 	}
 
+	ctx->backup_version = 0;
 	ctx->state = SBK_FIRST_FRAME;
 
-	if ((frm = sbk_get_frame(ctx, NULL)) == NULL)
+	if ((frm = sbk_get_first_frame(ctx)) == NULL)
 		goto error;
 
 	if (frm->header == NULL) {
 		warnx("Missing header frame");
 		goto error;
+	}
+
+	if (frm->header->has_version) {
+		ctx->backup_version = frm->header->version;
+		if (ctx->backup_version > 1) {
+			warnx("Backup version %u not yet supported",
+			    ctx->backup_version);
+			goto error;
+		}
 	}
 
 	if (!frm->header->has_iv) {
