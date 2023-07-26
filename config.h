@@ -8,6 +8,15 @@
 /* Define if you have asprintf() and vasprintf(). */
 /* #define HAVE_ASPRINTF */
 
+/*
+ * Define if you have be32toh(). If you do, also define either HAVE_ENDIAN_H or
+ * HAVE_SYS_ENDIAN_H below.
+ */
+/* #define HAVE_BE32TOH */
+
+/* Define if you have <endian.h>. */
+/* #define HAVE_ENDIAN_H */
+
 /* Define if you have the err() family of functions. */
 /* #define HAVE_ERR */
 
@@ -28,6 +37,9 @@
 
 /* Define if you have reallocarray(). */
 /* #define HAVE_REALLOCARRAY */
+
+/* Define if you have <sys/endian.h>. */
+/* #define HAVE_SYS_ENDIAN_H */
 
 /* Define if your struct tm has a tm_gmtoff member. */
 /* #define HAVE_TM_GMTOFF */
@@ -59,6 +71,8 @@
 #define _GNU_SOURCE
 
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
+#define HAVE_ENDIAN_H
 #define HAVE_ERR
 /* Cygwin's explicit_bzero() merely is a wrapper around bzero(). */
 /* #define HAVE_EXPLICIT_BZERO */
@@ -76,12 +90,14 @@
 #ifdef __DragonFly__
 
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
+#define HAVE_SYS_ENDIAN_H
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -93,12 +109,14 @@
 #ifdef __FreeBSD__
 
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPROGNAME
 #define HAVE_READPASSPHRASE
 #define HAVE_REALLOCARRAY
+#define HAVE_SYS_ENDIAN_H
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -112,10 +130,12 @@
 #define _OPENBSD_SOURCE
 
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
 #define HAVE_GETPROGNAME
 #define HAVE_REALLOCARRAY
+#define HAVE_SYS_ENDIAN_H
 #define HAVE_TM_GMTOFF
 
 #endif
@@ -127,6 +147,8 @@
 #ifdef __OpenBSD__
 
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
+#define HAVE_ENDIAN_H
 #define HAVE_ERR
 #define HAVE_EXPLICIT_BZERO
 #define HAVE_FOPEN_X_MODE
@@ -149,6 +171,8 @@
 
 /* All modern versions of glibc, musl and bionic have these. */
 #define HAVE_ASPRINTF
+#define HAVE_BE32TOH
+#define HAVE_ENDIAN_H
 #define HAVE_ERR
 #define HAVE_FOPEN_X_MODE
 #define HAVE_TM_GMTOFF

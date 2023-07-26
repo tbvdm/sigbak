@@ -50,6 +50,24 @@ int	 asprintf(char **, const char *, ...);
 int	 vasprintf(char **, const char *, va_list);
 #endif
 
+#ifdef HAVE_BE32TOH
+#  ifdef HAVE_ENDIAN_H
+#    include <endian.h>
+#  elif defined(HAVE_SYS_ENDIAN_H)
+#    include <sys/endian.h>
+#  endif
+#else
+#  ifdef __APPLE__
+#    include <libkern/OSByteOrder.h>
+#    define be32toh(x) OSSwapBigToHostInt32(x)
+#  elif defined(__sun)
+#    include <sys/byteorder.h>
+#    define be32toh(x) BE_32(x)
+#  else
+#    error "be32toh() not available"
+#  endif
+#endif
+
 #ifdef HAVE_ERR
 #include <err.h>
 #else
