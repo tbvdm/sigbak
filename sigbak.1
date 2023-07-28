@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd June 30, 2023
+.Dd July 28, 2023
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -220,11 +220,11 @@ $ sigbak export-attachments -p passfile signal.backup attachments
 Export the SQLite database and use
 .Xr sqlite3 1
 to view the contents of the
-.Sq sms
+.Sq message
 table:
 .Bd -literal -offset indent
 $ sigbak export-database signal.backup signal.db
-$ sqlite3 signal.db 'select * from sms' | less
+$ sqlite3 signal.db 'select * from message' | less
 .Ed
 .Sh SEE ALSO
 .Lk https://github.com/tbvdm/sigbak
