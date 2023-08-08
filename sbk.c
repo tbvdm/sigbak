@@ -167,34 +167,36 @@ sbk_sqlite_warn(struct sbk_ctx *ctx, const char *fmt, ...)
 }
 
 static int
-sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
+sbk_grow_buffers(struct sbk_ctx *ctx, size_t size)
 {
 	unsigned char *buf;
 
-	if (ctx->ibufsize < size) {
-		if ((buf = realloc(ctx->ibuf, size)) == NULL) {
-			warn(NULL);
-			return -1;
-		}
-		ctx->ibuf = buf;
-		ctx->ibufsize = size;
-	}
+	if (size <= ctx->ibufsize)
+		return 0;
 
-	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
+	if (ctx->ibufsize <= (SIZE_MAX - EVP_MAX_BLOCK_LENGTH) / 2 &&
+	    size <= ctx->ibufsize * 2)
+		size = ctx->ibufsize * 2;
+	else if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
 		warnx("Buffer size too large");
 		return -1;
 	}
 
+	if ((buf = realloc(ctx->ibuf, size)) == NULL) {
+		warn(NULL);
+		return -1;
+	}
+	ctx->ibuf = buf;
+	ctx->ibufsize = size;
+
 	size += EVP_MAX_BLOCK_LENGTH;
 
-	if (ctx->obufsize < size) {
-		if ((buf = realloc(ctx->obuf, size)) == NULL) {
-			warn(NULL);
-			return -1;
-		}
-		ctx->obuf = buf;
-		ctx->obufsize = size;
+	if ((buf = realloc(ctx->obuf, size)) == NULL) {
+		warn(NULL);
+		return -1;
 	}
+	ctx->obuf = buf;
+	ctx->obufsize = size;
 
 	return 0;
 }
@@ -385,7 +387,7 @@ sbk_get_first_frame(struct sbk_ctx *ctx)
 		return NULL;
 	}
 
-	if (sbk_enlarge_buffers(ctx, len) == -1)
+	if (sbk_grow_buffers(ctx, len) == -1)
 		return NULL;
 
 	if (sbk_read(ctx, ctx->ibuf, len) == -1)
@@ -434,7 +436,7 @@ sbk_get_encrypted_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 		return NULL;
 	}
 
-	if (sbk_enlarge_buffers(ctx, elen) == -1)
+	if (sbk_grow_buffers(ctx, elen) == -1)
 		return NULL;
 
 	if (sbk_read(ctx, ctx->ibuf, elen) == -1)
@@ -517,7 +519,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	size_t		ibuflen, len, obuflen;
 	unsigned char	mac[SBK_MAC_LEN];
 
-	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
@@ -576,7 +578,7 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 	if (buflen != NULL)
 		*buflen = 0;
 
-	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return NULL;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
@@ -3184,7 +3186,7 @@ sbk_ctx_new(void)
 		goto error;
 	}
 
-	if (sbk_enlarge_buffers(ctx, 8192) == -1)
+	if (sbk_grow_buffers(ctx, 8192) == -1)
 		goto error;
 
 	return ctx;
