@@ -58,6 +58,8 @@
 #define SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION	168
 #define SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION	174
 #define SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION 185
+#define SBK_DB_VERSION_RESET_PNI_COLUMN			200
+#define SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS	201
 
 #define XSTRINGIFY(x)	#x
 #define STRINGIFY(x)	XSTRINGIFY(x)
@@ -171,34 +173,36 @@ sbk_sqlite_warn(struct sbk_ctx *ctx, const char *fmt, ...)
 }
 
 static int
-sbk_enlarge_buffers(struct sbk_ctx *ctx, size_t size)
+sbk_grow_buffers(struct sbk_ctx *ctx, size_t size)
 {
 	unsigned char *buf;
 
-	if (ctx->ibufsize < size) {
-		if ((buf = realloc(ctx->ibuf, size)) == NULL) {
-			warn(NULL);
-			return -1;
-		}
-		ctx->ibuf = buf;
-		ctx->ibufsize = size;
-	}
+	if (size <= ctx->ibufsize)
+		return 0;
 
-	if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
+	if (ctx->ibufsize <= (SIZE_MAX - EVP_MAX_BLOCK_LENGTH) / 2 &&
+	    size <= ctx->ibufsize * 2)
+		size = ctx->ibufsize * 2;
+	else if (size > SIZE_MAX - EVP_MAX_BLOCK_LENGTH) {
 		warnx("Buffer size too large");
 		return -1;
 	}
 
+	if ((buf = realloc(ctx->ibuf, size)) == NULL) {
+		warn(NULL);
+		return -1;
+	}
+	ctx->ibuf = buf;
+	ctx->ibufsize = size;
+
 	size += EVP_MAX_BLOCK_LENGTH;
 
-	if (ctx->obufsize < size) {
-		if ((buf = realloc(ctx->obuf, size)) == NULL) {
-			warn(NULL);
-			return -1;
-		}
-		ctx->obuf = buf;
-		ctx->obufsize = size;
+	if ((buf = realloc(ctx->obuf, size)) == NULL) {
+		warn(NULL);
+		return -1;
 	}
+	ctx->obuf = buf;
+	ctx->obufsize = size;
 
 	return 0;
 }
@@ -414,7 +418,7 @@ sbk_get_first_frame(struct sbk_ctx *ctx)
 		return NULL;
 	}
 
-	if (sbk_enlarge_buffers(ctx, len) == -1)
+	if (sbk_grow_buffers(ctx, len) == -1)
 		return NULL;
 
 	if (sbk_read(ctx, ctx->ibuf, len) == -1)
@@ -463,7 +467,7 @@ sbk_get_encrypted_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 		return NULL;
 	}
 
-	if (sbk_enlarge_buffers(ctx, elen) == -1)
+	if (sbk_grow_buffers(ctx, elen) == -1)
 		return NULL;
 
 	if (sbk_read(ctx, ctx->ibuf, elen) == -1)
@@ -546,7 +550,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	size_t		ibuflen, len, obuflen;
 	unsigned char	mac[SBK_MAC_LEN];
 
-	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
@@ -612,7 +616,7 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 	if (buflen != NULL)
 		*buflen = 0;
 
-	if (sbk_enlarge_buffers(ctx, BUFSIZ) == -1)
+	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return NULL;
 
 	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
@@ -1189,14 +1193,14 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 #define SBK_RECIPIENTS_QUERY_1						\
 	"SELECT "							\
 	"r.recipient_ids, "						\
-	"NULL, "			/* uuid */			\
-	"NULL, "			/* phone */			\
+	"NULL, "			/* e164 */			\
+	"NULL, "			/* aci */			\
 	"NULL, "			/* email */			\
-	"r.system_display_name, "					\
-	"r.system_phone_label, "					\
-	"r.signal_profile_name, "					\
+	"r.signal_profile_name, "	/* profile_given_name */	\
 	"NULL, "			/* profile_family_name */	\
 	"NULL, "			/* profile_joined_name */	\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient_preferences AS r "				\
@@ -1207,32 +1211,68 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 #define SBK_RECIPIENTS_QUERY_2						\
 	"SELECT "							\
 	"r._id, "							\
-	"r.uuid, "							\
-	"r.phone, "							\
+	"r.phone, "			/* e164 */			\
+	"r.uuid, "			/* aci */			\
 	"r.email, "							\
-	"r.system_display_name, "					\
-	"r.system_phone_label, "					\
-	"r.signal_profile_name, "					\
+	"r.signal_profile_name, "	/* profile_given_name */	\
 	"NULL, "			/* profile_family_name */	\
 	"NULL, "			/* profile_joined_name */	\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
 	"LEFT JOIN groups AS g "					\
 	"ON r._id = g.recipient_id"
 
-/* For database versions >= SPLIT_PROFILE_NAMES */
+/* For database versions [SPLIT_PROFILE_NAMES, RESET_PNI_COLUMN) */
 #define SBK_RECIPIENTS_QUERY_3						\
 	"SELECT "							\
 	"r._id, "							\
-	"r.uuid, "							\
-	"r.phone, "							\
+	"r.phone, "			/* e164 */			\
+	"r.uuid, "			/* aci */			\
 	"r.email, "							\
-	"r.system_display_name, "					\
-	"r.system_phone_label, "					\
-	"r.signal_profile_name, "					\
+	"r.signal_profile_name, "	/* profile_given_name */	\
 	"r.profile_family_name, "					\
 	"r.profile_joined_name, "					\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions [RESET_PNI_COLUMN, RECIPIENT_TABLE_VALIDATIONS) */
+#define SBK_RECIPIENTS_QUERY_4						\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "			/* e164 */			\
+	"r.aci, "							\
+	"r.email, "							\
+	"r.signal_profile_name, "	/* profile_given_name */	\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions >= RECIPIENT_TABLE_VALIDATIONS */
+#define SBK_RECIPIENTS_QUERY_5						\
+	"SELECT "							\
+	"r._id, "							\
+	"r.e164, "							\
+	"r.aci, "							\
+	"r.email, "							\
+	"r.profile_given_name, "					\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_joined_name, "					\
+	"r.system_phone_label, "					\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
@@ -1240,14 +1280,14 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	"ON r._id = g.recipient_id"
 
 #define SBK_RECIPIENTS_COLUMN__ID			0
-#define SBK_RECIPIENTS_COLUMN_UUID			1
-#define SBK_RECIPIENTS_COLUMN_PHONE			2
+#define SBK_RECIPIENTS_COLUMN_E164			1
+#define SBK_RECIPIENTS_COLUMN_ACI			2
 #define SBK_RECIPIENTS_COLUMN_EMAIL			3
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME	4
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	5
-#define SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME	6
-#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	7
-#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	8
+#define SBK_RECIPIENTS_COLUMN_PROFILE_GIVEN_NAME	4
+#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	5
+#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	6
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_JOINED_NAME	7
+#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	8
 #define SBK_RECIPIENTS_COLUMN_GROUP_ID			9
 #define SBK_RECIPIENTS_COLUMN_TITLE			10
 
@@ -1297,7 +1337,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			}
 		} else {
 			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
-			    stm, SBK_RECIPIENTS_COLUMN_PHONE) == -1)
+			    stm, SBK_RECIPIENTS_COLUMN_E164) == -1)
 				goto error;
 
 			if (sbk_sqlite_column_text_copy(ctx, &con->email,
@@ -1306,11 +1346,11 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		}
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->uuid,
-		    stm, SBK_RECIPIENTS_COLUMN_UUID) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_ACI) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
-		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_DISPLAY_NAME) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_JOINED_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_phone_label,
@@ -1318,7 +1358,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_given_name,
-		    stm, SBK_RECIPIENTS_COLUMN_SIGNAL_PROFILE_NAME) == -1)
+		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_GIVEN_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_family_name,
@@ -1370,8 +1410,12 @@ sbk_build_recipient_tree(struct sbk_ctx *ctx)
 		query = SBK_RECIPIENTS_QUERY_1;
 	else if (ctx->db_version < SBK_DB_VERSION_SPLIT_PROFILE_NAMES)
 		query = SBK_RECIPIENTS_QUERY_2;
-	else
+	else if (ctx->db_version < SBK_DB_VERSION_RESET_PNI_COLUMN)
 		query = SBK_RECIPIENTS_QUERY_3;
+	else if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
+		query = SBK_RECIPIENTS_QUERY_4;
+	else
+		query = SBK_RECIPIENTS_QUERY_5;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
@@ -3245,7 +3289,7 @@ sbk_ctx_new(void)
 	}
 #endif
 
-	if (sbk_enlarge_buffers(ctx, 8192) == -1)
+	if (sbk_grow_buffers(ctx, 8192) == -1)
 		goto error;
 
 	return ctx;
