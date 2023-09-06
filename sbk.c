@@ -498,6 +498,7 @@ sbk_get_frame(struct sbk_ctx *ctx, struct sbk_file **file)
 			ctx->state = SBK_LAST_FRAME;
 		return frm;
 	case SBK_LAST_FRAME:
+	default:
 		return NULL;
 	}
 }
