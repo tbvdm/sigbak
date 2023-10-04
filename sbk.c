@@ -72,7 +72,7 @@ enum sbk_frame_state {
 };
 
 struct sbk_file {
-	long		 pos;
+	off_t		 pos;
 	uint32_t	 len;
 	uint32_t	 counter;
 };
@@ -310,7 +310,7 @@ sbk_skip_file_data(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 		return -1;
 	}
 
-	if (fseek(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1) {
+	if (fseeko(ctx->fp, len + SBK_MAC_LEN, SEEK_CUR) == -1) {
 		warn("Cannot seek");
 		return -1;
 	}
@@ -340,8 +340,8 @@ sbk_get_file(struct sbk_ctx *ctx, Signal__BackupFrame *frm)
 		return NULL;
 	}
 
-	if ((file->pos = ftell(ctx->fp)) == -1) {
-		warn(NULL);
+	if ((file->pos = ftello(ctx->fp)) == -1) {
+		warn("Cannot get file position");
 		goto error;
 	}
 
@@ -525,7 +525,7 @@ sbk_write_file(struct sbk_ctx *ctx, struct sbk_file *file, FILE *fp)
 	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return -1;
 
-	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
+	if (fseeko(ctx->fp, file->pos, SEEK_SET) == -1) {
 		warn("Cannot seek");
 		return -1;
 	}
@@ -584,7 +584,7 @@ sbk_decrypt_file_data(struct sbk_ctx *ctx, struct sbk_file *file,
 	if (sbk_grow_buffers(ctx, BUFSIZ) == -1)
 		return NULL;
 
-	if (fseek(ctx->fp, file->pos, SEEK_SET) == -1) {
+	if (fseeko(ctx->fp, file->pos, SEEK_SET) == -1) {
 		warn("Cannot seek");
 		return NULL;
 	}
@@ -3353,7 +3353,7 @@ sbk_close(struct sbk_ctx *ctx)
 int
 sbk_rewind(struct sbk_ctx *ctx)
 {
-	if (fseek(ctx->fp, 0, SEEK_SET) == -1) {
+	if (fseeko(ctx->fp, 0, SEEK_SET) == -1) {
 		warn("Cannot seek");
 		return -1;
 	}
