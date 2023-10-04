@@ -26,7 +26,6 @@ const struct cmd_entry cmd_check_backup_entry = {
 	.name = "check-backup",
 	.alias = "check",
 	.usage = "[-p passfile] backup",
-	.oldname = NULL,
 	.exec = cmd_check_backup
 };
 

@@ -187,22 +187,12 @@ main(int argc, char **argv)
 	argv++;
 	cmd = NULL;
 
-	for (i = 0; i < nitems(commands); i++) {
+	for (i = 0; i < nitems(commands); i++)
 		if (strcmp(argv[0], commands[i]->name) == 0 ||
 		    strcmp(argv[0], commands[i]->alias) == 0) {
 			cmd = commands[i];
 			break;
 		}
-		if (commands[i]->oldname != NULL &&
-		    strcmp(argv[0], commands[i]->oldname) == 0) {
-			warnx("The command \"%s\" has been renamed to \"%s\"",
-			    commands[i]->oldname, commands[i]->name);
-			warnx("The old name is deprecated and will be removed "
-			    "in the future");
-			cmd = commands[i];
-			break;
-		}
-	}
 
 	if (cmd == NULL)
 		errx(1, "%s: Invalid command", argv[0]);

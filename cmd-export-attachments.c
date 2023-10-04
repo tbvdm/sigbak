@@ -40,7 +40,6 @@ const struct cmd_entry cmd_export_attachments_entry = {
 	.name = "export-attachments",
 	.alias = "att",
 	.usage = "[-aI] [-p passfile] backup [directory]",
-	.oldname = "attachments",
 	.exec = cmd_export_attachments
 };
 

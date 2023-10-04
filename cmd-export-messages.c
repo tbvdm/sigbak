@@ -39,7 +39,6 @@ const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
 	.alias = "msg",
 	.usage = "[-f format] [-p passfile] backup [directory]",
-	.oldname = "messages",
 	.exec = cmd_export_messages
 };
 
