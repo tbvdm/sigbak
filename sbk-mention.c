@@ -20,6 +20,13 @@
 
 #include "sbk-internal.h"
 
+#define SBK_QUERY							\
+	"SELECT "							\
+	"recipient_id "							\
+	"FROM mention "							\
+	"WHERE message_id = ? "						\
+	"ORDER BY range_start"
+
 void
 sbk_free_mention_list(struct sbk_mention_list *lst)
 {
@@ -33,13 +40,6 @@ sbk_free_mention_list(struct sbk_mention_list *lst)
 		free(lst);
 	}
 }
-
-#define SBK_MENTIONS_QUERY						\
-	"SELECT "							\
-	"recipient_id "							\
-	"FROM mention "							\
-	"WHERE message_id = ? "						\
-	"ORDER BY range_start"
 
 static struct sbk_mention *
 sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -73,7 +73,7 @@ sbk_get_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
 	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
 		return 0;
 
-	if (sbk_sqlite_prepare(ctx, &stm, SBK_MENTIONS_QUERY) == -1)
+	if (sbk_sqlite_prepare(ctx, &stm, SBK_QUERY) == -1)
 		return -1;
 
 	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1)
@@ -102,6 +102,99 @@ error:
 	sbk_free_mention_list(msg->mentions);
 	msg->mentions = NULL;
 	sqlite3_finalize(stm);
+	return -1;
+}
+
+static void
+sbk_free_quote_mention_list_message(Signal__BodyRangeList *msg)
+{
+	if (msg != NULL)
+		signal__body_range_list__free_unpacked(msg, NULL);
+}
+
+static Signal__BodyRangeList *
+sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
+{
+	Signal__BodyRangeList *msg;
+
+	if ((msg = signal__body_range_list__unpack(NULL, len, buf)) == NULL)
+		warnx("Cannot unpack quoted mention list");
+
+	return msg;
+}
+
+int
+sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
+    sqlite3_stmt *stm, int idx, struct sbk_message_id *mid)
+{
+	Signal__BodyRangeList	*msg;
+	struct sbk_mention	*mnt;
+	struct sbk_recipient	*rcp;
+	const void		*blob;
+	size_t			 i;
+	int			 len;
+
+	*lst = NULL;
+
+	if (sqlite3_column_type(stm, idx) != SQLITE_BLOB) {
+		/* No mentions */
+		return 0;
+	}
+
+	if ((blob = sqlite3_column_blob(stm, idx)) == NULL) {
+		sbk_sqlite_warn(ctx, "Cannot get quoted mentions column");
+		return -1;
+	}
+
+	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
+		sbk_sqlite_warn(ctx, "Cannot get quoted mentions size");
+		return -1;
+	}
+
+	if ((msg = sbk_unpack_quote_mention_list_message(blob, len)) == NULL)
+		return -1;
+
+	if ((*lst = malloc(sizeof **lst)) == NULL) {
+		warn(NULL);
+		goto error;
+	}
+
+	SIMPLEQ_INIT(*lst);
+
+	for (i = 0; i < msg->n_ranges; i++) {
+		if (msg->ranges[i]->associated_value_case !=
+		    SIGNAL__BODY_RANGE_LIST__BODY_RANGE__ASSOCIATED_VALUE_MENTION_UUID)
+			continue;
+
+		if (msg->ranges[i]->mentionuuid == NULL) {
+			warnx("Quoted mention without uuid in message %d-%d",
+			    mid->type, mid->rowid);
+			continue;
+		}
+
+		rcp = sbk_get_recipient_from_uuid(ctx,
+		    msg->ranges[i]->mentionuuid);
+		if (rcp == NULL)
+			warnx("Cannot find recipient for quoted mention uuid "
+			    "%s in message %d-%d", msg->ranges[i]->mentionuuid,
+			    mid->type, mid->rowid);
+
+		if ((mnt = malloc(sizeof *mnt)) == NULL) {
+			warn(NULL);
+			goto error;
+		}
+
+		mnt->recipient = rcp;
+		SIMPLEQ_INSERT_TAIL(*lst, mnt, entries);
+	}
+
+	sbk_free_quote_mention_list_message(msg);
+	return 0;
+
+error:
+	sbk_free_quote_mention_list_message(msg);
+	sbk_free_mention_list(*lst);
+	*lst = NULL;
 	return -1;
 }
 
@@ -178,97 +271,4 @@ error:
 	warnx("Invalid mention in message %d-%d", mid->type, mid->rowid);
 	free(newtext);
 	return 0;
-}
-
-static Signal__BodyRangeList *
-sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
-{
-	Signal__BodyRangeList *msg;
-
-	if ((msg = signal__body_range_list__unpack(NULL, len, buf)) == NULL)
-		warnx("Cannot unpack quoted mention list");
-
-	return msg;
-}
-
-static void
-sbk_free_quote_mention_list_message(Signal__BodyRangeList *msg)
-{
-	if (msg != NULL)
-		signal__body_range_list__free_unpacked(msg, NULL);
-}
-
-int
-sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
-    sqlite3_stmt *stm, int idx, struct sbk_message_id *mid)
-{
-	Signal__BodyRangeList	*msg;
-	struct sbk_mention	*mnt;
-	struct sbk_recipient	*rcp;
-	const void		*blob;
-	size_t			 i;
-	int			 len;
-
-	*lst = NULL;
-
-	if (sqlite3_column_type(stm, idx) != SQLITE_BLOB) {
-		/* No mentions */
-		return 0;
-	}
-
-	if ((blob = sqlite3_column_blob(stm, idx)) == NULL) {
-		sbk_sqlite_warn(ctx, "Cannot get quoted mentions column");
-		return -1;
-	}
-
-	if ((len = sqlite3_column_bytes(stm, idx)) < 0) {
-		sbk_sqlite_warn(ctx, "Cannot get quoted mentions size");
-		return -1;
-	}
-
-	if ((msg = sbk_unpack_quote_mention_list_message(blob, len)) == NULL)
-		return -1;
-
-	if ((*lst = malloc(sizeof **lst)) == NULL) {
-		warn(NULL);
-		goto error;
-	}
-
-	SIMPLEQ_INIT(*lst);
-
-	for (i = 0; i < msg->n_ranges; i++) {
-		if (msg->ranges[i]->associated_value_case !=
-		    SIGNAL__BODY_RANGE_LIST__BODY_RANGE__ASSOCIATED_VALUE_MENTION_UUID)
-			continue;
-
-		if (msg->ranges[i]->mentionuuid == NULL) {
-			warnx("Quoted mention without uuid in message %d-%d",
-			    mid->type, mid->rowid);
-			continue;
-		}
-
-		rcp = sbk_get_recipient_from_uuid(ctx,
-		    msg->ranges[i]->mentionuuid);
-		if (rcp == NULL)
-			warnx("Cannot find recipient for quoted mention uuid "
-			    "%s in message %d-%d", msg->ranges[i]->mentionuuid,
-			    mid->type, mid->rowid);
-
-		if ((mnt = malloc(sizeof *mnt)) == NULL) {
-			warn(NULL);
-			goto error;
-		}
-
-		mnt->recipient = rcp;
-		SIMPLEQ_INSERT_TAIL(*lst, mnt, entries);
-	}
-
-	sbk_free_quote_mention_list_message(msg);
-	return 0;
-
-error:
-	sbk_free_quote_mention_list_message(msg);
-	sbk_free_mention_list(*lst);
-	*lst = NULL;
-	return -1;
 }

@@ -19,11 +19,23 @@
 
 #include "sbk-internal.h"
 
-static int	sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
-		    struct sbk_attachment_entry *);
+static int sbk_cmp_attachment_entries(struct sbk_attachment_entry *,
+    struct sbk_attachment_entry *);
 
 RB_GENERATE_STATIC(sbk_attachment_tree, sbk_attachment_entry, entries,
     sbk_cmp_attachment_entries)
+
+void
+sbk_free_attachment_tree(struct sbk_ctx *ctx)
+{
+	struct sbk_attachment_entry *entry;
+
+	while ((entry = RB_ROOT(&ctx->attachments)) != NULL) {
+		RB_REMOVE(sbk_attachment_tree, &ctx->attachments, entry);
+		sbk_free_file(entry->file);
+		free(entry);
+	}
+}
 
 static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
@@ -75,16 +87,4 @@ sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t rowid,
 	find.attachmentid = attachmentid;
 	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
 	return (result != NULL) ? result->file : NULL;
-}
-
-void
-sbk_free_attachment_tree(struct sbk_ctx *ctx)
-{
-	struct sbk_attachment_entry *entry;
-
-	while ((entry = RB_ROOT(&ctx->attachments)) != NULL) {
-		RB_REMOVE(sbk_attachment_tree, &ctx->attachments, entry);
-		sbk_free_file(entry->file);
-		free(entry);
-	}
 }

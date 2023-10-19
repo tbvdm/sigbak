@@ -20,41 +20,113 @@
 
 #include "sbk-internal.h"
 
-static int	sbk_cmp_recipient_entries(struct sbk_recipient_entry *,
-		    struct sbk_recipient_entry *);
+/* For database versions < RECIPIENT_IDS */
+#define SBK_QUERY_1							\
+	"SELECT "							\
+	"r.recipient_ids, "						\
+	"NULL, "			/* e164 */			\
+	"NULL, "			/* aci */			\
+	"NULL, "			/* email */			\
+	"r.signal_profile_name, "	/* profile_given_name */	\
+	"NULL, "			/* profile_family_name */	\
+	"NULL, "			/* profile_joined_name */	\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient_preferences AS r "				\
+	"LEFT JOIN groups AS g "					\
+	"ON r.recipient_ids = g.group_id"
+
+/* For database versions [RECIPIENT_IDS, SPLIT_PROFILE_NAMES) */
+#define SBK_QUERY_2							\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "			/* e164 */			\
+	"r.uuid, "			/* aci */			\
+	"r.email, "							\
+	"r.signal_profile_name, "	/* profile_given_name */	\
+	"NULL, "			/* profile_family_name */	\
+	"NULL, "			/* profile_joined_name */	\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions [SPLIT_PROFILE_NAMES, RESET_PNI_COLUMN) */
+#define SBK_QUERY_3							\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "			/* e164 */			\
+	"r.uuid, "			/* aci */			\
+	"r.email, "							\
+	"r.signal_profile_name, "	/* profile_given_name */	\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions [RESET_PNI_COLUMN, RECIPIENT_TABLE_VALIDATIONS) */
+#define SBK_QUERY_4							\
+	"SELECT "							\
+	"r._id, "							\
+	"r.phone, "			/* e164 */			\
+	"r.aci, "							\
+	"r.email, "							\
+	"r.signal_profile_name, "	/* profile_given_name */	\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_display_name, "	/* system_joined_name */	\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions >= RECIPIENT_TABLE_VALIDATIONS */
+#define SBK_QUERY_5							\
+	"SELECT "							\
+	"r._id, "							\
+	"r.e164, "							\
+	"r.aci, "							\
+	"r.email, "							\
+	"r.profile_given_name, "					\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_joined_name, "					\
+	"r.system_phone_label, "					\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+#define SBK_COLUMN__ID			0
+#define SBK_COLUMN_E164			1
+#define SBK_COLUMN_ACI			2
+#define SBK_COLUMN_EMAIL		3
+#define SBK_COLUMN_PROFILE_GIVEN_NAME	4
+#define SBK_COLUMN_PROFILE_FAMILY_NAME	5
+#define SBK_COLUMN_PROFILE_JOINED_NAME	6
+#define SBK_COLUMN_SYSTEM_JOINED_NAME	7
+#define SBK_COLUMN_SYSTEM_PHONE_LABEL	8
+#define SBK_COLUMN_GROUP_ID		9
+#define SBK_COLUMN_TITLE		10
+
+static int sbk_cmp_recipient_entries(struct sbk_recipient_entry *,
+    struct sbk_recipient_entry *);
 
 RB_GENERATE_STATIC(sbk_recipient_tree, sbk_recipient_entry, entries,
     sbk_cmp_recipient_entries)
-
-static int
-sbk_cmp_recipient_entries(struct sbk_recipient_entry *e,
-    struct sbk_recipient_entry *f)
-{
-	if (e->id.old != NULL)
-		return strcmp(e->id.old, f->id.old);
-	else
-		return (e->id.new < f->id.new) ? -1 : (e->id.new > f->id.new);
-}
-
-static int
-sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
-    struct sbk_recipient_id *id, sqlite3_stmt *stm, int idx)
-{
-	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
-		id->new = -1;
-		if (sbk_sqlite_column_text_copy(ctx, &id->old, stm, idx) == -1)
-			return -1;
-		if (id->old == NULL) {
-			warnx("Invalid recipient id");
-			return -1;
-		}
-	} else {
-		id->new = sqlite3_column_int(stm, idx);
-		id->old = NULL;
-	}
-
-	return 0;
-}
 
 static void
 sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
@@ -99,107 +171,35 @@ sbk_free_recipient_tree(struct sbk_ctx *ctx)
 	}
 }
 
-/* For database versions < RECIPIENT_IDS */
-#define SBK_RECIPIENTS_QUERY_1						\
-	"SELECT "							\
-	"r.recipient_ids, "						\
-	"NULL, "			/* e164 */			\
-	"NULL, "			/* aci */			\
-	"NULL, "			/* email */			\
-	"r.signal_profile_name, "	/* profile_given_name */	\
-	"NULL, "			/* profile_family_name */	\
-	"NULL, "			/* profile_joined_name */	\
-	"r.system_display_name, "	/* system_joined_name */	\
-	"r.system_phone_label, "					\
-	"g.group_id, "							\
-	"g.title "							\
-	"FROM recipient_preferences AS r "				\
-	"LEFT JOIN groups AS g "					\
-	"ON r.recipient_ids = g.group_id"
+static int
+sbk_cmp_recipient_entries(struct sbk_recipient_entry *e,
+    struct sbk_recipient_entry *f)
+{
+	if (e->id.old != NULL)
+		return strcmp(e->id.old, f->id.old);
+	else
+		return (e->id.new < f->id.new) ? -1 : (e->id.new > f->id.new);
+}
 
-/* For database versions [RECIPIENT_IDS, SPLIT_PROFILE_NAMES) */
-#define SBK_RECIPIENTS_QUERY_2						\
-	"SELECT "							\
-	"r._id, "							\
-	"r.phone, "			/* e164 */			\
-	"r.uuid, "			/* aci */			\
-	"r.email, "							\
-	"r.signal_profile_name, "	/* profile_given_name */	\
-	"NULL, "			/* profile_family_name */	\
-	"NULL, "			/* profile_joined_name */	\
-	"r.system_display_name, "	/* system_joined_name */	\
-	"r.system_phone_label, "					\
-	"g.group_id, "							\
-	"g.title "							\
-	"FROM recipient AS r "						\
-	"LEFT JOIN groups AS g "					\
-	"ON r._id = g.recipient_id"
+static int
+sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
+    struct sbk_recipient_id *id, sqlite3_stmt *stm, int idx)
+{
+	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
+		id->new = -1;
+		if (sbk_sqlite_column_text_copy(ctx, &id->old, stm, idx) == -1)
+			return -1;
+		if (id->old == NULL) {
+			warnx("Invalid recipient id");
+			return -1;
+		}
+	} else {
+		id->new = sqlite3_column_int(stm, idx);
+		id->old = NULL;
+	}
 
-/* For database versions [SPLIT_PROFILE_NAMES, RESET_PNI_COLUMN) */
-#define SBK_RECIPIENTS_QUERY_3						\
-	"SELECT "							\
-	"r._id, "							\
-	"r.phone, "			/* e164 */			\
-	"r.uuid, "			/* aci */			\
-	"r.email, "							\
-	"r.signal_profile_name, "	/* profile_given_name */	\
-	"r.profile_family_name, "					\
-	"r.profile_joined_name, "					\
-	"r.system_display_name, "	/* system_joined_name */	\
-	"r.system_phone_label, "					\
-	"g.group_id, "							\
-	"g.title "							\
-	"FROM recipient AS r "						\
-	"LEFT JOIN groups AS g "					\
-	"ON r._id = g.recipient_id"
-
-/* For database versions [RESET_PNI_COLUMN, RECIPIENT_TABLE_VALIDATIONS) */
-#define SBK_RECIPIENTS_QUERY_4						\
-	"SELECT "							\
-	"r._id, "							\
-	"r.phone, "			/* e164 */			\
-	"r.aci, "							\
-	"r.email, "							\
-	"r.signal_profile_name, "	/* profile_given_name */	\
-	"r.profile_family_name, "					\
-	"r.profile_joined_name, "					\
-	"r.system_display_name, "	/* system_joined_name */	\
-	"r.system_phone_label, "					\
-	"g.group_id, "							\
-	"g.title "							\
-	"FROM recipient AS r "						\
-	"LEFT JOIN groups AS g "					\
-	"ON r._id = g.recipient_id"
-
-/* For database versions >= RECIPIENT_TABLE_VALIDATIONS */
-#define SBK_RECIPIENTS_QUERY_5						\
-	"SELECT "							\
-	"r._id, "							\
-	"r.e164, "							\
-	"r.aci, "							\
-	"r.email, "							\
-	"r.profile_given_name, "					\
-	"r.profile_family_name, "					\
-	"r.profile_joined_name, "					\
-	"r.system_joined_name, "					\
-	"r.system_phone_label, "					\
-	"g.group_id, "							\
-	"g.title "							\
-	"FROM recipient AS r "						\
-	"LEFT JOIN groups AS g "					\
-	"ON r._id = g.recipient_id"
-
-#define SBK_RECIPIENTS_COLUMN__ID			0
-#define SBK_RECIPIENTS_COLUMN_E164			1
-#define SBK_RECIPIENTS_COLUMN_ACI			2
-#define SBK_RECIPIENTS_COLUMN_EMAIL			3
-#define SBK_RECIPIENTS_COLUMN_PROFILE_GIVEN_NAME	4
-#define SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME	5
-#define SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME	6
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_JOINED_NAME	7
-#define SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL	8
-#define SBK_RECIPIENTS_COLUMN_GROUP_ID			9
-#define SBK_RECIPIENTS_COLUMN_TITLE			10
+	return 0;
+}
 
 static struct sbk_recipient_entry *
 sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
@@ -214,11 +214,10 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	}
 
 	if (sbk_get_recipient_id_from_column(ctx, &ent->id, stm,
-	    SBK_RECIPIENTS_COLUMN__ID) == -1)
+	    SBK_COLUMN__ID) == -1)
 		goto error;
 
-	if (sqlite3_column_type(stm, SBK_RECIPIENTS_COLUMN_GROUP_ID) ==
-	    SQLITE_NULL)
+	if (sqlite3_column_type(stm, SBK_COLUMN_GROUP_ID) == SQLITE_NULL)
 		ent->recipient.type = SBK_CONTACT;
 	else
 		ent->recipient.type = SBK_GROUP;
@@ -247,36 +246,36 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			}
 		} else {
 			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
-			    stm, SBK_RECIPIENTS_COLUMN_E164) == -1)
+			    stm, SBK_COLUMN_E164) == -1)
 				goto error;
 
 			if (sbk_sqlite_column_text_copy(ctx, &con->email,
-			    stm, SBK_RECIPIENTS_COLUMN_EMAIL) == -1)
+			    stm, SBK_COLUMN_EMAIL) == -1)
 				goto error;
 		}
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->uuid,
-		    stm, SBK_RECIPIENTS_COLUMN_ACI) == -1)
+		    stm, SBK_COLUMN_ACI) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
-		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_JOINED_NAME) == -1)
+		    stm, SBK_COLUMN_SYSTEM_JOINED_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->system_phone_label,
-		    stm, SBK_RECIPIENTS_COLUMN_SYSTEM_PHONE_LABEL) == -1)
+		    stm, SBK_COLUMN_SYSTEM_PHONE_LABEL) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_given_name,
-		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_GIVEN_NAME) == -1)
+		    stm, SBK_COLUMN_PROFILE_GIVEN_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_family_name,
-		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_FAMILY_NAME) == -1)
+		    stm, SBK_COLUMN_PROFILE_FAMILY_NAME) == -1)
 			goto error;
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->profile_joined_name,
-		    stm, SBK_RECIPIENTS_COLUMN_PROFILE_JOINED_NAME) == -1)
+		    stm, SBK_COLUMN_PROFILE_JOINED_NAME) == -1)
 			goto error;
 
 		break;
@@ -289,7 +288,7 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		}
 
 		if (sbk_sqlite_column_text_copy(ctx, &grp->name,
-		    stm, SBK_RECIPIENTS_COLUMN_TITLE) == -1)
+		    stm, SBK_COLUMN_TITLE) == -1)
 			goto error;
 
 		break;
@@ -317,15 +316,15 @@ sbk_build_recipient_tree(struct sbk_ctx *ctx)
 		return -1;
 
 	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
-		query = SBK_RECIPIENTS_QUERY_1;
+		query = SBK_QUERY_1;
 	else if (ctx->db_version < SBK_DB_VERSION_SPLIT_PROFILE_NAMES)
-		query = SBK_RECIPIENTS_QUERY_2;
+		query = SBK_QUERY_2;
 	else if (ctx->db_version < SBK_DB_VERSION_RESET_PNI_COLUMN)
-		query = SBK_RECIPIENTS_QUERY_3;
+		query = SBK_QUERY_3;
 	else if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
-		query = SBK_RECIPIENTS_QUERY_4;
+		query = SBK_QUERY_4;
 	else
-		query = SBK_RECIPIENTS_QUERY_5;
+		query = SBK_QUERY_5;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;

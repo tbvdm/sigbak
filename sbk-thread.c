@@ -19,6 +19,44 @@
 
 #include "sbk-internal.h"
 
+/* For database versions < THREAD_AUTOINCREMENT */
+#define SBK_QUERY_1							\
+	"SELECT "							\
+	"_id, "								\
+	"date, "							\
+	"message_count, "		/* meaningful_messages */	\
+	"recipient_ids "		/* recipient_id */		\
+	"FROM thread "							\
+	"ORDER BY _id"
+
+/*
+ * For database versions
+ * [THREAD_AUTOINCREMENT, THREAD_AND_MESSAGE_FOREIGN_KEYS)
+ */
+#define SBK_QUERY_2							\
+	"SELECT "							\
+	"_id, "								\
+	"date, "							\
+	"message_count, "		/* meaningful_messages */	\
+	"thread_recipient_id "		/* recipient_id */		\
+	"FROM thread "							\
+	"ORDER BY _id"
+
+/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
+#define SBK_QUERY_3							\
+	"SELECT "							\
+	"_id, "								\
+	"date, "							\
+	"meaningful_messages, "						\
+	"recipient_id "							\
+	"FROM thread "							\
+	"ORDER BY _id"
+
+#define SBK_COLUMN__ID			0
+#define SBK_COLUMN_DATE			1
+#define SBK_COLUMN_MEANINGFUL_MESSAGES	2
+#define SBK_COLUMN_RECIPIENT_ID		3
+
 void
 sbk_free_thread_list(struct sbk_thread_list *lst)
 {
@@ -32,44 +70,6 @@ sbk_free_thread_list(struct sbk_thread_list *lst)
 		free(lst);
 	}
 }
-
-/* For database versions < THREAD_AUTOINCREMENT */
-#define SBK_THREADS_QUERY_1						\
-	"SELECT "							\
-	"_id, "								\
-	"date, "							\
-	"message_count, "		/* meaningful_messages */	\
-	"recipient_ids "		/* recipient_id */		\
-	"FROM thread "							\
-	"ORDER BY _id"
-
-/*
- * For database versions
- * [THREAD_AUTOINCREMENT, THREAD_AND_MESSAGE_FOREIGN_KEYS)
- */
-#define SBK_THREADS_QUERY_2						\
-	"SELECT "							\
-	"_id, "								\
-	"date, "							\
-	"message_count, "		/* meaningful_messages */	\
-	"thread_recipient_id "		/* recipient_id */		\
-	"FROM thread "							\
-	"ORDER BY _id"
-
-/* For database versions >= THREAD_AND_MESSAGE_FOREIGN_KEYS */
-#define SBK_THREADS_QUERY_3						\
-	"SELECT "							\
-	"_id, "								\
-	"date, "							\
-	"meaningful_messages, "						\
-	"recipient_id "							\
-	"FROM thread "							\
-	"ORDER BY _id"
-
-#define SBK_THREADS_COLUMN__ID			0
-#define SBK_THREADS_COLUMN_DATE			1
-#define SBK_THREADS_COLUMN_MEANINGFUL_MESSAGES	2
-#define SBK_THREADS_COLUMN_RECIPIENT_ID		3
 
 struct sbk_thread_list *
 sbk_get_threads(struct sbk_ctx *ctx)
@@ -91,12 +91,12 @@ sbk_get_threads(struct sbk_ctx *ctx)
 	SIMPLEQ_INIT(lst);
 
 	if (ctx->db_version < SBK_DB_VERSION_THREAD_AUTOINCREMENT)
-		query = SBK_THREADS_QUERY_1;
+		query = SBK_QUERY_1;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_THREADS_QUERY_2;
+		query = SBK_QUERY_2;
 	else
-		query = SBK_THREADS_QUERY_3;
+		query = SBK_QUERY_3;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		goto error;
@@ -108,16 +108,16 @@ sbk_get_threads(struct sbk_ctx *ctx)
 		}
 
 		thd->recipient = sbk_get_recipient_from_column(ctx, stm,
-		    SBK_THREADS_COLUMN_RECIPIENT_ID);
+		    SBK_COLUMN_RECIPIENT_ID);
 		if (thd->recipient == NULL) {
 			free(thd);
 			goto error;
 		}
 
-		thd->id = sqlite3_column_int64(stm, SBK_THREADS_COLUMN__ID);
-		thd->date = sqlite3_column_int64(stm, SBK_THREADS_COLUMN_DATE);
+		thd->id = sqlite3_column_int64(stm, SBK_COLUMN__ID);
+		thd->date = sqlite3_column_int64(stm, SBK_COLUMN_DATE);
 		thd->nmessages = sqlite3_column_int64(stm,
-		    SBK_THREADS_COLUMN_MEANINGFUL_MESSAGES);
+		    SBK_COLUMN_MEANINGFUL_MESSAGES);
 		SIMPLEQ_INSERT_TAIL(lst, thd, entries);
 	}
 

@@ -111,41 +111,50 @@ struct sbk_ctx {
 	size_t		 obufsize;
 };
 
+/* sbk-attachment-tree.c */
+void	 sbk_free_attachment_tree(struct sbk_ctx *);
+struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *, int64_t, int64_t);
 int	 sbk_insert_attachment_entry(struct sbk_ctx *, Signal__BackupFrame *,
 	    struct sbk_file *);
-struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *, int64_t, int64_t);
-void	 sbk_free_attachment_tree(struct sbk_ctx *);
 
+/* sbk-attachment.c */
 void	 sbk_free_attachment(struct sbk_attachment *);
-int	 sbk_get_attachments_for_quote(struct sbk_ctx *, struct sbk_quote *,
-	    struct sbk_message_id *);
 int	 sbk_get_attachments_for_message(struct sbk_ctx *,
 	    struct sbk_message *);
+int	 sbk_get_attachments_for_quote(struct sbk_ctx *, struct sbk_quote *,
+	    struct sbk_message_id *);
 
+/* sbk-database.c */
 int	 sbk_create_database(struct sbk_ctx *);
 
+/* sbk-file.c */
 char	*sbk_get_file_data_as_string(struct sbk_ctx *, struct sbk_file *);
 
+/* sbk-frame.c */
 Signal__BackupFrame *sbk_get_first_frame(struct sbk_ctx *);
 
+/* sbk-mention.c */
 void	 sbk_free_mention_list(struct sbk_mention_list *);
 int	 sbk_get_mentions(struct sbk_ctx *, struct sbk_message *);
-int	 sbk_insert_mentions(char **, struct sbk_mention_list *,
-	    struct sbk_message_id *);
 int	 sbk_get_quote_mentions(struct sbk_ctx *, struct sbk_mention_list **,
 	    sqlite3_stmt *, int, struct sbk_message_id *);
+int	 sbk_insert_mentions(char **, struct sbk_mention_list *,
+	    struct sbk_message_id *);
 
+/* sbk-reaction.c */
 void	 sbk_free_reaction_list(struct sbk_reaction_list *);
 int	 sbk_get_reactions_from_column(struct sbk_ctx *,
 	    struct sbk_reaction_list **, sqlite3_stmt *, int);
 int	 sbk_get_reactions_from_table(struct sbk_ctx *, struct sbk_message *);
 
-int	 sbk_grow_buffers(struct sbk_ctx *, size_t);
+/* sbk-read.c */
+int	 sbk_decrypt_final(struct sbk_ctx *, size_t *, const unsigned char *);
 int	 sbk_decrypt_init(struct sbk_ctx *, uint32_t);
 int	 sbk_decrypt_update(struct sbk_ctx *, size_t, size_t *);
-int	 sbk_decrypt_final(struct sbk_ctx *, size_t *, const unsigned char *);
+int	 sbk_grow_buffers(struct sbk_ctx *, size_t);
 int	 sbk_read(struct sbk_ctx *, void *, size_t);
 
+/* sbk-recipient-tree.c */
 void	 sbk_free_recipient_tree(struct sbk_ctx *);
 struct sbk_recipient *sbk_get_recipient(struct sbk_ctx *,
 	    struct sbk_recipient_id *);
@@ -154,8 +163,7 @@ struct sbk_recipient *sbk_get_recipient_from_column(struct sbk_ctx *,
 struct sbk_recipient *sbk_get_recipient_from_uuid(struct sbk_ctx *,
 	    const char *);
 
-void	 sbk_sqlite_warnd(sqlite3 *, const char *, ...);
-void	 sbk_sqlite_warn(struct sbk_ctx *, const char *, ...);
+/* sbk-sqlite.c */
 int	 sbk_sqlite_bind_blob(struct sbk_ctx *, sqlite3_stmt *, int,
 	    const void *, size_t);
 int	 sbk_sqlite_bind_double(struct sbk_ctx *, sqlite3_stmt *, int, double);
@@ -167,9 +175,11 @@ int	 sbk_sqlite_bind_text(struct sbk_ctx *, sqlite3_stmt *, int,
 	    const char *);
 int	 sbk_sqlite_column_text_copy(struct sbk_ctx *, char **, sqlite3_stmt *,
 	    int);
+int	 sbk_sqlite_exec(struct sbk_ctx *, const char *);
 int	 sbk_sqlite_open(sqlite3 **, const char *);
 int	 sbk_sqlite_prepare(struct sbk_ctx *, sqlite3_stmt **, const char *);
 int	 sbk_sqlite_step(struct sbk_ctx *, sqlite3_stmt *);
-int	 sbk_sqlite_exec(struct sbk_ctx *, const char *);
+void	 sbk_sqlite_warn(struct sbk_ctx *, const char *, ...);
+void	 sbk_sqlite_warnd(sqlite3 *, const char *, ...);
 
 #endif

@@ -20,6 +20,42 @@
 
 #include "sbk-internal.h"
 
+#define SBK_SELECT							\
+	"SELECT "							\
+	"author_id, "							\
+	"emoji, "							\
+	"date_sent, "							\
+	"date_received "						\
+	"FROM reaction "
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_WHERE_1							\
+	"WHERE message_id = ? AND is_mms = ? "
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_WHERE_2							\
+	"WHERE message_id = ? "
+
+#define SBK_ORDER							\
+	"ORDER BY date_sent"
+
+/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_QUERY_1							\
+	SBK_SELECT							\
+	SBK_WHERE_1							\
+	SBK_ORDER
+
+/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
+#define SBK_QUERY_2							\
+	SBK_SELECT							\
+	SBK_WHERE_2							\
+	SBK_ORDER
+
+#define SBK_COLUMN_AUTHOR_ID		0
+#define SBK_COLUMN_EMOJI		1
+#define SBK_COLUMN_DATE_SENT		2
+#define SBK_COLUMN_DATE_RECEIVED	3
+
 static void
 sbk_free_reaction(struct sbk_reaction *rct)
 {
@@ -41,6 +77,103 @@ sbk_free_reaction_list(struct sbk_reaction_list *lst)
 		}
 		free(lst);
 	}
+}
+
+/*
+ * For database versions >= REACTION_REFACTOR
+ */
+
+static struct sbk_reaction *
+sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_reaction *rct;
+
+	if ((rct = calloc(1, sizeof *rct)) == NULL) {
+		warn(NULL);
+		return NULL;
+	}
+
+	rct->recipient = sbk_get_recipient_from_column(ctx, stm,
+	    SBK_COLUMN_AUTHOR_ID);
+	if (rct->recipient == NULL)
+		goto error;
+
+	if (sbk_sqlite_column_text_copy(ctx, &rct->emoji, stm,
+	    SBK_COLUMN_EMOJI) == -1)
+		goto error;
+
+	rct->time_sent = sqlite3_column_int64(stm, SBK_COLUMN_DATE_SENT);
+	rct->time_recv = sqlite3_column_int64(stm, SBK_COLUMN_DATE_RECEIVED);
+
+	return rct;
+
+error:
+	sbk_free_reaction(rct);
+	return NULL;
+}
+
+static struct sbk_reaction_list *
+sbk_get_reactions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
+{
+	struct sbk_reaction_list	*lst;
+	struct sbk_reaction		*rct;
+	int				 ret;
+
+	if ((lst = malloc(sizeof *lst)) == NULL) {
+		warn(NULL);
+		goto error;
+	}
+
+	SIMPLEQ_INIT(lst);
+
+	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
+		if ((rct = sbk_get_reaction(ctx, stm)) == NULL)
+			goto error;
+		SIMPLEQ_INSERT_TAIL(lst, rct, entries);
+	}
+
+	if (ret != SQLITE_DONE)
+		goto error;
+
+	sqlite3_finalize(stm);
+	return lst;
+
+error:
+	sbk_free_reaction_list(lst);
+	sqlite3_finalize(stm);
+	return NULL;
+}
+
+int
+sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	sqlite3_stmt	*stm;
+	const char	*query;
+
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		query = SBK_QUERY_1;
+	else
+		query = SBK_QUERY_2;
+
+	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
+		return -1;
+
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
+		sqlite3_finalize(stm);
+		return -1;
+	}
+
+	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		if (sbk_sqlite_bind_int(ctx, stm, 2,
+		    msg->id.type == SBK_MESSAGE_MMS) == -1) {
+			sqlite3_finalize(stm);
+			return -1;
+		}
+
+	if ((msg->reactions = sbk_get_reactions(ctx, stm)) == NULL)
+		return -1;
+
+	return 0;
 }
 
 /*
@@ -136,139 +269,4 @@ error1:
 	sbk_free_reaction_list_message(msg);
 	*lst = NULL;
 	return -1;
-}
-
-/*
- * For database versions >= REACTION_REFACTOR
- */
-
-#define SBK_REACTIONS_SELECT						\
-	"SELECT "							\
-	"author_id, "							\
-	"emoji, "							\
-	"date_sent, "							\
-	"date_received "						\
-	"FROM reaction "
-
-/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
-#define SBK_REACTIONS_WHERE_1						\
-	"WHERE message_id = ? AND is_mms = ? "
-
-/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
-#define SBK_REACTIONS_WHERE_2						\
-	"WHERE message_id = ? "
-
-#define SBK_REACTIONS_ORDER						\
-	"ORDER BY date_sent"
-
-/* For database versions < SINGLE_MESSAGE_TABLE_MIGRATION */
-#define SBK_REACTIONS_QUERY_1						\
-	SBK_REACTIONS_SELECT						\
-	SBK_REACTIONS_WHERE_1						\
-	SBK_REACTIONS_ORDER
-
-/* For database versions >= SINGLE_MESSAGE_TABLE_MIGRATION */
-#define SBK_REACTIONS_QUERY_2						\
-	SBK_REACTIONS_SELECT						\
-	SBK_REACTIONS_WHERE_2						\
-	SBK_REACTIONS_ORDER
-
-#define SBK_REACTIONS_COLUMN_AUTHOR_ID		0
-#define SBK_REACTIONS_COLUMN_EMOJI		1
-#define SBK_REACTIONS_COLUMN_DATE_SENT		2
-#define SBK_REACTIONS_COLUMN_DATE_RECEIVED	3
-
-static struct sbk_reaction *
-sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
-{
-	struct sbk_reaction *rct;
-
-	if ((rct = calloc(1, sizeof *rct)) == NULL) {
-		warn(NULL);
-		return NULL;
-	}
-
-	rct->recipient = sbk_get_recipient_from_column(ctx, stm,
-	    SBK_REACTIONS_COLUMN_AUTHOR_ID);
-	if (rct->recipient == NULL)
-		goto error;
-
-	if (sbk_sqlite_column_text_copy(ctx, &rct->emoji, stm,
-	    SBK_REACTIONS_COLUMN_EMOJI) == -1)
-		goto error;
-
-	rct->time_sent = sqlite3_column_int64(stm,
-	    SBK_REACTIONS_COLUMN_DATE_SENT);
-	rct->time_recv = sqlite3_column_int64(stm,
-	    SBK_REACTIONS_COLUMN_DATE_RECEIVED);
-
-	return rct;
-
-error:
-	sbk_free_reaction(rct);
-	return NULL;
-}
-
-static struct sbk_reaction_list *
-sbk_get_reactions(struct sbk_ctx *ctx, sqlite3_stmt *stm)
-{
-	struct sbk_reaction_list	*lst;
-	struct sbk_reaction		*rct;
-	int				 ret;
-
-	if ((lst = malloc(sizeof *lst)) == NULL) {
-		warn(NULL);
-		goto error;
-	}
-
-	SIMPLEQ_INIT(lst);
-
-	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
-		if ((rct = sbk_get_reaction(ctx, stm)) == NULL)
-			goto error;
-		SIMPLEQ_INSERT_TAIL(lst, rct, entries);
-	}
-
-	if (ret != SQLITE_DONE)
-		goto error;
-
-	sqlite3_finalize(stm);
-	return lst;
-
-error:
-	sbk_free_reaction_list(lst);
-	sqlite3_finalize(stm);
-	return NULL;
-}
-
-int
-sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
-{
-	sqlite3_stmt	*stm;
-	const char	*query;
-
-	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
-		query = SBK_REACTIONS_QUERY_1;
-	else
-		query = SBK_REACTIONS_QUERY_2;
-
-	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
-		return -1;
-
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
-		sqlite3_finalize(stm);
-		return -1;
-	}
-
-	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
-		if (sbk_sqlite_bind_int(ctx, stm, 2,
-		    msg->id.type == SBK_MESSAGE_MMS) == -1) {
-			sqlite3_finalize(stm);
-			return -1;
-		}
-
-	if ((msg->reactions = sbk_get_reactions(ctx, stm)) == NULL)
-		return -1;
-
-	return 0;
 }

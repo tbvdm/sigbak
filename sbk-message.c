@@ -20,6 +20,347 @@
 
 #include "sbk-internal.h"
 
+/* For database versions < REACTIONS */
+#define SBK_SELECT_SMS_1						\
+	"SELECT "							\
+	"0, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date AS date_received, "					\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"type, "							\
+	"body, "							\
+	"0, "				/* mms.quote_id */		\
+	"NULL, "			/* mms.quote_author */		\
+	"NULL, "			/* mms.quote_body */		\
+	"NULL, "			/* mms.quote_mentions */	\
+	"NULL "				/* reactions */			\
+	"FROM sms "
+
+/* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+#define SBK_SELECT_SMS_2						\
+	"SELECT "							\
+	"0, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date AS date_received, "					\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"type, "							\
+	"body, "							\
+	"0, "				/* mms.quote_id */		\
+	"NULL, "			/* mms.quote_author */		\
+	"NULL, "			/* mms.quote_body */		\
+	"NULL, "			/* mms.quote_mentions */	\
+	"reactions "							\
+	"FROM sms "
+
+/*
+ * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
+ * SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
+#define SBK_SELECT_SMS_3						\
+	"SELECT "							\
+	"0, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"0, "				/* mms.quote_id */		\
+	"NULL, "			/* mms.quote_author */		\
+	"NULL, "			/* mms.quote_body */		\
+	"NULL, "			/* mms.quote_mentions */	\
+	"NULL "				/* reactions */			\
+	"FROM sms "
+
+/* For database versions < QUOTED_REPLIES */
+#define SBK_SELECT_MMS_1						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date, "			/* date_sent */			\
+	"date_received, "						\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
+	"0, "				/* quote_id */			\
+	"NULL, "			/* quote_author */		\
+	"NULL, "			/* quote_body */		\
+	"NULL, "			/* quote_mentions */		\
+	"NULL "				/* reactions */			\
+	"FROM mms "
+
+/* For database versions [QUOTED_REPLIES, REACTIONS) */
+#define SBK_SELECT_MMS_2						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date, "			/* date_sent */			\
+	"date_received, "						\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"NULL, "			/* quote_mentions */		\
+	"NULL "				/* reactions */			\
+	"FROM mms "
+
+/* For database versions [REACTIONS, MENTIONS) */
+#define SBK_SELECT_MMS_3						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date, "			/* date_sent */			\
+	"date_received, "						\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"NULL, "			/* quote_mentions */		\
+	"reactions "							\
+	"FROM mms "
+
+/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+#define SBK_SELECT_MMS_4						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date, "			/* date_sent */			\
+	"date_received, "						\
+	"thread_id, "							\
+	"address, "			/* recipient_id */		\
+	"msg_box, "			/* type */			\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"reactions "							\
+	"FROM mms "
+
+/*
+ * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
+ * SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
+#define SBK_SELECT_MMS_5						\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
+	"FROM mms "
+
+/*
+ * For database versions [SINGLE_MESSAGE_TABLE_MIGRATION,
+ * REACTION_FOREIGN_KEY_MIGRATION)
+ */
+#define SBK_SELECT_1							\
+	SBK_SELECT_MMS_5
+
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
+#define SBK_SELECT_2							\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
+	"FROM message "
+
+/*
+ * For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION
+ *
+ * The iif() expression below is based on the outgoingClause variable in
+ * V185_MessageRecipientsAndEditMessageMigration.kt in the Signal-Android
+ * repository.
+ */
+#define SBK_SELECT_3							\
+	"SELECT "							\
+	"1, "								\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"iif(type & " STRINGIFY(SBK_BASE_TYPE_MASK) " IN ("		\
+	    STRINGIFY(SBK_OUTGOING_AUDIO_CALL_TYPE) ", "		\
+	    STRINGIFY(SBK_OUTGOING_VIDEO_CALL_TYPE) ", "		\
+	    STRINGIFY(SBK_BASE_OUTBOX_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_SENDING_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_SENT_TYPE) ", "				\
+	    STRINGIFY(SBK_BASE_SENT_FAILED_TYPE) ", "			\
+	    STRINGIFY(SBK_BASE_PENDING_SECURE_SMS_FALLBACK) ", "	\
+	    STRINGIFY(SBK_BASE_PENDING_INSECURE_SMS_FALLBACK) "), "	\
+	    "to_recipient_id, from_recipient_id), "			\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL "				/* reactions */			\
+	"FROM message "
+
+#define SBK_WHERE_THREAD						\
+	"WHERE thread_id = ?1 "
+
+#define SBK_ORDER							\
+	"ORDER BY date_received"
+
+/* For database versions < QUOTED_REPLIES */
+#define SBK_QUERY_1							\
+	SBK_SELECT_SMS_1						\
+	SBK_WHERE_THREAD						\
+	"UNION ALL "							\
+	SBK_SELECT_MMS_1						\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/* For database versions [QUOTED_REPLIES, REACTIONS) */
+#define SBK_QUERY_2							\
+	SBK_SELECT_SMS_1						\
+	SBK_WHERE_THREAD						\
+	"UNION ALL "							\
+	SBK_SELECT_MMS_2						\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/* For database versions [REACTIONS, MENTIONS) */
+#define SBK_QUERY_3							\
+	SBK_SELECT_SMS_2						\
+	SBK_WHERE_THREAD						\
+	"UNION ALL "							\
+	SBK_SELECT_MMS_3						\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
+#define SBK_QUERY_4							\
+	SBK_SELECT_SMS_2						\
+	SBK_WHERE_THREAD						\
+	"UNION ALL "							\
+	SBK_SELECT_MMS_4						\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/*
+ * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
+ * SINGLE_MESSAGE_TABLE_MIGRATION)
+ */
+#define SBK_QUERY_5							\
+	SBK_SELECT_SMS_3						\
+	SBK_WHERE_THREAD						\
+	"UNION ALL "							\
+	SBK_SELECT_MMS_5						\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/*
+ * For database versions [SINGLE_MESSAGE_TABLE_MIGRATION,
+ * REACTION_FOREIGN_KEY_MIGRATION)
+ */
+#define SBK_QUERY_6							\
+	SBK_SELECT_1							\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
+#define SBK_QUERY_7							\
+	SBK_SELECT_2							\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+#define SBK_QUERY_8							\
+	SBK_SELECT_3							\
+	SBK_WHERE_THREAD						\
+	SBK_ORDER
+
+#define SBK_COLUMN_TABLE		0
+#define SBK_COLUMN__ID			1
+#define SBK_COLUMN_DATE_SENT		2
+#define SBK_COLUMN_DATE_RECEIVED	3
+#define SBK_COLUMN_THREAD_ID		4
+#define SBK_COLUMN_RECIPIENT_ID		5
+#define SBK_COLUMN_TYPE			6
+#define SBK_COLUMN_BODY			7
+#define SBK_COLUMN_QUOTE_ID		8
+#define SBK_COLUMN_QUOTE_AUTHOR		9
+#define SBK_COLUMN_QUOTE_BODY		10
+#define SBK_COLUMN_QUOTE_MENTIONS	11
+#define SBK_COLUMN_REACTIONS		12
+
+static void
+sbk_free_quote(struct sbk_quote *qte)
+{
+	if (qte != NULL) {
+		free(qte->text);
+		sbk_free_attachment_list(qte->attachments);
+		sbk_free_mention_list(qte->mentions);
+		free(qte);
+	}
+}
+
+static void
+sbk_free_message(struct sbk_message *msg)
+{
+	if (msg != NULL) {
+		free(msg->text);
+		sbk_free_attachment_list(msg->attachments);
+		sbk_free_mention_list(msg->mentions);
+		sbk_free_reaction_list(msg->reactions);
+		sbk_free_quote(msg->quote);
+		free(msg);
+	}
+}
+
+void
+sbk_free_message_list(struct sbk_message_list *lst)
+{
+	struct sbk_message *msg;
+
+	if (lst != NULL) {
+		while ((msg = SIMPLEQ_FIRST(lst)) != NULL) {
+			SIMPLEQ_REMOVE_HEAD(lst, entries);
+			sbk_free_message(msg);
+		}
+		free(lst);
+	}
+}
+
 int
 sbk_is_outgoing_message(const struct sbk_message *msg)
 {
@@ -193,354 +534,13 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	return 0;
 }
 
-static void
-sbk_free_quote(struct sbk_quote *qte)
-{
-	if (qte != NULL) {
-		free(qte->text);
-		sbk_free_attachment_list(qte->attachments);
-		sbk_free_mention_list(qte->mentions);
-		free(qte);
-	}
-}
-
-static void
-sbk_free_message(struct sbk_message *msg)
-{
-	if (msg != NULL) {
-		free(msg->text);
-		sbk_free_attachment_list(msg->attachments);
-		sbk_free_mention_list(msg->mentions);
-		sbk_free_reaction_list(msg->reactions);
-		sbk_free_quote(msg->quote);
-		free(msg);
-	}
-}
-
-void
-sbk_free_message_list(struct sbk_message_list *lst)
-{
-	struct sbk_message *msg;
-
-	if (lst != NULL) {
-		while ((msg = SIMPLEQ_FIRST(lst)) != NULL) {
-			SIMPLEQ_REMOVE_HEAD(lst, entries);
-			sbk_free_message(msg);
-		}
-		free(lst);
-	}
-}
-
-/* For database versions < REACTIONS */
-#define SBK_MESSAGES_SELECT_SMS_1					\
-	"SELECT "							\
-	"0, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date AS date_received, "					\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"type, "							\
-	"body, "							\
-	"0, "				/* mms.quote_id */		\
-	"NULL, "			/* mms.quote_author */		\
-	"NULL, "			/* mms.quote_body */		\
-	"NULL, "			/* mms.quote_mentions */	\
-	"NULL "				/* reactions */			\
-	"FROM sms "
-
-/* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
-#define SBK_MESSAGES_SELECT_SMS_2					\
-	"SELECT "							\
-	"0, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date AS date_received, "					\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"type, "							\
-	"body, "							\
-	"0, "				/* mms.quote_id */		\
-	"NULL, "			/* mms.quote_author */		\
-	"NULL, "			/* mms.quote_body */		\
-	"NULL, "			/* mms.quote_mentions */	\
-	"reactions "							\
-	"FROM sms "
-
-/*
- * For database versions
- * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
- */
-#define SBK_MESSAGES_SELECT_SMS_3					\
-	"SELECT "							\
-	"0, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date_received, "						\
-	"thread_id, "							\
-	"recipient_id, "						\
-	"type, "							\
-	"body, "							\
-	"0, "				/* mms.quote_id */		\
-	"NULL, "			/* mms.quote_author */		\
-	"NULL, "			/* mms.quote_body */		\
-	"NULL, "			/* mms.quote_mentions */	\
-	"NULL "				/* reactions */			\
-	"FROM sms "
-
-/* For database versions < QUOTED_REPLIES */
-#define SBK_MESSAGES_SELECT_MMS_1					\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date, "			/* date_sent */			\
-	"date_received, "						\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"msg_box, "			/* type */			\
-	"body, "							\
-	"0, "				/* quote_id */			\
-	"NULL, "			/* quote_author */		\
-	"NULL, "			/* quote_body */		\
-	"NULL, "			/* quote_mentions */		\
-	"NULL "				/* reactions */			\
-	"FROM mms "
-
-/* For database versions [QUOTED_REPLIES, REACTIONS) */
-#define SBK_MESSAGES_SELECT_MMS_2					\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date, "			/* date_sent */			\
-	"date_received, "						\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"msg_box, "			/* type */			\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"NULL, "			/* quote_mentions */		\
-	"NULL "				/* reactions */			\
-	"FROM mms "
-
-/* For database versions [REACTIONS, MENTIONS) */
-#define SBK_MESSAGES_SELECT_MMS_3					\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date, "			/* date_sent */			\
-	"date_received, "						\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"msg_box, "			/* type */			\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"NULL, "			/* quote_mentions */		\
-	"reactions "							\
-	"FROM mms "
-
-/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
-#define SBK_MESSAGES_SELECT_MMS_4					\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date, "			/* date_sent */			\
-	"date_received, "						\
-	"thread_id, "							\
-	"address, "			/* recipient_id */		\
-	"msg_box, "			/* type */			\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"quote_mentions, "						\
-	"reactions "							\
-	"FROM mms "
-
-/*
- * For database versions
- * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
- */
-#define SBK_MESSAGES_SELECT_MMS_5					\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date_received, "						\
-	"thread_id, "							\
-	"recipient_id, "						\
-	"type, "							\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"quote_mentions, "						\
-	"NULL "				/* reactions */			\
-	"FROM mms "
-
-/*
- * For database versions
- * [SINGLE_MESSAGE_TABLE_MIGRATION, REACTION_FOREIGN_KEY_MIGRATION)
- */
-#define SBK_MESSAGES_SELECT_1						\
-	SBK_MESSAGES_SELECT_MMS_5
-
-/*
- * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
- * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
- */
-#define SBK_MESSAGES_SELECT_2						\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date_received, "						\
-	"thread_id, "							\
-	"recipient_id, "						\
-	"type, "							\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"quote_mentions, "						\
-	"NULL "				/* reactions */			\
-	"FROM message "
-
-/*
- * For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION
- *
- * The iif() expression below is based on the outgoingClause variable in
- * V185_MessageRecipientsAndEditMessageMigration.kt in the Signal-Android
- * repository.
- */
-#define SBK_MESSAGES_SELECT_3						\
-	"SELECT "							\
-	"1, "								\
-	"_id, "								\
-	"date_sent, "							\
-	"date_received, "						\
-	"thread_id, "							\
-	"iif(type & " STRINGIFY(SBK_BASE_TYPE_MASK) " IN ("		\
-	    STRINGIFY(SBK_OUTGOING_AUDIO_CALL_TYPE) ", "		\
-	    STRINGIFY(SBK_OUTGOING_VIDEO_CALL_TYPE) ", "		\
-	    STRINGIFY(SBK_BASE_OUTBOX_TYPE) ", "			\
-	    STRINGIFY(SBK_BASE_SENDING_TYPE) ", "			\
-	    STRINGIFY(SBK_BASE_SENT_TYPE) ", "				\
-	    STRINGIFY(SBK_BASE_SENT_FAILED_TYPE) ", "			\
-	    STRINGIFY(SBK_BASE_PENDING_SECURE_SMS_FALLBACK) ", "	\
-	    STRINGIFY(SBK_BASE_PENDING_INSECURE_SMS_FALLBACK) "), "	\
-	    "to_recipient_id, from_recipient_id), "			\
-	"type, "							\
-	"body, "							\
-	"quote_id, "							\
-	"quote_author, "						\
-	"quote_body, "							\
-	"quote_mentions, "						\
-	"NULL "				/* reactions */			\
-	"FROM message "
-
-#define SBK_MESSAGES_WHERE_THREAD					\
-	"WHERE thread_id = ?1 "
-
-#define SBK_MESSAGES_ORDER						\
-	"ORDER BY date_received"
-
-/* For database versions < QUOTED_REPLIES */
-#define SBK_MESSAGES_QUERY_1						\
-	SBK_MESSAGES_SELECT_SMS_1					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_1					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions [QUOTED_REPLIES, REACTIONS) */
-#define SBK_MESSAGES_QUERY_2						\
-	SBK_MESSAGES_SELECT_SMS_1					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_2					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions [REACTIONS, MENTIONS) */
-#define SBK_MESSAGES_QUERY_3						\
-	SBK_MESSAGES_SELECT_SMS_2					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_3					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
-#define SBK_MESSAGES_QUERY_4						\
-	SBK_MESSAGES_SELECT_SMS_2					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_4					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/*
- * For database versions
- * [THREAD_AND_MESSAGE_FOREIGN_KEYS, SINGLE_MESSAGE_TABLE_MIGRATION)
- */
-#define SBK_MESSAGES_QUERY_5						\
-	SBK_MESSAGES_SELECT_SMS_3					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	"UNION ALL "							\
-	SBK_MESSAGES_SELECT_MMS_5					\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/*
- * For database versions
- * [SINGLE_MESSAGE_TABLE_MIGRATION, REACTION_FOREIGN_KEY_MIGRATION)
- */
-#define SBK_MESSAGES_QUERY_6						\
-	SBK_MESSAGES_SELECT_1						\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/*
- * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
- * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
- */
-#define SBK_MESSAGES_QUERY_7						\
-	SBK_MESSAGES_SELECT_2						\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
-#define SBK_MESSAGES_QUERY_8						\
-	SBK_MESSAGES_SELECT_3						\
-	SBK_MESSAGES_WHERE_THREAD					\
-	SBK_MESSAGES_ORDER
-
-#define SBK_MESSAGES_COLUMN_TABLE		0
-#define SBK_MESSAGES_COLUMN__ID			1
-#define SBK_MESSAGES_COLUMN_DATE_SENT		2
-#define SBK_MESSAGES_COLUMN_DATE_RECEIVED	3
-#define SBK_MESSAGES_COLUMN_THREAD_ID		4
-#define SBK_MESSAGES_COLUMN_RECIPIENT_ID	5
-#define SBK_MESSAGES_COLUMN_TYPE		6
-#define SBK_MESSAGES_COLUMN_BODY		7
-#define SBK_MESSAGES_COLUMN_QUOTE_ID		8
-#define SBK_MESSAGES_COLUMN_QUOTE_AUTHOR	9
-#define SBK_MESSAGES_COLUMN_QUOTE_BODY		10
-#define SBK_MESSAGES_COLUMN_QUOTE_MENTIONS	11
-#define SBK_MESSAGES_COLUMN_REACTIONS		12
-
 static int
 sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 {
 	struct sbk_quote *qte;
 
-	if (sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID) == 0 &&
-	    sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_AUTHOR) == 0) {
+	if (sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_ID) == 0 &&
+	    sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_AUTHOR) == 0) {
 		/* No quote */
 		return 0;
 	}
@@ -550,22 +550,22 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		return -1;
 	}
 
-	qte->id = sqlite3_column_int64(stm, SBK_MESSAGES_COLUMN_QUOTE_ID);
+	qte->id = sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_ID);
 
 	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
-	    SBK_MESSAGES_COLUMN_QUOTE_AUTHOR);
+	    SBK_COLUMN_QUOTE_AUTHOR);
 	if (qte->recipient == NULL)
 		goto error;
 
 	if (sbk_sqlite_column_text_copy(ctx, &qte->text, stm,
-	    SBK_MESSAGES_COLUMN_QUOTE_BODY) == -1)
+	    SBK_COLUMN_QUOTE_BODY) == -1)
 		goto error;
 
 	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
 		goto error;
 
 	if (sbk_get_quote_mentions(ctx, &qte->mentions, stm,
-	    SBK_MESSAGES_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
+	    SBK_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
 		goto error;
 
 	if (sbk_insert_mentions(&qte->text, qte->mentions, &msg->id) == -1)
@@ -589,26 +589,23 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		return NULL;
 	}
 
-	msg->id.type =
-	    (sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TABLE) == 0) ?
+	msg->id.type = (sqlite3_column_int(stm, SBK_COLUMN_TABLE) == 0) ?
 	    SBK_MESSAGE_SMS : SBK_MESSAGE_MMS;
-	msg->id.rowid = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN__ID);
+	msg->id.rowid = sqlite3_column_int(stm, SBK_COLUMN__ID);
 
 	msg->recipient = sbk_get_recipient_from_column(ctx, stm,
-	    SBK_MESSAGES_COLUMN_RECIPIENT_ID);
+	    SBK_COLUMN_RECIPIENT_ID);
 	if (msg->recipient == NULL)
 		goto error;
 
-	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm,
-	    SBK_MESSAGES_COLUMN_BODY) == -1)
+	if (sbk_sqlite_column_text_copy(ctx, &msg->text, stm, SBK_COLUMN_BODY)
+	    == -1)
 		goto error;
 
-	msg->time_sent = sqlite3_column_int64(stm,
-	    SBK_MESSAGES_COLUMN_DATE_SENT);
-	msg->time_recv = sqlite3_column_int64(stm,
-	    SBK_MESSAGES_COLUMN_DATE_RECEIVED);
-	msg->type = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_TYPE);
-	msg->thread = sqlite3_column_int(stm, SBK_MESSAGES_COLUMN_THREAD_ID);
+	msg->time_sent = sqlite3_column_int64(stm, SBK_COLUMN_DATE_SENT);
+	msg->time_recv = sqlite3_column_int64(stm, SBK_COLUMN_DATE_RECEIVED);
+	msg->type = sqlite3_column_int(stm, SBK_COLUMN_TYPE);
+	msg->thread = sqlite3_column_int(stm, SBK_COLUMN_THREAD_ID);
 
 	if (sbk_get_body(msg) == -1)
 		goto error;
@@ -633,7 +630,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 
 	if (ctx->db_version < SBK_DB_VERSION_REACTION_REFACTOR) {
 		if (sbk_get_reactions_from_column(ctx, &msg->reactions, stm,
-		    SBK_MESSAGES_COLUMN_REACTIONS) == -1)
+		    SBK_COLUMN_REACTIONS) == -1)
 			goto error;
 	} else {
 		if (sbk_get_reactions_from_table(ctx, msg) == -1)
@@ -689,25 +686,25 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 		return NULL;
 
 	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
-		query = SBK_MESSAGES_QUERY_1;
+		query = SBK_QUERY_1;
 	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
-		query = SBK_MESSAGES_QUERY_2;
+		query = SBK_QUERY_2;
 	else if (ctx->db_version < SBK_DB_VERSION_MENTIONS)
-		query = SBK_MESSAGES_QUERY_3;
+		query = SBK_QUERY_3;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_MESSAGES_QUERY_4;
+		query = SBK_QUERY_4;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
-		query = SBK_MESSAGES_QUERY_5;
+		query = SBK_QUERY_5;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
-		query = SBK_MESSAGES_QUERY_6;
+		query = SBK_QUERY_6;
 	else if (ctx->db_version <
 	    SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
-		query = SBK_MESSAGES_QUERY_7;
+		query = SBK_QUERY_7;
 	else
-		query = SBK_MESSAGES_QUERY_8;
+		query = SBK_QUERY_8;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
