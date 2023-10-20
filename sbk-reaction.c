@@ -93,7 +93,7 @@ sbk_get_reaction(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		return NULL;
 	}
 
-	rct->recipient = sbk_get_recipient_from_column(ctx, stm,
+	rct->recipient = sbk_get_recipient_from_id_from_column(ctx, stm,
 	    SBK_COLUMN_AUTHOR_ID);
 	if (rct->recipient == NULL)
 		goto error;
@@ -245,7 +245,8 @@ sbk_get_reactions_from_column(struct sbk_ctx *ctx,
 		id.new = msg->reactions[i]->author;
 		id.old = NULL;
 
-		if ((rct->recipient = sbk_get_recipient(ctx, &id)) == NULL)
+		rct->recipient = sbk_get_recipient_from_id(ctx, &id);
+		if (rct->recipient == NULL)
 			goto error2;
 
 		if ((rct->emoji = strdup(msg->reactions[i]->emoji)) == NULL) {

@@ -51,7 +51,7 @@ sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		return NULL;
 	}
 
-	mnt->recipient = sbk_get_recipient_from_column(ctx, stm, 0);
+	mnt->recipient = sbk_get_recipient_from_id_from_column(ctx, stm, 0);
 	if (mnt->recipient == NULL) {
 		free(mnt);
 		return NULL;
@@ -61,7 +61,7 @@ sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 }
 
 int
-sbk_get_mentions(struct sbk_ctx *ctx, struct sbk_message *msg)
+sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
 	struct sbk_mention	*mnt;
 	sqlite3_stmt		*stm;
@@ -124,7 +124,7 @@ sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
 }
 
 int
-sbk_get_quote_mentions(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
+sbk_get_mentions_for_quote(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
     sqlite3_stmt *stm, int idx, struct sbk_message_id *mid)
 {
 	Signal__BodyRangeList	*msg;

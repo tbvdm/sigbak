@@ -552,7 +552,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 
 	qte->id = sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_ID);
 
-	qte->recipient = sbk_get_recipient_from_column(ctx, stm,
+	qte->recipient = sbk_get_recipient_from_id_from_column(ctx, stm,
 	    SBK_COLUMN_QUOTE_AUTHOR);
 	if (qte->recipient == NULL)
 		goto error;
@@ -564,7 +564,7 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
 		goto error;
 
-	if (sbk_get_quote_mentions(ctx, &qte->mentions, stm,
+	if (sbk_get_mentions_for_quote(ctx, &qte->mentions, stm,
 	    SBK_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
 		goto error;
 
@@ -593,7 +593,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	    SBK_MESSAGE_SMS : SBK_MESSAGE_MMS;
 	msg->id.rowid = sqlite3_column_int(stm, SBK_COLUMN__ID);
 
-	msg->recipient = sbk_get_recipient_from_column(ctx, stm,
+	msg->recipient = sbk_get_recipient_from_id_from_column(ctx, stm,
 	    SBK_COLUMN_RECIPIENT_ID);
 	if (msg->recipient == NULL)
 		goto error;
@@ -617,7 +617,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_long_message(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_get_mentions(ctx, msg) == -1)
+		if (sbk_get_mentions_for_message(ctx, msg) == -1)
 			goto error;
 
 		if (sbk_insert_mentions(&msg->text, msg->mentions, &msg->id) ==

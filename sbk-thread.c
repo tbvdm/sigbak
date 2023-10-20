@@ -107,8 +107,8 @@ sbk_get_threads(struct sbk_ctx *ctx)
 			goto error;
 		}
 
-		thd->recipient = sbk_get_recipient_from_column(ctx, stm,
-		    SBK_COLUMN_RECIPIENT_ID);
+		thd->recipient = sbk_get_recipient_from_id_from_column(ctx,
+		    stm, SBK_COLUMN_RECIPIENT_ID);
 		if (thd->recipient == NULL) {
 			free(thd);
 			goto error;

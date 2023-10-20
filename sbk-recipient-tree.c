@@ -348,7 +348,7 @@ error:
 }
 
 struct sbk_recipient *
-sbk_get_recipient(struct sbk_ctx *ctx, struct sbk_recipient_id *id)
+sbk_get_recipient_from_id(struct sbk_ctx *ctx, struct sbk_recipient_id *id)
 {
 	struct sbk_recipient_entry find, *result;
 
@@ -367,7 +367,7 @@ sbk_get_recipient(struct sbk_ctx *ctx, struct sbk_recipient_id *id)
 }
 
 struct sbk_recipient *
-sbk_get_recipient_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
+sbk_get_recipient_from_id_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
     int idx)
 {
 	struct sbk_recipient	*rcp;
@@ -376,7 +376,7 @@ sbk_get_recipient_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
 	if (sbk_get_recipient_id_from_column(ctx, &id, stm, idx) == -1)
 		return NULL;
 
-	rcp = sbk_get_recipient(ctx, &id);
+	rcp = sbk_get_recipient_from_id(ctx, &id);
 	free(id.old);
 	return rcp;
 }
