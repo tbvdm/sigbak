@@ -157,12 +157,12 @@ int	 sbk_read(struct sbk_ctx *, void *, size_t);
 
 /* sbk-recipient-tree.c */
 void	 sbk_free_recipient_tree(struct sbk_ctx *);
+struct sbk_recipient *sbk_get_recipient_from_aci(struct sbk_ctx *,
+	    const char *);
 struct sbk_recipient *sbk_get_recipient_from_id(struct sbk_ctx *,
 	    struct sbk_recipient_id *);
 struct sbk_recipient *sbk_get_recipient_from_id_from_column(struct sbk_ctx *,
 	    sqlite3_stmt *, int);
-struct sbk_recipient *sbk_get_recipient_from_uuid(struct sbk_ctx *,
-	    const char *);
 
 /* sbk-sqlite.c */
 int	 sbk_sqlite_bind_blob(struct sbk_ctx *, sqlite3_stmt *, int,

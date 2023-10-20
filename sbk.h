@@ -110,10 +110,10 @@ struct sbk_ctx;
 struct sbk_file;
 
 struct sbk_contact {
-	char		*uuid;
+	char		*aci;	/* Account Identity */
 	char		*phone;
 	char		*email;
-	char		*system_display_name;
+	char		*system_joined_name;
 	char		*system_phone_label;
 	char		*profile_given_name;
 	char		*profile_family_name;

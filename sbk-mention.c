@@ -172,7 +172,7 @@ sbk_get_mentions_for_quote(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 			continue;
 		}
 
-		rcp = sbk_get_recipient_from_uuid(ctx,
+		rcp = sbk_get_recipient_from_aci(ctx,
 		    msg->ranges[i]->mentionuuid);
 		if (rcp == NULL)
 			warnx("Cannot find recipient for quoted mention uuid "

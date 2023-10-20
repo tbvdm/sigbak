@@ -137,10 +137,10 @@ sbk_free_recipient_entry(struct sbk_recipient_entry *ent)
 	switch (ent->recipient.type) {
 	case SBK_CONTACT:
 		if (ent->recipient.contact != NULL) {
-			free(ent->recipient.contact->uuid);
+			free(ent->recipient.contact->aci);
 			free(ent->recipient.contact->phone);
 			free(ent->recipient.contact->email);
-			free(ent->recipient.contact->system_display_name);
+			free(ent->recipient.contact->system_joined_name);
 			free(ent->recipient.contact->system_phone_label);
 			free(ent->recipient.contact->profile_given_name);
 			free(ent->recipient.contact->profile_family_name);
@@ -254,11 +254,11 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 				goto error;
 		}
 
-		if (sbk_sqlite_column_text_copy(ctx, &con->uuid,
+		if (sbk_sqlite_column_text_copy(ctx, &con->aci,
 		    stm, SBK_COLUMN_ACI) == -1)
 			goto error;
 
-		if (sbk_sqlite_column_text_copy(ctx, &con->system_display_name,
+		if (sbk_sqlite_column_text_copy(ctx, &con->system_joined_name,
 		    stm, SBK_COLUMN_SYSTEM_JOINED_NAME) == -1)
 			goto error;
 
@@ -382,14 +382,14 @@ sbk_get_recipient_from_id_from_column(struct sbk_ctx *ctx, sqlite3_stmt *stm,
 }
 
 struct sbk_recipient *
-sbk_get_recipient_from_uuid(struct sbk_ctx *ctx, const char *uuid)
+sbk_get_recipient_from_aci(struct sbk_ctx *ctx, const char *aci)
 {
 	struct sbk_recipient_entry *ent;
 
 	RB_FOREACH(ent, sbk_recipient_tree, &ctx->recipients)
 		if (ent->recipient.type == SBK_CONTACT &&
-		    ent->recipient.contact->uuid != NULL &&
-		    strcmp(uuid, ent->recipient.contact->uuid) == 0)
+		    ent->recipient.contact->aci != NULL &&
+		    strcmp(aci, ent->recipient.contact->aci) == 0)
 			return &ent->recipient;
 
 	return NULL;
