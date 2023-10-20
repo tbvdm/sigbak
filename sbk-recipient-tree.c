@@ -185,7 +185,10 @@ static int
 sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
     struct sbk_recipient_id *id, sqlite3_stmt *stm, int idx)
 {
-	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
+	if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_IDS) {
+		id->new = sqlite3_column_int(stm, idx);
+		id->old = NULL;
+	} else {
 		id->new = -1;
 		if (sbk_sqlite_column_text_copy(ctx, &id->old, stm, idx) == -1)
 			return -1;
@@ -193,9 +196,6 @@ sbk_get_recipient_id_from_column(struct sbk_ctx *ctx,
 			warnx("Invalid recipient id");
 			return -1;
 		}
-	} else {
-		id->new = sqlite3_column_int(stm, idx);
-		id->old = NULL;
 	}
 
 	return 0;
@@ -230,7 +230,15 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 		}
 
-		if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS) {
+		if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_IDS) {
+			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
+			    stm, SBK_COLUMN_E164) == -1)
+				goto error;
+
+			if (sbk_sqlite_column_text_copy(ctx, &con->email,
+			    stm, SBK_COLUMN_EMAIL) == -1)
+				goto error;
+		} else {
 			if (strchr(ent->id.old, '@') != NULL) {
 				con->email = strdup(ent->id.old);
 				if (con->email == NULL) {
@@ -244,14 +252,6 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 					goto error;
 				}
 			}
-		} else {
-			if (sbk_sqlite_column_text_copy(ctx, &con->phone,
-			    stm, SBK_COLUMN_E164) == -1)
-				goto error;
-
-			if (sbk_sqlite_column_text_copy(ctx, &con->email,
-			    stm, SBK_COLUMN_EMAIL) == -1)
-				goto error;
 		}
 
 		if (sbk_sqlite_column_text_copy(ctx, &con->aci,
@@ -315,16 +315,16 @@ sbk_build_recipient_tree(struct sbk_ctx *ctx)
 	if (sbk_create_database(ctx) == -1)
 		return -1;
 
-	if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_IDS)
-		query = SBK_QUERY_1;
-	else if (ctx->db_version < SBK_DB_VERSION_SPLIT_PROFILE_NAMES)
-		query = SBK_QUERY_2;
-	else if (ctx->db_version < SBK_DB_VERSION_RESET_PNI_COLUMN)
-		query = SBK_QUERY_3;
-	else if (ctx->db_version < SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
-		query = SBK_QUERY_4;
-	else
+	if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
 		query = SBK_QUERY_5;
+	else if (ctx->db_version >= SBK_DB_VERSION_RESET_PNI_COLUMN)
+		query = SBK_QUERY_4;
+	else if (ctx->db_version >= SBK_DB_VERSION_SPLIT_PROFILE_NAMES)
+		query = SBK_QUERY_3;
+	else if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_IDS)
+		query = SBK_QUERY_2;
+	else
+		query = SBK_QUERY_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;

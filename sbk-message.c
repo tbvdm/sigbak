@@ -628,12 +628,12 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 	}
 
-	if (ctx->db_version < SBK_DB_VERSION_REACTION_REFACTOR) {
-		if (sbk_get_reactions_from_column(ctx, &msg->reactions, stm,
-		    SBK_COLUMN_REACTIONS) == -1)
+	if (ctx->db_version >= SBK_DB_VERSION_REACTION_REFACTOR) {
+		if (sbk_get_reactions_from_table(ctx, msg) == -1)
 			goto error;
 	} else {
-		if (sbk_get_reactions_from_table(ctx, msg) == -1)
+		if (sbk_get_reactions_from_column(ctx, &msg->reactions, stm,
+		    SBK_COLUMN_REACTIONS) == -1)
 			goto error;
 	}
 
@@ -685,26 +685,26 @@ sbk_get_messages_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
-		query = SBK_QUERY_1;
-	else if (ctx->db_version < SBK_DB_VERSION_REACTIONS)
-		query = SBK_QUERY_2;
-	else if (ctx->db_version < SBK_DB_VERSION_MENTIONS)
-		query = SBK_QUERY_3;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_QUERY_4;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
-		query = SBK_QUERY_5;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
-		query = SBK_QUERY_6;
-	else if (ctx->db_version <
+	if (ctx->db_version >=
 	    SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
-		query = SBK_QUERY_7;
-	else
 		query = SBK_QUERY_8;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+		query = SBK_QUERY_7;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
+		query = SBK_QUERY_6;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
+		query = SBK_QUERY_5;
+	else if (ctx->db_version >= SBK_DB_VERSION_MENTIONS)
+		query = SBK_QUERY_4;
+	else if (ctx->db_version >= SBK_DB_VERSION_REACTIONS)
+		query = SBK_QUERY_3;
+	else if (ctx->db_version >= SBK_DB_VERSION_QUOTED_REPLIES)
+		query = SBK_QUERY_2;
+	else
+		query = SBK_QUERY_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;

@@ -90,13 +90,13 @@ sbk_get_threads(struct sbk_ctx *ctx)
 
 	SIMPLEQ_INIT(lst);
 
-	if (ctx->db_version < SBK_DB_VERSION_THREAD_AUTOINCREMENT)
-		query = SBK_QUERY_1;
-	else if (ctx->db_version <
+	if (ctx->db_version >=
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
+		query = SBK_QUERY_3;
+	else if (ctx->db_version >= SBK_DB_VERSION_THREAD_AUTOINCREMENT)
 		query = SBK_QUERY_2;
 	else
-		query = SBK_QUERY_3;
+		query = SBK_QUERY_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		goto error;

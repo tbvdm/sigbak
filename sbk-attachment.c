@@ -285,13 +285,13 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version < SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_QUERY_THREAD_1;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+		query = SBK_QUERY_THREAD_3;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_QUERY_THREAD_2;
 	else
-		query = SBK_QUERY_THREAD_3;
+		query = SBK_QUERY_THREAD_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return NULL;
@@ -313,16 +313,15 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (msg->id.type != SBK_MESSAGE_MMS)
 		return 0;
 
-	if (ctx->db_version < SBK_DB_VERSION_QUOTED_REPLIES)
-		query = SBK_QUERY_MESSAGE_1;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_QUERY_MESSAGE_2;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
-		query = SBK_QUERY_MESSAGE_3;
-	else
+	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_QUERY_MESSAGE_4;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
+		query = SBK_QUERY_MESSAGE_3;
+	else if (ctx->db_version >= SBK_DB_VERSION_QUOTED_REPLIES)
+		query = SBK_QUERY_MESSAGE_2;
+	else
+		query = SBK_QUERY_MESSAGE_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
@@ -345,13 +344,13 @@ sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
 	sqlite3_stmt	*stm;
 	const char	*query;
 
-	if (ctx->db_version < SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
-		query = SBK_QUERY_QUOTE_1;
-	else if (ctx->db_version <
-	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+		query = SBK_QUERY_QUOTE_3;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
 		query = SBK_QUERY_QUOTE_2;
 	else
-		query = SBK_QUERY_QUOTE_3;
+		query = SBK_QUERY_QUOTE_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;

@@ -150,10 +150,10 @@ sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 	sqlite3_stmt	*stm;
 	const char	*query;
 
-	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
-		query = SBK_QUERY_1;
-	else
+	if (ctx->db_version >= SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
 		query = SBK_QUERY_2;
+	else
+		query = SBK_QUERY_1;
 
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
