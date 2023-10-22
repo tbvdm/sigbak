@@ -31,7 +31,8 @@
 	"p.unique_id, "							\
 	"m.date, "							\
 	"m.date_received, "						\
-	"0 AS quote "							\
+	"0 AS quote, "							\
+	"NULL AS latest_revision_id "					\
 	"FROM part AS p "						\
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
@@ -46,7 +47,8 @@
 	"p.file_name, "							\
 	"p.unique_id, "							\
 	"m.date, "							\
-	"m.date_received "						\
+	"m.date_received, "						\
+	"NULL AS latest_revision_id "					\
 	"FROM part AS p "						\
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
@@ -64,13 +66,33 @@
 	"p.file_name, "							\
 	"p.unique_id, "							\
 	"m.date_sent, "							\
-	"m.date_received "						\
+	"m.date_received, "						\
+	"NULL AS latest_revision_id "					\
 	"FROM part AS p "						\
 	"LEFT JOIN mms AS m "						\
 	"ON p.mid = m._id "
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
 #define SBK_SELECT_4							\
+	"SELECT "							\
+	"p._id, "							\
+	"p.ct, "							\
+	"p.pending_push, "						\
+	"p.data_size, "							\
+	"p.file_name, "							\
+	"p.unique_id, "							\
+	"m.date_sent, "							\
+	"m.date_received, "						\
+	"NULL AS latest_revision_id "					\
+	"FROM part AS p "						\
+	"LEFT JOIN message AS m "					\
+	"ON p.mid = m._id "
+
+/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+#define SBK_SELECT_5							\
 	"SELECT "							\
 	"p._id, "							\
 	"p.ct, "							\
@@ -86,11 +108,13 @@
 
 /* For database versions < REACTION_FOREIGN_KEY_MIGRATION */
 #define SBK_WHERE_THREAD_1						\
-	"WHERE p.mid IN (SELECT _id FROM mms WHERE thread_id = ?) "
+	"WHERE p.mid IN (SELECT _id FROM mms WHERE thread_id = ?) "	\
+	"AND latest_revision_id IS NULL "
 
 /* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
 #define SBK_WHERE_THREAD_2						\
-	"WHERE p.mid IN (SELECT _id FROM message WHERE thread_id = ?) "
+	"WHERE p.mid IN (SELECT _id FROM message WHERE thread_id = ?) "	\
+	"AND latest_revision_id IS NULL "
 
 #define SBK_WHERE_MESSAGE						\
 	"WHERE p.mid = ? AND quote = 0 "
@@ -116,9 +140,18 @@
 	SBK_WHERE_THREAD_1						\
 	SBK_ORDER
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION
+ * MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+ */
 #define SBK_QUERY_THREAD_3						\
 	SBK_SELECT_4							\
+	SBK_WHERE_THREAD_2						\
+	SBK_ORDER
+
+/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+#define SBK_QUERY_THREAD_4						\
+	SBK_SELECT_5							\
 	SBK_WHERE_THREAD_2						\
 	SBK_ORDER
 
@@ -285,7 +318,11 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+	if (ctx->db_version >=
+	    SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
+		query = SBK_QUERY_THREAD_4;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_QUERY_THREAD_3;
 	else if (ctx->db_version >=
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
