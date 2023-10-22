@@ -487,26 +487,28 @@ sbk_get_body(struct sbk_message *msg)
 }
 
 static void
-sbk_remove_attachment(struct sbk_message *msg, struct sbk_attachment *att)
+sbk_remove_attachment(struct sbk_attachment_list **lst,
+    struct sbk_attachment *att)
 {
-	TAILQ_REMOVE(msg->attachments, att, entries);
+	TAILQ_REMOVE(*lst, att, entries);
 	sbk_free_attachment(att);
-	if (TAILQ_EMPTY(msg->attachments)) {
-		sbk_free_attachment_list(msg->attachments);
-		msg->attachments = NULL;
+	if (TAILQ_EMPTY(*lst)) {
+		sbk_free_attachment_list(*lst);
+		*lst = NULL;
 	}
 }
 
 static int
-sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+sbk_get_long_message(struct sbk_ctx *ctx, char **text,
+    struct sbk_attachment_list **lst)
 {
 	struct sbk_attachment	*att;
-	char			*longmsg;
+	char			*longtext;
 	int			 found;
 
 	/* Look for a long-message attachment */
 	found = 0;
-	TAILQ_FOREACH(att, msg->attachments, entries)
+	TAILQ_FOREACH(att, *lst, entries)
 		if (att->content_type != NULL &&
 		    strcmp(att->content_type, SBK_LONG_TEXT_TYPE) == 0) {
 			found = 1;
@@ -517,19 +519,18 @@ sbk_get_long_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 		return 0;
 
 	if (att->file == NULL) {
-		warnx("Long-message attachment for message %d-%d not "
-		    "available in backup", msg->id.type, msg->id.rowid);
+		warnx("Long-message attachment not available in backup");
 		return 0;
 	}
 
-	if ((longmsg = sbk_get_file_data_as_string(ctx, att->file)) == NULL)
+	if ((longtext = sbk_get_file_data_as_string(ctx, att->file)) == NULL)
 		return -1;
 
-	free(msg->text);
-	msg->text = longmsg;
+	free(*text);
+	*text = longtext;
 
 	/* Do not expose the long-message attachment */
-	sbk_remove_attachment(msg, att);
+	sbk_remove_attachment(lst, att);
 
 	return 0;
 }
@@ -562,6 +563,9 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		goto error;
 
 	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
+		goto error;
+
+	if (sbk_get_long_message(ctx, &qte->text, &qte->attachments) == -1)
 		goto error;
 
 	if (sbk_get_mentions_for_quote(ctx, &qte->mentions, stm,
@@ -620,7 +624,8 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_attachments_for_message(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_get_long_message(ctx, msg) == -1)
+		if (sbk_get_long_message(ctx, &msg->text, &msg->attachments) ==
+		    -1)
 			goto error;
 
 		if (sbk_get_mentions_for_message(ctx, msg) == -1)
