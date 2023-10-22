@@ -125,7 +125,7 @@ sbk_unpack_quote_mention_list_message(const void *buf, size_t len)
 
 int
 sbk_get_mentions_for_quote(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
-    sqlite3_stmt *stm, int idx, struct sbk_message_id *mid)
+    sqlite3_stmt *stm, int idx)
 {
 	Signal__BodyRangeList	*msg;
 	struct sbk_mention	*mnt;
@@ -167,17 +167,17 @@ sbk_get_mentions_for_quote(struct sbk_ctx *ctx, struct sbk_mention_list **lst,
 			continue;
 
 		if (msg->ranges[i]->mentionuuid == NULL) {
-			warnx("Quoted mention without uuid in message %d-%d",
-			    mid->type, mid->rowid);
-			continue;
+			warnx("Quoted mention without uuid");
+			goto error;
 		}
 
 		rcp = sbk_get_recipient_from_aci(ctx,
 		    msg->ranges[i]->mentionuuid);
-		if (rcp == NULL)
+		if (rcp == NULL) {
 			warnx("Cannot find recipient for quoted mention uuid "
-			    "%s in message %d-%d", msg->ranges[i]->mentionuuid,
-			    mid->type, mid->rowid);
+			    "%s", msg->ranges[i]->mentionuuid);
+			goto error;
+		}
 
 		if ((mnt = malloc(sizeof *mnt)) == NULL) {
 			warn(NULL);
@@ -199,8 +199,7 @@ error:
 }
 
 int
-sbk_insert_mentions(char **text, struct sbk_mention_list *lst,
-    struct sbk_message_id *mid)
+sbk_insert_mentions(char **text, struct sbk_mention_list *lst)
 {
 	struct sbk_mention *mnt;
 	char		*newtext, *newtextpos, *placeholderpos, *textpos;
@@ -268,7 +267,7 @@ sbk_insert_mentions(char **text, struct sbk_mention_list *lst,
 	return 0;
 
 error:
-	warnx("Invalid mention in message %d-%d", mid->type, mid->rowid);
+	warnx("Invalid mention");
 	free(newtext);
 	return 0;
 }

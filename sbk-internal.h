@@ -137,10 +137,8 @@ Signal__BackupFrame *sbk_get_first_frame(struct sbk_ctx *);
 void	 sbk_free_mention_list(struct sbk_mention_list *);
 int	 sbk_get_mentions_for_message(struct sbk_ctx *, struct sbk_message *);
 int	 sbk_get_mentions_for_quote(struct sbk_ctx *,
-	    struct sbk_mention_list **, sqlite3_stmt *, int,
-	    struct sbk_message_id *);
-int	 sbk_insert_mentions(char **, struct sbk_mention_list *,
-	    struct sbk_message_id *);
+	    struct sbk_mention_list **, sqlite3_stmt *, int);
+int	 sbk_insert_mentions(char **, struct sbk_mention_list *);
 
 /* sbk-reaction.c */
 void	 sbk_free_reaction_list(struct sbk_reaction_list *);

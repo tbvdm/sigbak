@@ -565,11 +565,17 @@ sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
 		goto error;
 
 	if (sbk_get_mentions_for_quote(ctx, &qte->mentions, stm,
-	    SBK_COLUMN_QUOTE_MENTIONS, &msg->id) == -1)
+	    SBK_COLUMN_QUOTE_MENTIONS) == -1) {
+		warnx("Cannot get mentions for quote in message %d-%d",
+		    msg->id.type, msg->id.rowid);
 		goto error;
+	}
 
-	if (sbk_insert_mentions(&qte->text, qte->mentions, &msg->id) == -1)
+	if (sbk_insert_mentions(&qte->text, qte->mentions) == -1) {
+		warnx("Cannot insert mentions in quote in message %d-%d",
+		    msg->id.type, msg->id.rowid);
 		goto error;
+	}
 
 	msg->quote = qte;
 	return 0;
@@ -620,9 +626,11 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_mentions_for_message(ctx, msg) == -1)
 			goto error;
 
-		if (sbk_insert_mentions(&msg->text, msg->mentions, &msg->id) ==
-		    -1)
+		if (sbk_insert_mentions(&msg->text, msg->mentions) == -1) {
+			warnx("Cannot insert mentions in message %d-%d",
+			    msg->id.type, msg->id.rowid);
 			goto error;
+		}
 
 		if (sbk_get_quote(ctx, msg, stm) == -1)
 			goto error;
