@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: install dependencies
       run: |
@@ -42,7 +42,7 @@ jobs:
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: install dependencies
       # Also install make because Xcode provides GNU make 3.81 which is too old
@@ -62,13 +62,12 @@ jobs:
         ./sigbak check -p sigbak.c sigbak.c
         test $? = 1
 
-  # https://github.com/vmactions/dragonflybsd-vm
   dragonfly:
     runs-on: macos-12
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: run vm
       uses: vmactions/dragonflybsd-vm@v0
@@ -82,21 +81,20 @@ jobs:
           ./sigbak check -p sigbak.c sigbak.c
           test $? = 1
 
-  # https://github.com/vmactions/freebsd-vm
   freebsd:
     strategy:
       fail-fast: false
       matrix:
         ssl: [libressl, openssl]
 
-    runs-on: macos-12
+    runs-on: ubuntu-22.04
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: run vm
-      uses: vmactions/freebsd-vm@v0
+      uses: vmactions/freebsd-vm@v1
       with:
         usesh: true
         prepare: pkg install -y pkgconf protobuf-c sqlite3 ${{matrix.ssl}}
@@ -107,16 +105,15 @@ jobs:
           ./sigbak check -p sigbak.c sigbak.c
           test $? = 1
 
-  # https://github.com/vmactions/netbsd-vm
   netbsd:
-    runs-on: macos-12
+    runs-on: ubuntu-22.04
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: run vm
-      uses: vmactions/netbsd-vm@v0
+      uses: vmactions/netbsd-vm@v1
       with:
         prepare: pkg_add pkg-config protobuf-c sqlite3
         run: |
@@ -126,13 +123,12 @@ jobs:
           ./sigbak check -p sigbak.c sigbak.c
           test $? = 1
 
-  # https://github.com/vmactions/solaris-vm
   solaris:
     runs-on: macos-12
 
     steps:
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: run vm
       uses: vmactions/solaris-vm@v0
@@ -147,7 +143,6 @@ jobs:
           ./sigbak check -p sigbak.c sigbak.c
           test $? = 1
 
-  # https://github.com/cygwin/cygwin-install-action
   cygwin:
     runs-on: windows-latest
 
@@ -156,7 +151,7 @@ jobs:
       run: git config --global core.autocrlf input
 
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: install Cygwin
       uses: cygwin/cygwin-install-action@master
