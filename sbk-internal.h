@@ -140,6 +140,15 @@ int	 sbk_get_mentions_for_quote(struct sbk_ctx *,
 	    struct sbk_mention_list **, sqlite3_stmt *, int);
 int	 sbk_insert_mentions(char **, struct sbk_mention_list *);
 
+/* sbk-message.c */
+int	 sbk_get_long_message(struct sbk_ctx *, char **,
+	    struct sbk_attachment_list **);
+
+/* sbk-quote.c */
+void	 sbk_free_quote(struct sbk_quote *);
+int	 sbk_get_quote(struct sbk_ctx *, struct sbk_quote **, sqlite3_stmt *,
+	    int, int, int, int, struct sbk_message_id *);
+
 /* sbk-reaction.c */
 void	 sbk_free_reaction_list(struct sbk_reaction_list *);
 int	 sbk_get_reactions_from_column(struct sbk_ctx *,

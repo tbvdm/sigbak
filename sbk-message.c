@@ -324,17 +324,6 @@
 #define SBK_COLUMN_REACTIONS		12
 
 static void
-sbk_free_quote(struct sbk_quote *qte)
-{
-	if (qte != NULL) {
-		free(qte->text);
-		sbk_free_attachment_list(qte->attachments);
-		sbk_free_mention_list(qte->mentions);
-		free(qte);
-	}
-}
-
-static void
 sbk_free_message(struct sbk_message *msg)
 {
 	if (msg != NULL) {
@@ -498,7 +487,7 @@ sbk_remove_attachment(struct sbk_attachment_list **lst,
 	}
 }
 
-static int
+int
 sbk_get_long_message(struct sbk_ctx *ctx, char **text,
     struct sbk_attachment_list **lst)
 {
@@ -536,57 +525,12 @@ sbk_get_long_message(struct sbk_ctx *ctx, char **text,
 }
 
 static int
-sbk_get_quote(struct sbk_ctx *ctx, struct sbk_message *msg, sqlite3_stmt *stm)
+sbk_get_quote_for_message(struct sbk_ctx *ctx, struct sbk_message *msg,
+    sqlite3_stmt *stm)
 {
-	struct sbk_quote *qte;
-
-	if (sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_ID) == 0 &&
-	    sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_AUTHOR) == 0) {
-		/* No quote */
-		return 0;
-	}
-
-	if ((qte = calloc(1, sizeof *qte)) == NULL) {
-		warn(NULL);
-		return -1;
-	}
-
-	qte->id = sqlite3_column_int64(stm, SBK_COLUMN_QUOTE_ID);
-
-	qte->recipient = sbk_get_recipient_from_id_from_column(ctx, stm,
-	    SBK_COLUMN_QUOTE_AUTHOR);
-	if (qte->recipient == NULL)
-		goto error;
-
-	if (sbk_sqlite_column_text_copy(ctx, &qte->text, stm,
-	    SBK_COLUMN_QUOTE_BODY) == -1)
-		goto error;
-
-	if (sbk_get_attachments_for_quote(ctx, qte, &msg->id) == -1)
-		goto error;
-
-	if (sbk_get_long_message(ctx, &qte->text, &qte->attachments) == -1)
-		goto error;
-
-	if (sbk_get_mentions_for_quote(ctx, &qte->mentions, stm,
-	    SBK_COLUMN_QUOTE_MENTIONS) == -1) {
-		warnx("Cannot get mentions for quote in message %d-%d",
-		    msg->id.type, msg->id.rowid);
-		goto error;
-	}
-
-	if (sbk_insert_mentions(&qte->text, qte->mentions) == -1) {
-		warnx("Cannot insert mentions in quote in message %d-%d",
-		    msg->id.type, msg->id.rowid);
-		goto error;
-	}
-
-	msg->quote = qte;
-	return 0;
-
-error:
-	sbk_free_quote(qte);
-	return -1;
+	return sbk_get_quote(ctx, &msg->quote, stm, SBK_COLUMN_QUOTE_ID,
+	    SBK_COLUMN_QUOTE_AUTHOR, SBK_COLUMN_QUOTE_BODY,
+	    SBK_COLUMN_QUOTE_MENTIONS, &msg->id);
 }
 
 static struct sbk_message *
@@ -637,8 +581,11 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 		}
 
-		if (sbk_get_quote(ctx, msg, stm) == -1)
+		if (sbk_get_quote_for_message(ctx, msg, stm) == -1) {
+			warnx("Cannot get quote for message %d-%d",
+			    msg->id.type, msg->id.rowid);
 			goto error;
+		}
 	}
 
 	if (ctx->db_version >= SBK_DB_VERSION_REACTION_REFACTOR) {

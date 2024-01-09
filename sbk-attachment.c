@@ -341,13 +341,14 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	return sbk_get_attachments(ctx, stm);
 }
 
-int
-sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+static int
+sbk_get_attachments_for_message_id(struct sbk_ctx *ctx,
+    struct sbk_attachment_list **lst, struct sbk_message_id *mid)
 {
 	sqlite3_stmt	*stm;
 	const char	*query;
 
-	if (msg->id.type != SBK_MESSAGE_MMS)
+	if (mid->type != SBK_MESSAGE_MMS)
 		return 0;
 
 	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
@@ -363,15 +364,22 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}
 
-	if ((msg->attachments = sbk_get_attachments(ctx, stm)) == NULL)
+	if ((*lst = sbk_get_attachments(ctx, stm)) == NULL)
 		return -1;
 
 	return 0;
+}
+
+int
+sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	return sbk_get_attachments_for_message_id(ctx, &msg->attachments,
+	    &msg->id);
 }
 
 int

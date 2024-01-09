@@ -60,36 +60,31 @@ sbk_get_mention(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	return mnt;
 }
 
-int
-sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+static int
+sbk_get_mentions_for_message_id(struct sbk_ctx *ctx,
+    struct sbk_mention_list **lst, struct sbk_message_id *mid)
 {
 	struct sbk_mention	*mnt;
 	sqlite3_stmt		*stm;
 	int			 ret;
 
-	msg->mentions = NULL;
-
-	if (msg->id.type != SBK_MESSAGE_MMS ||
-	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
-		return 0;
-
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_QUERY) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1)
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1)
 		goto error;
 
-	if ((msg->mentions = malloc(sizeof *msg->mentions)) == NULL) {
+	if ((*lst = malloc(sizeof **lst)) == NULL) {
 		warn(NULL);
 		goto error;
 	}
 
-	SIMPLEQ_INIT(msg->mentions);
+	SIMPLEQ_INIT(*lst);
 
 	while ((ret = sbk_sqlite_step(ctx, stm)) == SQLITE_ROW) {
 		if ((mnt = sbk_get_mention(ctx, stm)) == NULL)
 			goto error;
-		SIMPLEQ_INSERT_TAIL(msg->mentions, mnt, entries);
+		SIMPLEQ_INSERT_TAIL(*lst, mnt, entries);
 	}
 
 	if (ret != SQLITE_DONE)
@@ -99,10 +94,20 @@ sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 	return 0;
 
 error:
-	sbk_free_mention_list(msg->mentions);
-	msg->mentions = NULL;
+	sbk_free_mention_list(*lst);
+	*lst = NULL;
 	sqlite3_finalize(stm);
 	return -1;
+}
+
+int
+sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
+{
+	if (msg->id.type != SBK_MESSAGE_MMS ||
+	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
+		return 0;
+
+	return sbk_get_mentions_for_message_id(ctx, &msg->mentions, &msg->id);
 }
 
 static void
