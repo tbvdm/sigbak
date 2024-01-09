@@ -2,9 +2,9 @@ PROG=		sigbak
 SRCS=		cmd-check-backup.c cmd-dump-backup.c cmd-export-attachments.c \
 		cmd-export-avatars.c cmd-export-database.c \
 		cmd-export-messages.c mime.c sbk-attachment-tree.c \
-		sbk-attachment.c sbk-database.c sbk-file.c sbk-frame.c \
-		sbk-mention.c sbk-message.c sbk-open.c sbk-quote.c \
-		sbk-reaction.c sbk-read.c sbk-recipient-tree.c \
+		sbk-attachment.c sbk-database.c sbk-edit.c sbk-file.c \
+		sbk-frame.c sbk-mention.c sbk-message.c sbk-open.c \
+		sbk-quote.c sbk-reaction.c sbk-read.c sbk-recipient-tree.c \
 		sbk-recipient.c sbk-sqlite.c sbk-thread.c sigbak.c
 PROTOS=		backup.proto database.proto
 

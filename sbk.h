@@ -173,6 +173,19 @@ struct sbk_quote {
 	struct sbk_mention_list *mentions;
 };
 
+struct sbk_edit {
+	int		 revision;
+	uint64_t	 time_sent;
+	uint64_t	 time_recv;
+	char		*text;
+	struct sbk_attachment_list *attachments;
+	struct sbk_mention_list *mentions;
+	struct sbk_quote *quote;
+	TAILQ_ENTRY(sbk_edit) entries;
+};
+
+TAILQ_HEAD(sbk_edit_list, sbk_edit);
+
 struct sbk_message_id {
 	enum {
 		SBK_MESSAGE_SMS,
@@ -193,6 +206,8 @@ struct sbk_message {
 	struct sbk_mention_list *mentions;
 	struct sbk_reaction_list *reactions;
 	struct sbk_quote *quote;
+	struct sbk_edit_list *edits;
+	int		 nedits;
 	SIMPLEQ_ENTRY(sbk_message) entries;
 };
 

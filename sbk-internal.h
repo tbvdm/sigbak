@@ -119,6 +119,8 @@ int	 sbk_insert_attachment_entry(struct sbk_ctx *, Signal__BackupFrame *,
 
 /* sbk-attachment.c */
 void	 sbk_free_attachment(struct sbk_attachment *);
+int	 sbk_get_attachments_for_edit(struct sbk_ctx *, struct sbk_edit *,
+	    struct sbk_message_id *);
 int	 sbk_get_attachments_for_message(struct sbk_ctx *,
 	    struct sbk_message *);
 int	 sbk_get_attachments_for_quote(struct sbk_ctx *, struct sbk_quote *,
@@ -126,6 +128,10 @@ int	 sbk_get_attachments_for_quote(struct sbk_ctx *, struct sbk_quote *,
 
 /* sbk-database.c */
 int	 sbk_create_database(struct sbk_ctx *);
+
+/* sbk-edit.c */
+void	 sbk_free_edit_list(struct sbk_edit_list *);
+int	 sbk_get_edits(struct sbk_ctx *, struct sbk_message *);
 
 /* sbk-file.c */
 char	*sbk_get_file_data_as_string(struct sbk_ctx *, struct sbk_file *);
@@ -135,6 +141,8 @@ Signal__BackupFrame *sbk_get_first_frame(struct sbk_ctx *);
 
 /* sbk-mention.c */
 void	 sbk_free_mention_list(struct sbk_mention_list *);
+int	 sbk_get_mentions_for_edit(struct sbk_ctx *, struct sbk_edit *,
+	    struct sbk_message_id *);
 int	 sbk_get_mentions_for_message(struct sbk_ctx *, struct sbk_message *);
 int	 sbk_get_mentions_for_quote(struct sbk_ctx *,
 	    struct sbk_mention_list **, sqlite3_stmt *, int);

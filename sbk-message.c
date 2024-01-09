@@ -35,6 +35,9 @@
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
 	"NULL, "			/* mms.quote_mentions */	\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM sms "
 
@@ -53,6 +56,9 @@
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
 	"NULL, "			/* mms.quote_mentions */	\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"reactions "							\
 	"FROM sms "
 
@@ -74,6 +80,9 @@
 	"NULL, "			/* mms.quote_author */		\
 	"NULL, "			/* mms.quote_body */		\
 	"NULL, "			/* mms.quote_mentions */	\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM sms "
 
@@ -92,6 +101,9 @@
 	"NULL, "			/* quote_author */		\
 	"NULL, "			/* quote_body */		\
 	"NULL, "			/* quote_mentions */		\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM mms "
 
@@ -110,6 +122,9 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"NULL, "			/* quote_mentions */		\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM mms "
 
@@ -128,6 +143,9 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"NULL, "			/* quote_mentions */		\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"reactions "							\
 	"FROM mms "
 
@@ -146,6 +164,9 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"quote_mentions, "						\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"reactions "							\
 	"FROM mms "
 
@@ -167,6 +188,9 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"quote_mentions, "						\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM mms "
 
@@ -195,6 +219,9 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"quote_mentions, "						\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
 	"NULL "				/* reactions */			\
 	"FROM message "
 
@@ -228,11 +255,14 @@
 	"quote_author, "						\
 	"quote_body, "							\
 	"quote_mentions, "						\
+	"latest_revision_id, "						\
+	"original_message_id, "						\
+	"revision_number, "						\
 	"NULL "				/* reactions */			\
 	"FROM message "
 
 #define SBK_WHERE_THREAD						\
-	"WHERE thread_id = ?1 "
+	"WHERE thread_id = ?1 AND latest_revision_id IS NULL "
 
 #define SBK_ORDER							\
 	"ORDER BY date_received"
@@ -321,7 +351,14 @@
 #define SBK_COLUMN_QUOTE_AUTHOR		9
 #define SBK_COLUMN_QUOTE_BODY		10
 #define SBK_COLUMN_QUOTE_MENTIONS	11
-#define SBK_COLUMN_REACTIONS		12
+#define SBK_COLUMN_LATEST_REVISION_ID	12
+#define SBK_COLUMN_ORIGINAL_MESSAGE_ID	13
+#define SBK_COLUMN_REVISION_NUMBER	14
+#define SBK_COLUMN_REACTIONS		15
+
+#define SBK_MESSAGE_HAS_EDITS(stm)					\
+	(sqlite3_column_type((stm), SBK_COLUMN_ORIGINAL_MESSAGE_ID)	\
+	    != SQLITE_NULL)
 
 static void
 sbk_free_message(struct sbk_message *msg)
@@ -332,6 +369,7 @@ sbk_free_message(struct sbk_message *msg)
 		sbk_free_mention_list(msg->mentions);
 		sbk_free_reaction_list(msg->reactions);
 		sbk_free_quote(msg->quote);
+		sbk_free_edit_list(msg->edits);
 		free(msg);
 	}
 }
@@ -595,6 +633,12 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		if (sbk_get_reactions_from_column(ctx, &msg->reactions, stm,
 		    SBK_COLUMN_REACTIONS) == -1)
 			goto error;
+	}
+
+	if (SBK_MESSAGE_HAS_EDITS(stm) && sbk_get_edits(ctx, msg) == -1) {
+		warnx("Cannot get edits for message %d-%d", msg->id.type,
+		    msg->id.rowid);
+		goto error;
 	}
 
 	return msg;

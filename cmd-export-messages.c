@@ -576,6 +576,33 @@ text_write_quote(FILE *fp, struct sbk_quote *qte)
 	}
 }
 
+static void
+text_write_edits(FILE *fp, struct sbk_message *msg)
+{
+	struct sbk_attachment	*att;
+	struct sbk_edit		*edit;
+
+	TAILQ_FOREACH_REVERSE(edit, msg->edits, sbk_edit_list, entries) {
+		fprintf(fp, "Version: %d\n", edit->revision + 1);
+		text_write_time_field(fp, "Sent", edit->time_sent);
+
+		if (!sbk_is_outgoing_message(msg))
+			text_write_time_field(fp, "Received", edit->time_recv);
+
+		if (edit->attachments != NULL)
+			TAILQ_FOREACH(att, edit->attachments, entries)
+				text_write_attachment_field(fp, att);
+
+		if (edit->quote != NULL)
+			text_write_quote(fp, edit->quote);
+
+		if (edit->text != NULL && *edit->text != '\0')
+			fprintf(fp, "\n%s\n\n", edit->text);
+		else
+			putc('\n', fp);
+	}
+}
+
 static int
 text_write_message(FILE *fp, struct sbk_message *msg)
 {
@@ -602,13 +629,18 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 			    rct->emoji,
 			    sbk_get_recipient_display_name(rct->recipient));
 
-	if (msg->quote != NULL)
-		text_write_quote(fp, msg->quote);
+	if (msg->edits != NULL) {
+		fprintf(fp, "Edited: %d versions\n\n", msg->nedits);
+		text_write_edits(fp, msg);
+	} else {
+		if (msg->quote != NULL)
+			text_write_quote(fp, msg->quote);
 
-	if (msg->text != NULL && *msg->text != '\0')
-		fprintf(fp, "\n%s\n\n", msg->text);
-	else
-		fputs("\n", fp);
+		if (msg->text != NULL && *msg->text != '\0')
+			fprintf(fp, "\n%s\n\n", msg->text);
+		else
+			fputs("\n", fp);
+	}
 
 	return 0;
 }

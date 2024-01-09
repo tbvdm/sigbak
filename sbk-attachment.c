@@ -383,6 +383,14 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 }
 
 int
+sbk_get_attachments_for_edit(struct sbk_ctx *ctx, struct sbk_edit *edit,
+    struct sbk_message_id *mid)
+{
+	return sbk_get_attachments_for_message_id(ctx, &edit->attachments,
+	    mid);
+}
+
+int
 sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
     struct sbk_message_id *mid)
 {
