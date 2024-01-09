@@ -5,12 +5,12 @@ sigbak
 app][2]. It can be used to export messages, attachments and other data.
 
 For example, the following two commands will export all messages and
-attachments from the backup `signal-2022-01-23-12-34-45.backup`. Messages will
+attachments from the backup `signal-2022-01-23-12-34-56.backup`. Messages will
 be exported to the `messages` directory and attachments to the `attachments`
 directory:
 
-	sigbak export-messages signal-2022-01-23-12-34-45.backup messages
-	sigbak export-attachments signal-2022-01-23-12-34-45.backup attachments
+	sigbak export-messages signal-2022-01-23-12-34-56.backup messages
+	sigbak export-attachments signal-2022-01-23-12-34-56.backup attachments
 
 The complete documentation is available in the `sigbak.1` manual page. You can
 also [read it online][3].
