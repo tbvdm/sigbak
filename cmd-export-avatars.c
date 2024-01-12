@@ -34,7 +34,6 @@ const struct cmd_entry cmd_export_avatars_entry = {
 	.name = "export-avatars",
 	.alias = "avt",
 	.usage = "[-p passfile] backup [directory]",
-	.oldname = "avatars",
 	.exec = cmd_export_avatars
 };
 
@@ -42,7 +41,6 @@ const struct cmd_entry cmd_export_stickers_entry = {
 	.name = "export-stickers",
 	.alias = "stk",
 	.usage = "[-p passfile] backup [directory]",
-	.oldname = "stickers",
 	.exec = cmd_export_stickers
 };
 

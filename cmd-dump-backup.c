@@ -32,7 +32,6 @@ const struct cmd_entry cmd_dump_backup_entry = {
 	.name = "dump-backup",
 	.alias = "dump",
 	.usage = "[-p passfile] backup",
-	.oldname = NULL,
 	.exec = cmd_dump_backup
 };
 

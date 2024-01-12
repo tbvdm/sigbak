@@ -28,7 +28,6 @@ const struct cmd_entry cmd_export_database_entry = {
 	.name = "export-database",
 	.alias = "db",
 	.usage = "[-p passfile] backup database",
-	.oldname = "sqlite",
 	.exec = cmd_export_database
 };
 
