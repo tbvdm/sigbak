@@ -63,14 +63,14 @@ jobs:
         test $? = 1
 
   dragonfly:
-    runs-on: macos-12
+    runs-on: ubuntu-latest
 
     steps:
     - name: checkout
       uses: actions/checkout@v4
 
     - name: run vm
-      uses: vmactions/dragonflybsd-vm@v0
+      uses: vmactions/dragonflybsd-vm@v1
       with:
         usesh: true
         prepare: pkg install -y openssl pkgconf protobuf-c sqlite3
@@ -87,7 +87,7 @@ jobs:
       matrix:
         ssl: [libressl, openssl]
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
     - name: checkout
@@ -106,7 +106,7 @@ jobs:
           test $? = 1
 
   netbsd:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
     - name: checkout
@@ -124,14 +124,14 @@ jobs:
           test $? = 1
 
   solaris:
-    runs-on: macos-12
+    runs-on: ubuntu-latest
 
     steps:
     - name: checkout
       uses: actions/checkout@v4
 
     - name: run vm
-      uses: vmactions/solaris-vm@v0
+      uses: vmactions/solaris-vm@v1
       with:
         prepare: |
           pkgutil -iy gcc5core gmake libprotobuf_c_dev libsqlite3_dev \
