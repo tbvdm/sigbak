@@ -23,7 +23,7 @@
 /* For database versions < REACTIONS */
 #define SBK_SELECT_SMS_1						\
 	"SELECT "							\
-	"0, "								\
+	STRINGIFY(SBK_SMS_TABLE) ", "					\
 	"_id, "								\
 	"date_sent, "							\
 	"date AS date_received, "					\
@@ -44,7 +44,7 @@
 /* For database versions [REACTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
 #define SBK_SELECT_SMS_2						\
 	"SELECT "							\
-	"0, "								\
+	STRINGIFY(SBK_SMS_TABLE) ", "					\
 	"_id, "								\
 	"date_sent, "							\
 	"date AS date_received, "					\
@@ -68,7 +68,7 @@
  */
 #define SBK_SELECT_SMS_3						\
 	"SELECT "							\
-	"0, "								\
+	STRINGIFY(SBK_SMS_TABLE) ", "					\
 	"_id, "								\
 	"date_sent, "							\
 	"date_received, "						\
@@ -89,7 +89,7 @@
 /* For database versions < QUOTED_REPLIES */
 #define SBK_SELECT_MMS_1						\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_MMS_TABLE) ", "					\
 	"_id, "								\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
@@ -110,7 +110,7 @@
 /* For database versions [QUOTED_REPLIES, REACTIONS) */
 #define SBK_SELECT_MMS_2						\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_MMS_TABLE) ", "					\
 	"_id, "								\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
@@ -131,7 +131,7 @@
 /* For database versions [REACTIONS, MENTIONS) */
 #define SBK_SELECT_MMS_3						\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_MMS_TABLE) ", "					\
 	"_id, "								\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
@@ -152,7 +152,7 @@
 /* For database versions [MENTIONS, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
 #define SBK_SELECT_MMS_4						\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_MMS_TABLE) ", "					\
 	"_id, "								\
 	"date, "			/* date_sent */			\
 	"date_received, "						\
@@ -176,7 +176,7 @@
  */
 #define SBK_SELECT_MMS_5						\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_MMS_TABLE) ", "					\
 	"_id, "								\
 	"date_sent, "							\
 	"date_received, "						\
@@ -199,7 +199,24 @@
  * REACTION_FOREIGN_KEY_MIGRATION)
  */
 #define SBK_SELECT_1							\
-	SBK_SELECT_MMS_5
+	"SELECT "							\
+	STRINGIFY(SBK_SINGLE_TABLE) ", "				\
+	"_id, "								\
+	"date_sent, "							\
+	"date_received, "						\
+	"thread_id, "							\
+	"recipient_id, "						\
+	"type, "							\
+	"body, "							\
+	"quote_id, "							\
+	"quote_author, "						\
+	"quote_body, "							\
+	"quote_mentions, "						\
+	"NULL AS latest_revision_id, "					\
+	"NULL, "			/* original_message_id */	\
+	"0, "				/* revision_number */		\
+	"NULL "				/* reactions */			\
+	"FROM mms "
 
 /*
  * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
@@ -207,7 +224,7 @@
  */
 #define SBK_SELECT_2							\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_SINGLE_TABLE) ", "				\
 	"_id, "								\
 	"date_sent, "							\
 	"date_received, "						\
@@ -234,7 +251,7 @@
  */
 #define SBK_SELECT_3							\
 	"SELECT "							\
-	"1, "								\
+	STRINGIFY(SBK_SINGLE_TABLE) ", "				\
 	"_id, "								\
 	"date_sent, "							\
 	"date_received, "						\
@@ -386,6 +403,20 @@ sbk_free_message_list(struct sbk_message_list *lst)
 		}
 		free(lst);
 	}
+}
+
+const char *
+sbk_message_id_to_string(const struct sbk_message *msg)
+{
+	static char buf[32];
+
+	if (msg->id.table == SBK_SINGLE_TABLE)
+		snprintf(buf, sizeof buf, "%d", msg->id.row_id);
+	else
+		snprintf(buf, sizeof buf, "%d-%d", msg->id.table,
+		    msg->id.row_id);
+
+	return buf;
 }
 
 int
@@ -581,9 +612,8 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		return NULL;
 	}
 
-	msg->id.type = (sqlite3_column_int(stm, SBK_COLUMN_TABLE) == 0) ?
-	    SBK_MESSAGE_SMS : SBK_MESSAGE_MMS;
-	msg->id.rowid = sqlite3_column_int(stm, SBK_COLUMN__ID);
+	msg->id.table = sqlite3_column_int(stm, SBK_COLUMN_TABLE);
+	msg->id.row_id = sqlite3_column_int(stm, SBK_COLUMN__ID);
 
 	msg->recipient = sbk_get_recipient_from_id_from_column(ctx, stm,
 	    SBK_COLUMN_RECIPIENT_ID);
@@ -602,7 +632,7 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	if (sbk_get_body(msg) == -1)
 		goto error;
 
-	if (msg->id.type == SBK_MESSAGE_MMS) {
+	if (msg->id.table != SBK_SMS_TABLE) {
 		if (sbk_get_attachments_for_message(ctx, msg) == -1)
 			goto error;
 
@@ -614,14 +644,14 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 			goto error;
 
 		if (sbk_insert_mentions(&msg->text, msg->mentions) == -1) {
-			warnx("Cannot insert mentions in message %d-%d",
-			    msg->id.type, msg->id.rowid);
+			warnx("Cannot insert mentions in message %s",
+			    sbk_message_id_to_string(msg));
 			goto error;
 		}
 
 		if (sbk_get_quote_for_message(ctx, msg, stm) == -1) {
-			warnx("Cannot get quote for message %d-%d",
-			    msg->id.type, msg->id.rowid);
+			warnx("Cannot get quote for message %s",
+			    sbk_message_id_to_string(msg));
 			goto error;
 		}
 	}
@@ -636,8 +666,8 @@ sbk_get_message(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	}
 
 	if (SBK_MESSAGE_HAS_EDITS(stm) && sbk_get_edits(ctx, msg) == -1) {
-		warnx("Cannot get edits for message %d-%d", msg->id.type,
-		    msg->id.rowid);
+		warnx("Cannot get edits for message %s",
+		    sbk_message_id_to_string(msg));
 		goto error;
 	}
 

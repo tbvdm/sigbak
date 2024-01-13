@@ -69,8 +69,7 @@ struct sbk_file {
 };
 
 struct sbk_attachment_entry {
-	int64_t		 rowid;
-	int64_t		 attachmentid;
+	struct sbk_attachment_id id;
 	struct sbk_file	*file;
 	RB_ENTRY(sbk_attachment_entry) entries;
 };
@@ -113,7 +112,8 @@ struct sbk_ctx {
 
 /* sbk-attachment-tree.c */
 void	 sbk_free_attachment_tree(struct sbk_ctx *);
-struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *, int64_t, int64_t);
+struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *,
+	    const struct sbk_attachment_id *);
 int	 sbk_insert_attachment_entry(struct sbk_ctx *, Signal__BackupFrame *,
 	    struct sbk_file *);
 

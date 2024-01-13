@@ -98,8 +98,8 @@ sbk_get_edit(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	edit->time_sent = sqlite3_column_int64(stm, SBK_COLUMN_DATE_SENT);
 	edit->time_recv = sqlite3_column_int64(stm, SBK_COLUMN_DATE_RECEIVED);
 
-	mid.type = SBK_MESSAGE_MMS;
-	mid.rowid = sqlite3_column_int(stm, SBK_COLUMN__ID);
+	mid.table = SBK_SINGLE_TABLE;
+	mid.row_id = sqlite3_column_int(stm, SBK_COLUMN__ID);
 
 	if (sbk_get_attachments_for_edit(ctx, edit, &mid) == -1)
 		goto error;
@@ -137,7 +137,7 @@ sbk_get_edits(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_QUERY) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1)
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.row_id) == -1)
 		goto error;
 
 	if ((msg->edits = malloc(sizeof *msg->edits)) == NULL) {

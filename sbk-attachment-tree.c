@@ -41,14 +41,14 @@ static int
 sbk_cmp_attachment_entries(struct sbk_attachment_entry *a,
     struct sbk_attachment_entry *b)
 {
-	if (a->rowid < b->rowid)
+	if (a->id.row_id < b->id.row_id)
 		return -1;
 
-	if (a->rowid > b->rowid)
+	if (a->id.row_id > b->id.row_id)
 		return 1;
 
-	return (a->attachmentid < b->attachmentid) ? -1 :
-	    (a->attachmentid > b->attachmentid);
+	return (a->id.unique_id < b->id.unique_id) ? -1 :
+	    (a->id.unique_id > b->id.unique_id);
 }
 
 int
@@ -70,21 +70,20 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 		return -1;
 	}
 
-	entry->rowid = frm->attachment->rowid;
-	entry->attachmentid = frm->attachment->attachmentid;
+	entry->id.row_id = frm->attachment->rowid;
+	entry->id.unique_id = frm->attachment->attachmentid;
 	entry->file = file;
 	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
 	return 0;
 }
 
 struct sbk_file *
-sbk_get_attachment_file(struct sbk_ctx *ctx, int64_t rowid,
-    int64_t attachmentid)
+sbk_get_attachment_file(struct sbk_ctx *ctx,
+    const struct sbk_attachment_id *id)
 {
 	struct sbk_attachment_entry find, *result;
 
-	find.rowid = rowid;
-	find.attachmentid = attachmentid;
+	find.id = *id;
 	result = RB_FIND(sbk_attachment_tree, &ctx->attachments, &find);
 	return (result != NULL) ? result->file : NULL;
 }

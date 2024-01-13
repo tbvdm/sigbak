@@ -162,8 +162,8 @@ get_file(int dfd, struct sbk_attachment *att, int flags)
 	}
 
 	if (flags & FLAG_FILENAME_ID) {
-		if (asprintf(&tmp, "%" PRIu64 "-%" PRIu64 " %s", att->rowid,
-		    att->attachmentid, name) == -1) {
+		if (asprintf(&tmp, "%s %s",
+		    sbk_attachment_id_to_string(att), name) == -1) {
 			warnx("asprintf() failed");
 			free(name);
 			return NULL;

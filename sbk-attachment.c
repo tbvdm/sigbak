@@ -16,6 +16,7 @@
 
 #include <err.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "sbk-internal.h"
@@ -236,6 +237,16 @@ sbk_free_attachment_list(struct sbk_attachment_list *lst)
 	}
 }
 
+const char *
+sbk_attachment_id_to_string(const struct sbk_attachment *att)
+{
+	static char buf[48];
+
+	snprintf(buf, sizeof buf, "%" PRId64 "-%" PRId64, att->id.row_id,
+	    att->id.unique_id);
+	return buf;
+}
+
 static struct sbk_attachment *
 sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
@@ -254,21 +265,20 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	    SBK_COLUMN_CT) == -1)
 		goto error;
 
-	att->rowid = sqlite3_column_int64(stm, SBK_COLUMN__ID);
-	att->attachmentid = sqlite3_column_int64(stm, SBK_COLUMN_UNIQUE_ID);
+	att->id.row_id = sqlite3_column_int64(stm, SBK_COLUMN__ID);
+	att->id.unique_id = sqlite3_column_int64(stm, SBK_COLUMN_UNIQUE_ID);
 	att->status = sqlite3_column_int(stm, SBK_COLUMN_PENDING_PUSH);
 	att->size = sqlite3_column_int64(stm, SBK_COLUMN_DATA_SIZE);
 	att->time_sent = sqlite3_column_int64(stm, SBK_COLUMN_DATE_SENT);
 	att->time_recv = sqlite3_column_int64(stm, SBK_COLUMN_DATE_RECEIVED);
-	att->file = sbk_get_attachment_file(ctx, att->rowid,
-	    att->attachmentid);
+	att->file = sbk_get_attachment_file(ctx, &att->id);
 
 	if (att->file == NULL)
-		warnx("Attachment %" PRId64 "-%" PRId64 " not available in "
-		    "backup", att->rowid, att->attachmentid);
+		warnx("Attachment %s not available in backup",
+		    sbk_attachment_id_to_string(att));
 	else if (att->size != att->file->len)
-		warnx("Attachment %" PRId64 "-%" PRId64 " has inconsistent "
-		    "size", att->rowid, att->attachmentid);
+		warnx("Attachment %s has inconsistent size",
+		    sbk_attachment_id_to_string(att));
 
 	return att;
 
@@ -348,7 +358,7 @@ sbk_get_attachments_for_message_id(struct sbk_ctx *ctx,
 	sqlite3_stmt	*stm;
 	const char	*query;
 
-	if (mid->type != SBK_MESSAGE_MMS)
+	if (mid->table == SBK_SMS_TABLE)
 		return 0;
 
 	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
@@ -364,7 +374,7 @@ sbk_get_attachments_for_message_id(struct sbk_ctx *ctx,
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->row_id) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}
@@ -408,7 +418,7 @@ sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->row_id) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}

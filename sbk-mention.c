@@ -71,7 +71,7 @@ sbk_get_mentions_for_message_id(struct sbk_ctx *ctx,
 	if (sbk_sqlite_prepare(ctx, &stm, SBK_QUERY) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->rowid) == -1)
+	if (sbk_sqlite_bind_int(ctx, stm, 1, mid->row_id) == -1)
 		goto error;
 
 	if ((*lst = malloc(sizeof **lst)) == NULL) {
@@ -103,7 +103,7 @@ error:
 int
 sbk_get_mentions_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 {
-	if (msg->id.type != SBK_MESSAGE_MMS ||
+	if (msg->id.table == SBK_SMS_TABLE ||
 	    ctx->db_version < SBK_DB_VERSION_MENTIONS)
 		return 0;
 
