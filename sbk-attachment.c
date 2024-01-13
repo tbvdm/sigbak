@@ -393,11 +393,10 @@ sbk_get_attachments_for_message(struct sbk_ctx *ctx, struct sbk_message *msg)
 }
 
 int
-sbk_get_attachments_for_edit(struct sbk_ctx *ctx, struct sbk_edit *edit,
-    struct sbk_message_id *mid)
+sbk_get_attachments_for_edit(struct sbk_ctx *ctx, struct sbk_edit *edit)
 {
 	return sbk_get_attachments_for_message_id(ctx, &edit->attachments,
-	    mid);
+	    &edit->id);
 }
 
 int

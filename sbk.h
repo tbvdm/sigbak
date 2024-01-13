@@ -177,7 +177,16 @@ struct sbk_quote {
 	struct sbk_mention_list *mentions;
 };
 
+struct sbk_message_id {
+#define SBK_SMS_TABLE		0
+#define SBK_MMS_TABLE		1
+#define SBK_SINGLE_TABLE	2
+	int		 table;
+	int		 row_id;
+};
+
 struct sbk_edit {
+	struct sbk_message_id id;
 	int		 revision;
 	uint64_t	 time_sent;
 	uint64_t	 time_recv;
@@ -189,14 +198,6 @@ struct sbk_edit {
 };
 
 TAILQ_HEAD(sbk_edit_list, sbk_edit);
-
-struct sbk_message_id {
-#define SBK_SMS_TABLE		0
-#define SBK_MMS_TABLE		1
-#define SBK_SINGLE_TABLE	2
-	int		 table;
-	int		 row_id;
-};
 
 struct sbk_message {
 	struct sbk_message_id id;
