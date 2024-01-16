@@ -179,3 +179,35 @@ jobs:
         set +e
         sigbak check -p sigbak.c sigbak.c
         test $? = 1
+
+  wsl:
+    runs-on: windows-latest
+
+    steps:
+    - name: git-config
+      run: git config --global core.autocrlf input
+
+    - name: checkout
+      uses: actions/checkout@v4
+
+    - name: setup-wsl
+      uses: Vampire/setup-wsl@v2
+      with:
+        additional-packages: >
+          build-essential libprotobuf-c-dev libsqlite3-dev libssl-dev
+          pkg-config protobuf-c-compiler
+
+    - name: wsl-status
+      run: wsl --status
+
+    - name: sigbak
+      shell: wsl-bash {0}
+      env:
+        WSLENV: GITHUB_WORKSPACE/p
+      run: |
+        uname -a
+        cd "$GITHUB_WORKSPACE"
+        make
+        set +e
+        ./sigbak check -p sigbak.c sigbak.c
+        test $? = 1
