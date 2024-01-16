@@ -15,13 +15,13 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: install dependencies
+    - name: apt-get
       run: |
         sudo apt-get update
         sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev \
           libssl-dev pkg-config protobuf-c-compiler
 
-    - name: initialize
+    - name: init
       uses: github/codeql-action/init@v2
       with:
         languages: cpp

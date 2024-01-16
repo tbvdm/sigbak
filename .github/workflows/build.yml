@@ -15,7 +15,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: install dependencies
+    - name: apt-get
       run: |
         sudo apt-get update
         sudo apt-get install build-essential libprotobuf-c-dev libsqlite3-dev \
@@ -44,7 +44,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: install dependencies
+    - name: brew
       # Also install make because Xcode provides GNU make 3.81 which is too old
       run: |
         brew update
@@ -69,7 +69,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: run vm
+    - name: dragonflybsd-vm
       uses: vmactions/dragonflybsd-vm@v1
       with:
         usesh: true
@@ -93,7 +93,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: run vm
+    - name: freebsd-vm
       uses: vmactions/freebsd-vm@v1
       with:
         usesh: true
@@ -112,7 +112,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: run vm
+    - name: netbsd-vm
       uses: vmactions/netbsd-vm@v1
       with:
         prepare: pkg_add pkg-config protobuf-c sqlite3
@@ -130,7 +130,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: run vm
+    - name: solaris-vm
       uses: vmactions/solaris-vm@v1
       with:
         prepare: |
@@ -147,21 +147,21 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: configure git
+    - name: git-config
       run: git config --global core.autocrlf input
 
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: install Cygwin
+    - name: cygwin-install-action
       uses: cygwin/cygwin-install-action@master
       with:
         packages: >
           curl gcc-core gcc-g++ libprotobuf-devel libsqlite3-devel libssl-devel
           make pkg-config
 
-    - name: install protobuf-c
-      shell: C:\cygwin\bin\bash.exe -elo pipefail -o igncr '{0}'
+    - name: protobuf-c
+      shell: C:\cygwin\bin\bash.exe -elo igncr -o pipefail '{0}'
       run: |
         VERSION=1.4.1
         curl -LO https://github.com/protobuf-c/protobuf-c/releases/download/v$VERSION/protobuf-c-$VERSION.tar.gz
@@ -170,11 +170,11 @@ jobs:
         ./configure
         make install
 
-    - name: install and run sigbak
-      shell: C:\cygwin\bin\bash.exe -elo pipefail -o igncr '{0}'
+    - name: sigbak
+      shell: C:\cygwin\bin\bash.exe -elo igncr -o pipefail '{0}'
       run: |
         uname -a
-        cd $GITHUB_WORKSPACE
+        cd "$GITHUB_WORKSPACE"
         PKG_CONFIG_PATH=/usr/local/lib/pkgconfig make install
         set +e
         sigbak check -p sigbak.c sigbak.c
