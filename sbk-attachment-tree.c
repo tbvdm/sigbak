@@ -57,11 +57,14 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 {
 	struct sbk_attachment_entry *entry;
 
-	if (!frm->attachment->has_rowid ||
-	    !frm->attachment->has_attachmentid) {
-		warnx("Invalid attachment frame");
-		sbk_free_file(file);
-		return -1;
+	if (!frm->attachment->has_rowid)
+		goto invalid;
+
+	if (!frm->attachment->has_attachmentid) {
+		if (ctx->db_version <
+		    SBK_DB_VERSION_REMOVE_ATTACHMENT_UNIQUE_ID)
+			goto invalid;
+		frm->attachment->attachmentid = 0;
 	}
 
 	if ((entry = malloc(sizeof *entry)) == NULL) {
@@ -75,6 +78,11 @@ sbk_insert_attachment_entry(struct sbk_ctx *ctx, Signal__BackupFrame *frm,
 	entry->file = file;
 	RB_INSERT(sbk_attachment_tree, &ctx->attachments, entry);
 	return 0;
+
+invalid:
+	warnx("Invalid attachment frame");
+	sbk_free_file(file);
+	return -1;
 }
 
 struct sbk_file *

@@ -135,7 +135,7 @@ struct sbk_recipient {
 
 struct sbk_attachment_id {
 	int64_t		 row_id;
-	int64_t		 unique_id;
+	int64_t		 unique_id;	/* For older backups */
 };
 
 struct sbk_attachment {

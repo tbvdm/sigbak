@@ -92,7 +92,10 @@
 	"LEFT JOIN message AS m "					\
 	"ON p.mid = m._id "
 
-/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+/*
+ * For database versions [MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION,
+ * REMOVE_ATTACHMENT_UNIQUE_ID)
+ */
 #define SBK_SELECT_5							\
 	"SELECT "							\
 	"p._id, "							\
@@ -107,30 +110,69 @@
 	"LEFT JOIN message AS m "					\
 	"ON p.mid = m._id "
 
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_SELECT_6							\
+	"SELECT "							\
+	"a._id, "							\
+	"a.content_type, "						\
+	"a.transfer_state, "						\
+	"a.data_size, "							\
+	"a.file_name, "							\
+	"0, "				/* unique_id */			\
+	"m.date_sent, "							\
+	"m.date_received "						\
+	"FROM attachment AS a "						\
+	"LEFT JOIN message AS m "					\
+	"ON a.message_id = m._id "
+
 /* For database versions < REACTION_FOREIGN_KEY_MIGRATION */
 #define SBK_WHERE_THREAD_1						\
 	"WHERE p.mid IN (SELECT _id FROM mms WHERE thread_id = ?) "	\
 	"AND latest_revision_id IS NULL "
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * REMOVE_ATTACHMENT_UNIQUE_ID)
+ */
 #define SBK_WHERE_THREAD_2						\
 	"WHERE p.mid IN (SELECT _id FROM message WHERE thread_id = ?) "	\
 	"AND latest_revision_id IS NULL "
 
-#define SBK_WHERE_MESSAGE						\
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_WHERE_THREAD_3						\
+	"WHERE a.message_id IN "					\
+	"(SELECT _id FROM message WHERE thread_id = ?) "		\
+	"AND latest_revision_id IS NULL "
+
+/* For database versions < REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_WHERE_MESSAGE_1						\
 	"WHERE p.mid = ? AND quote = 0 "
 
-#define SBK_WHERE_QUOTE							\
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_WHERE_MESSAGE_2						\
+	"WHERE a.message_id = ? AND quote = 0 "
+
+/* For database versions < REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_WHERE_QUOTE_1						\
 	"WHERE p.mid = ? AND quote = 1 "
 
-#define SBK_ORDER							\
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_WHERE_QUOTE_2						\
+	"WHERE a.message_id = ? AND quote = 1 "
+
+/* For database versions < REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_ORDER_1							\
 	"ORDER BY p.unique_id, p._id"
+
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_ORDER_2							\
+	"ORDER BY a._id"
 
 /* For database versions < THREAD_AND_MESSAGE_FOREIGN_KEYS */
 #define SBK_QUERY_THREAD_1						\
 	SBK_SELECT_2							\
 	SBK_WHERE_THREAD_1						\
-	SBK_ORDER
+	SBK_ORDER_1
 
 /*
  * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
@@ -139,7 +181,7 @@
 #define SBK_QUERY_THREAD_2						\
 	SBK_SELECT_3							\
 	SBK_WHERE_THREAD_1						\
-	SBK_ORDER
+	SBK_ORDER_1
 
 /*
  * For database versions [REACTION_FOREIGN_KEY_MIGRATION
@@ -148,25 +190,34 @@
 #define SBK_QUERY_THREAD_3						\
 	SBK_SELECT_4							\
 	SBK_WHERE_THREAD_2						\
-	SBK_ORDER
+	SBK_ORDER_1
 
-/* For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION */
+/*
+ * For database versions [MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION,
+ * REMOVE_ATTACHMENT_UNIQUE_ID)
+ */
 #define SBK_QUERY_THREAD_4						\
 	SBK_SELECT_5							\
 	SBK_WHERE_THREAD_2						\
-	SBK_ORDER
+	SBK_ORDER_1
+
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_QUERY_THREAD_5						\
+	SBK_SELECT_6							\
+	SBK_WHERE_THREAD_3						\
+	SBK_ORDER_2
 
 /* For database versions < QUOTED_REPLIES */
 #define SBK_QUERY_MESSAGE_1						\
 	SBK_SELECT_1							\
-	SBK_WHERE_MESSAGE						\
-	SBK_ORDER
+	SBK_WHERE_MESSAGE_1						\
+	SBK_ORDER_1
 
 /* For database versions [QUOTED_REPLIES, THREAD_AND_MESSAGE_FOREIGN_KEYS) */
 #define SBK_QUERY_MESSAGE_2						\
 	SBK_SELECT_2							\
-	SBK_WHERE_MESSAGE						\
-	SBK_ORDER
+	SBK_WHERE_MESSAGE_1						\
+	SBK_ORDER_1
 
 /*
  * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
@@ -174,20 +225,29 @@
  */
 #define SBK_QUERY_MESSAGE_3						\
 	SBK_SELECT_3							\
-	SBK_WHERE_MESSAGE						\
-	SBK_ORDER
+	SBK_WHERE_MESSAGE_1						\
+	SBK_ORDER_1
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * REMOVE_ATTACHMENT_UNIQUE_ID)
+ */
 #define SBK_QUERY_MESSAGE_4						\
 	SBK_SELECT_4							\
-	SBK_WHERE_MESSAGE						\
-	SBK_ORDER
+	SBK_WHERE_MESSAGE_1						\
+	SBK_ORDER_1
+
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_QUERY_MESSAGE_5						\
+	SBK_SELECT_6							\
+	SBK_WHERE_MESSAGE_2						\
+	SBK_ORDER_2
 
 /* For database versions < THREAD_AND_MESSAGE_FOREIGN_KEYS */
 #define SBK_QUERY_QUOTE_1						\
 	SBK_SELECT_2							\
-	SBK_WHERE_QUOTE							\
-	SBK_ORDER
+	SBK_WHERE_QUOTE_1						\
+	SBK_ORDER_1
 
 /*
  * For database versions [THREAD_AND_MESSAGE_FOREIGN_KEYS,
@@ -195,14 +255,23 @@
  */
 #define SBK_QUERY_QUOTE_2						\
 	SBK_SELECT_3							\
-	SBK_WHERE_QUOTE							\
-	SBK_ORDER
+	SBK_WHERE_QUOTE_1						\
+	SBK_ORDER_1
 
-/* For database versions >= REACTION_FOREIGN_KEY_MIGRATION */
+/*
+ * For database versions [REACTION_FOREIGN_KEY_MIGRATION,
+ * REMOVE_ATTACHMENT_UNIQUE_ID)
+ */
 #define SBK_QUERY_QUOTE_3						\
 	SBK_SELECT_4							\
-	SBK_WHERE_QUOTE							\
-	SBK_ORDER
+	SBK_WHERE_QUOTE_1						\
+	SBK_ORDER_1
+
+/* For database versions >= REMOVE_ATTACHMENT_UNIQUE_ID */
+#define SBK_QUERY_QUOTE_4						\
+	SBK_SELECT_6							\
+	SBK_WHERE_QUOTE_2						\
+	SBK_ORDER_2
 
 #define SBK_COLUMN__ID			0
 #define SBK_COLUMN_CT			1
@@ -242,8 +311,12 @@ sbk_attachment_id_to_string(const struct sbk_attachment *att)
 {
 	static char buf[48];
 
-	snprintf(buf, sizeof buf, "%" PRId64 "-%" PRId64, att->id.row_id,
-	    att->id.unique_id);
+	if (att->id.unique_id == 0)
+		snprintf(buf, sizeof buf, "%" PRId64, att->id.row_id);
+	else
+		snprintf(buf, sizeof buf, "%" PRId64 "-%" PRId64,
+		    att->id.row_id, att->id.unique_id);
+
 	return buf;
 }
 
@@ -328,7 +401,9 @@ sbk_get_attachments_for_thread(struct sbk_ctx *ctx, struct sbk_thread *thd)
 	if (sbk_create_database(ctx) == -1)
 		return NULL;
 
-	if (ctx->db_version >=
+	if (ctx->db_version >= SBK_DB_VERSION_REMOVE_ATTACHMENT_UNIQUE_ID)
+		query = SBK_QUERY_THREAD_5;
+	else if (ctx->db_version >=
 	    SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION)
 		query = SBK_QUERY_THREAD_4;
 	else if (ctx->db_version >=
@@ -361,7 +436,10 @@ sbk_get_attachments_for_message_id(struct sbk_ctx *ctx,
 	if (mid->table == SBK_SMS_TABLE)
 		return 0;
 
-	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+	if (ctx->db_version >= SBK_DB_VERSION_REMOVE_ATTACHMENT_UNIQUE_ID)
+		query = SBK_QUERY_MESSAGE_5;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_QUERY_MESSAGE_4;
 	else if (ctx->db_version >=
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
@@ -406,7 +484,10 @@ sbk_get_attachments_for_quote(struct sbk_ctx *ctx, struct sbk_quote *qte,
 	sqlite3_stmt	*stm;
 	const char	*query;
 
-	if (ctx->db_version >= SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
+	if (ctx->db_version >= SBK_DB_VERSION_REMOVE_ATTACHMENT_UNIQUE_ID)
+		query = SBK_QUERY_QUOTE_4;
+	else if (ctx->db_version >=
+	    SBK_DB_VERSION_REACTION_FOREIGN_KEY_MIGRATION)
 		query = SBK_QUERY_QUOTE_3;
 	else if (ctx->db_version >=
 	    SBK_DB_VERSION_THREAD_AND_MESSAGE_FOREIGN_KEYS)
