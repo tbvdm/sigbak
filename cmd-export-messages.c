@@ -235,8 +235,8 @@ maildir_open_file(int dfd, const char *maildir, const struct sbk_message *msg)
 
 	/* Intentionally create deterministic filenames */
 	/* XXX Shouldn't write directly into cur */
-	if (asprintf(&path, "%s/cur/%" PRIu64 ".%d-%d.localhost:2,S", maildir,
-	    msg->time_recv, msg->id.type, msg->id.rowid) == -1) {
+	if (asprintf(&path, "%s/cur/%" PRIu64 ".%s.localhost:2,S", maildir,
+	    msg->time_recv, sbk_message_id_to_string(msg)) == -1) {
 		warnx("asprintf() failed");
 		return NULL;
 	}
@@ -474,9 +474,8 @@ maildir_write_message(struct sbk_ctx *ctx, int dfd, const char *maildir,
 			fprintf(fp, "Content-Type: %s\n", type);
 			fputs("Content-Transfer-Encoding: base64\n", fp);
 			fprintf(fp, "Content-Disposition: attachment; "
-			    "filename=%" PRId64 "-%" PRId64 "%s%s\n\n",
-			    att->rowid,
-			    att->attachmentid,
+			    "filename=%s%s%s\n\n",
+			    sbk_attachment_id_to_string(att),
 			    (ext != NULL) ? "." : "",
 			    (ext != NULL) ? ext : "");
 			ret |= maildir_write_attachment(ctx, fp, att);
@@ -555,12 +554,11 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 	else
 		fprintf(fp, "%s", att->filename);
 
-	fprintf(fp, " (%s, %" PRIu64 " bytes, id %" PRId64 "-%" PRId64 ")\n",
+	fprintf(fp, " (%s, %" PRIu64 " bytes, id %s)\n",
 	    (att->content_type != NULL) ?
 	    att->content_type : "",
 	    att->size,
-	    att->rowid,
-	    att->attachmentid);
+	    sbk_attachment_id_to_string(att));
 }
 
 static void

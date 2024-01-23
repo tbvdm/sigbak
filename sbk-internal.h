@@ -53,6 +53,7 @@
 #define SBK_DB_VERSION_MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION 185
 #define SBK_DB_VERSION_RESET_PNI_COLUMN			200
 #define SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS	201
+#define SBK_DB_VERSION_REMOVE_ATTACHMENT_UNIQUE_ID	215
 
 #define XSTRINGIFY(x)	#x
 #define STRINGIFY(x)	XSTRINGIFY(x)
@@ -70,8 +71,7 @@ struct sbk_file {
 };
 
 struct sbk_attachment_entry {
-	int64_t		 rowid;
-	int64_t		 attachmentid;
+	struct sbk_attachment_id id;
 	struct sbk_file	*file;
 	RB_ENTRY(sbk_attachment_entry) entries;
 };
@@ -119,14 +119,14 @@ struct sbk_ctx {
 
 /* sbk-attachment-tree.c */
 void	 sbk_free_attachment_tree(struct sbk_ctx *);
-struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *, int64_t, int64_t);
+struct sbk_file *sbk_get_attachment_file(struct sbk_ctx *,
+	    const struct sbk_attachment_id *);
 int	 sbk_insert_attachment_entry(struct sbk_ctx *, Signal__BackupFrame *,
 	    struct sbk_file *);
 
 /* sbk-attachment.c */
 void	 sbk_free_attachment(struct sbk_attachment *);
-int	 sbk_get_attachments_for_edit(struct sbk_ctx *, struct sbk_edit *,
-	    struct sbk_message_id *);
+int	 sbk_get_attachments_for_edit(struct sbk_ctx *, struct sbk_edit *);
 int	 sbk_get_attachments_for_message(struct sbk_ctx *,
 	    struct sbk_message *);
 int	 sbk_get_attachments_for_quote(struct sbk_ctx *, struct sbk_quote *,
@@ -147,8 +147,7 @@ Signal__BackupFrame *sbk_get_first_frame(struct sbk_ctx *);
 
 /* sbk-mention.c */
 void	 sbk_free_mention_list(struct sbk_mention_list *);
-int	 sbk_get_mentions_for_edit(struct sbk_ctx *, struct sbk_edit *,
-	    struct sbk_message_id *);
+int	 sbk_get_mentions_for_edit(struct sbk_ctx *, struct sbk_edit *);
 int	 sbk_get_mentions_for_message(struct sbk_ctx *, struct sbk_message *);
 int	 sbk_get_mentions_for_quote(struct sbk_ctx *,
 	    struct sbk_mention_list **, sqlite3_stmt *, int);

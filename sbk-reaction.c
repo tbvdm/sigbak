@@ -159,14 +159,14 @@ sbk_get_reactions_from_table(struct sbk_ctx *ctx, struct sbk_message *msg)
 	if (sbk_sqlite_prepare(ctx, &stm, query) == -1)
 		return -1;
 
-	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.rowid) == -1) {
+	if (sbk_sqlite_bind_int(ctx, stm, 1, msg->id.row_id) == -1) {
 		sqlite3_finalize(stm);
 		return -1;
 	}
 
 	if (ctx->db_version < SBK_DB_VERSION_SINGLE_MESSAGE_TABLE_MIGRATION)
 		if (sbk_sqlite_bind_int(ctx, stm, 2,
-		    msg->id.type == SBK_MESSAGE_MMS) == -1) {
+		    msg->id.table != SBK_SMS_TABLE) == -1) {
 			sqlite3_finalize(stm);
 			return -1;
 		}

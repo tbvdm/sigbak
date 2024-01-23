@@ -133,9 +133,13 @@ struct sbk_recipient {
 	struct sbk_group	*group;
 };
 
+struct sbk_attachment_id {
+	int64_t		 row_id;
+	int64_t		 unique_id;	/* For older backups */
+};
+
 struct sbk_attachment {
-	int64_t		 rowid;
-	int64_t		 attachmentid;
+	struct sbk_attachment_id id;
 	int		 status;
 	char		*filename;
 	char		*content_type;
@@ -173,7 +177,16 @@ struct sbk_quote {
 	struct sbk_mention_list *mentions;
 };
 
+struct sbk_message_id {
+#define SBK_SMS_TABLE		0
+#define SBK_MMS_TABLE		1
+#define SBK_SINGLE_TABLE	2
+	int		 table;
+	int		 row_id;
+};
+
 struct sbk_edit {
+	struct sbk_message_id id;
 	int		 revision;
 	uint64_t	 time_sent;
 	uint64_t	 time_recv;
@@ -185,14 +198,6 @@ struct sbk_edit {
 };
 
 TAILQ_HEAD(sbk_edit_list, sbk_edit);
-
-struct sbk_message_id {
-	enum {
-		SBK_MESSAGE_SMS,
-		SBK_MESSAGE_MMS
-	}		 type;
-	int		 rowid;
-};
 
 struct sbk_message {
 	struct sbk_message_id id;
@@ -241,11 +246,13 @@ void		 sbk_free_file(struct sbk_file *);
 struct sbk_attachment_list *sbk_get_attachments_for_thread(struct sbk_ctx *,
 		    struct sbk_thread *);
 void		 sbk_free_attachment_list(struct sbk_attachment_list *);
+const char	*sbk_attachment_id_to_string(const struct sbk_attachment *);
 
 struct sbk_message_list *sbk_get_messages_for_thread(struct sbk_ctx *,
 		    struct sbk_thread *);
 void		 sbk_free_message_list(struct sbk_message_list *);
 int		 sbk_is_outgoing_message(const struct sbk_message *);
+const char	*sbk_message_id_to_string(const struct sbk_message *);
 
 struct sbk_thread_list *sbk_get_threads(struct sbk_ctx *);
 void		 sbk_free_thread_list(struct sbk_thread_list *);
