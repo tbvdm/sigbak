@@ -166,7 +166,7 @@ csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 
 	if (SIMPLEQ_EMPTY(lst)) {
 		sbk_free_message_list(lst);
-		return -1;
+		return 0;
 	}
 
 	if ((fp = get_thread_file(thd, dfd, ".csv")) == NULL) {
@@ -488,7 +488,7 @@ maildir_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 
 	if (SIMPLEQ_EMPTY(lst)) {
 		sbk_free_message_list(lst);
-		return -1;
+		return 0;
 	}
 
 	if ((maildir = get_recipient_filename(thd->recipient, NULL)) == NULL)
