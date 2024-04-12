@@ -1,5 +1,6 @@
-/* $OpenBSD: hkdf.c,v 1.9 2023/06/01 02:34:23 tb Exp $ */
-/* Copyright (c) 2014, Google Inc.
+/* $OpenBSD: hkdf.c,v 1.11 2024/03/25 13:09:13 jsing Exp $ */
+/*
+ * Copyright (c) 2014, Google Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,6 +26,8 @@
 #include <openssl/evp.h>
 #endif
 #include <openssl/hmac.h>
+
+#include "bytestring.h"
 
 #include "../compat.h"
 
@@ -74,88 +77,103 @@ HKDF_expand(uint8_t *out_key, size_t out_len,
     const uint8_t *info, size_t info_len)
 {
 	const size_t digest_len = EVP_MD_size(digest);
-	uint8_t previous[EVP_MAX_MD_SIZE];
-	size_t n, done = 0;
-	unsigned int i;
-	int ret = 0;
+	uint8_t out_hmac[EVP_MAX_MD_SIZE];
+	size_t n, remaining;
+	uint8_t ctr;
 #ifdef HAVE_EVP_MAC
-	EVP_MAC *mac;
+	EVP_MAC *mac = NULL;
 	EVP_MAC_CTX *mac_ctx = NULL;
 	OSSL_PARAM params[3];
 #else
-	HMAC_CTX *hmac;
+	HMAC_CTX *hmac = NULL;
 #endif
+	CBB cbb;
+	int ret = 0;
 
-	/* Expand key material to desired length. */
-	n = (out_len + digest_len - 1) / digest_len;
-	if (out_len + digest_len < out_len || n > 255) {
-		return 0;
-	}
+	if (!CBB_init_fixed(&cbb, out_key, out_len))
+		goto err;
 
 #ifdef HAVE_EVP_MAC
 	if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL)
-		goto out;
-
+		goto err;
 	if ((mac_ctx = EVP_MAC_CTX_new(mac)) == NULL)
-		goto out;
+		goto err;
 
 	params[0] = OSSL_PARAM_construct_octet_string("key", (uint8_t *)prk,
 	    prk_len);
 	params[1] = OSSL_PARAM_construct_utf8_string("digest",
 	    (char *)EVP_MD_get0_name(digest), 0);
 	params[2] = OSSL_PARAM_construct_end();
+
+	if (!EVP_MAC_init(mac_ctx, NULL, 0, params))
+		goto err;
 #else
 	if ((hmac = HMAC_CTX_new()) == NULL)
-		goto out;
-
+		goto err;
 	if (!HMAC_Init_ex(hmac, prk, prk_len, digest, NULL))
-		goto out;
+		goto err;
 #endif
 
-	for (i = 0; i < n; i++) {
-		uint8_t ctr = i + 1;
-		size_t todo;
+	remaining = out_len;
+	ctr = 0;
+
+	/* Expand key material to desired length. */
+	while (remaining > 0) {
+		if (++ctr == 0) {
+			goto err;
+		}
 
 #ifdef HAVE_EVP_MAC
-		if (!EVP_MAC_init(mac_ctx, NULL, 0, params))
-			goto out;
-
-		if (i != 0 && !EVP_MAC_update(mac_ctx, previous, digest_len))
-			goto out;
-
-		if (!EVP_MAC_update(mac_ctx, info, info_len) ||
-		    !EVP_MAC_update(mac_ctx, &ctr, 1) ||
-		    !EVP_MAC_final(mac_ctx, previous, NULL, sizeof(previous)))
-			goto out;
+		if (!EVP_MAC_update(mac_ctx, info, info_len))
+			goto err;
+		if (!EVP_MAC_update(mac_ctx, &ctr, 1))
+			goto err;
+		if (!EVP_MAC_final(mac_ctx, out_hmac, NULL, sizeof(out_hmac)))
+			goto err;
 #else
-		if (i != 0 && (!HMAC_Init_ex(hmac, NULL, 0, NULL, NULL) ||
-		    !HMAC_Update(hmac, previous, digest_len)))
-			goto out;
-
-		if (!HMAC_Update(hmac, info, info_len) ||
-		    !HMAC_Update(hmac, &ctr, 1) ||
-		    !HMAC_Final(hmac, previous, NULL))
-			goto out;
+		if (!HMAC_Update(hmac, info, info_len))
+			goto err;
+		if (!HMAC_Update(hmac, &ctr, 1))
+			goto err;
+		if (!HMAC_Final(hmac, out_hmac, NULL))
+			goto err;
 #endif
 
-		todo = digest_len;
-		if (todo > out_len - done)
-			todo = out_len - done;
+		if ((n = remaining) > digest_len)
+			n = digest_len;
 
-		memcpy(out_key + done, previous, todo);
-		done += todo;
+		if (!CBB_add_bytes(&cbb, out_hmac, n))
+			goto err;
+
+		remaining -= n;
+
+		if (remaining > 0) {
+#ifdef HAVE_EVP_MAC
+			if (!EVP_MAC_init(mac_ctx, NULL, 0, params))
+				goto err;
+			if (!EVP_MAC_update(mac_ctx, out_hmac, digest_len))
+				goto err;
+#else
+			if (!HMAC_Init_ex(hmac, NULL, 0, NULL, NULL))
+				goto err;
+			if (!HMAC_Update(hmac, out_hmac, digest_len))
+				goto err;
+#endif
+		}
 	}
 
 	ret = 1;
 
- out:
+ err:
+	CBB_cleanup(&cbb);
 #ifdef HAVE_EVP_MAC
 	EVP_MAC_CTX_free(mac_ctx);
 	EVP_MAC_free(mac);
 #else
 	HMAC_CTX_free(hmac);
 #endif
-	explicit_bzero(previous, sizeof(previous));
+	explicit_bzero(out_hmac, sizeof(out_hmac));
+
 	return ret;
 }
 

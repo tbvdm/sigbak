@@ -24,10 +24,10 @@ PROTO_HDRS=	${PROTOS:.proto=.pb-c.h}
 PROTO_SRCS=	${PROTOS:.proto=.pb-c.c}
 PROTO_OBJS=	${PROTO_SRCS:.c=.o}
 
-COMPAT_OBJS=	compat/asprintf.o compat/err.o compat/explicit_bzero.o \
-		compat/fopen.o compat/getprogname.o compat/hkdf.o \
-		compat/hmac_ctx_new.o compat/pledge.o compat/readpassphrase.o \
-		compat/reallocarray.o compat/unveil.o
+COMPAT_OBJS=	compat/asprintf.o compat/bs_cbb.o compat/err.o \
+		compat/explicit_bzero.o compat/fopen.o compat/getprogname.o \
+		compat/hkdf.o compat/hmac_ctx_new.o compat/pledge.o \
+		compat/readpassphrase.o compat/reallocarray.o compat/unveil.o
 
 OBJS=		cmd-check-backup.o cmd-dump-backup.o cmd-export-attachments.o \
 		cmd-export-avatars.o cmd-export-database.o \
