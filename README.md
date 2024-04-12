@@ -65,7 +65,7 @@ To update the sigbak formula, run:
 
 If you prefer to build sigbak manually, run:
 
-	brew install libressl make pkg-config protobuf-c sqlite
+	brew install libressl make pkg-config protobuf-c
 	git clone https://github.com/tbvdm/sigbak.git
 	cd sigbak
 	git checkout portable

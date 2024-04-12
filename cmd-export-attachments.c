@@ -34,13 +34,17 @@
 
 #define FLAG_EXPORT_ALL		0x1
 #define FLAG_FILENAME_ID	0x2
+#define FLAG_MTIME_SENT		0x4
+#define FLAG_MTIME_RECV		0x8
+
+#define FLAG_MTIME_MASK		(FLAG_MTIME_SENT | FLAG_MTIME_RECV)
 
 static enum cmd_status cmd_export_attachments(int, char **);
 
 const struct cmd_entry cmd_export_attachments_entry = {
 	.name = "export-attachments",
 	.alias = "att",
-	.usage = "[-aI] [-p passfile] backup [directory]",
+	.usage = "[-aIMm] [-p passfile] backup [directory]",
 	.exec = cmd_export_attachments
 };
 
@@ -204,6 +208,28 @@ get_thread_directory(int dfd, struct sbk_thread *thd)
 }
 
 static int
+set_mtime(FILE *fp, uint64_t msec)
+{
+	struct timespec ts[2];
+
+	if (fflush(fp) == EOF) {
+		warn("fflush");
+		return -1;
+	}
+
+	ts[0].tv_nsec = UTIME_OMIT;
+	ts[1].tv_sec = msec / 1000;
+	ts[1].tv_nsec = msec % 1000 * 1000000;
+
+	if (futimens(fileno(fp), ts) == -1) {
+		warn("futimens");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
     int flags)
 {
@@ -243,10 +269,33 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 			continue;
 		}
 
-		if (sbk_write_file(ctx, att->file, fp) == -1)
+		if (sbk_write_file(ctx, att->file, fp) == -1) {
+			fclose(fp);
 			ret = -1;
+			continue;
+		}
 
-		fclose(fp);
+		switch (flags & FLAG_MTIME_MASK) {
+		case FLAG_MTIME_SENT:
+			if (set_mtime(fp, att->time_sent) == -1) {
+				fclose(fp);
+				ret = -1;
+				continue;
+			}
+			break;
+		case FLAG_MTIME_RECV:
+			if (set_mtime(fp, att->time_recv) == -1) {
+				fclose(fp);
+				ret = -1;
+				continue;
+			}
+			break;
+		}
+
+		if (fclose(fp) == EOF) {
+			warn("fclose");
+			ret = -1;
+		}
 	}
 
 	close(thd_dfd);
@@ -293,13 +342,21 @@ cmd_export_attachments(int argc, char **argv)
 	flags = 0;
 	passfile = NULL;
 
-	while ((c = getopt(argc, argv, "aIp:")) != -1)
+	while ((c = getopt(argc, argv, "aIMmp:")) != -1)
 		switch (c) {
 		case 'a':
 			flags |= FLAG_EXPORT_ALL;
 			break;
 		case 'I':
 			flags |= FLAG_FILENAME_ID;
+			break;
+		case 'M':
+			flags &= ~FLAG_MTIME_RECV;
+			flags |= FLAG_MTIME_SENT;
+			break;
+		case 'm':
+			flags &= ~FLAG_MTIME_SENT;
+			flags |= FLAG_MTIME_RECV;
 			break;
 		case 'p':
 			passfile = optarg;
@@ -343,13 +400,13 @@ cmd_export_attachments(int argc, char **argv)
 		err(1, "unveil: /tmp");
 
 	if (passfile == NULL) {
-		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
+		if (pledge("stdio rpath wpath cpath fattr tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
 		if (unveil(passfile, "r") == -1)
 			err(1, "unveil: %s", passfile);
 
-		if (pledge("stdio rpath wpath cpath", NULL) == -1)
+		if (pledge("stdio rpath wpath cpath fattr", NULL) == -1)
 			err(1, "pledge");
 	}
 
@@ -369,8 +426,13 @@ cmd_export_attachments(int argc, char **argv)
 
 	explicit_bzero(passphr, sizeof passphr);
 
-	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
-		err(1, "pledge");
+	if (flags & FLAG_MTIME_MASK) {
+		if (pledge("stdio rpath wpath cpath fattr", NULL) == -1)
+			err(1, "pledge");
+	} else {
+		if (pledge("stdio rpath wpath cpath", NULL) == -1)
+			err(1, "pledge");
+	}
 
 	ret = export_attachments(ctx, outdir, flags);
 	sbk_close(ctx);
