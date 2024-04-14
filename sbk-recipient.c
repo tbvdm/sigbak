@@ -26,6 +26,8 @@ sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 	if (rcp != NULL)
 		switch (rcp->type) {
 		case SBK_CONTACT:
+			if (!ISEMPTY(rcp->contact->nickname_joined_name))
+				return rcp->contact->nickname_joined_name;
 			if (!ISEMPTY(rcp->contact->system_joined_name))
 				return rcp->contact->system_joined_name;
 			if (!ISEMPTY(rcp->contact->profile_joined_name))

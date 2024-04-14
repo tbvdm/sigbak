@@ -33,6 +33,9 @@
 	"NULL, "			/* profile_joined_name */	\
 	"r.system_display_name, "	/* system_joined_name */	\
 	"r.system_phone_label, "					\
+	"NULL, "			/* nickname_given_name */	\
+	"NULL, "			/* nickname_family_name */	\
+	"NULL, "			/* nickname_joined_name */	\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient_preferences AS r "				\
@@ -51,6 +54,9 @@
 	"NULL, "			/* profile_joined_name */	\
 	"r.system_display_name, "	/* system_joined_name */	\
 	"r.system_phone_label, "					\
+	"NULL, "			/* nickname_given_name */	\
+	"NULL, "			/* nickname_family_name */	\
+	"NULL, "			/* nickname_joined_name */	\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
@@ -69,6 +75,9 @@
 	"r.profile_joined_name, "					\
 	"r.system_display_name, "	/* system_joined_name */	\
 	"r.system_phone_label, "					\
+	"NULL, "			/* nickname_given_name */	\
+	"NULL, "			/* nickname_family_name */	\
+	"NULL, "			/* nickname_joined_name */	\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
@@ -87,13 +96,19 @@
 	"r.profile_joined_name, "					\
 	"r.system_display_name, "	/* system_joined_name */	\
 	"r.system_phone_label, "					\
+	"NULL, "			/* nickname_given_name */	\
+	"NULL, "			/* nickname_family_name */	\
+	"NULL, "			/* nickname_joined_name */	\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
 	"LEFT JOIN groups AS g "					\
 	"ON r._id = g.recipient_id"
 
-/* For database versions >= RECIPIENT_TABLE_VALIDATIONS */
+/*
+ * For database versions [RECIPIENT_TABLE_VALIDATIONS,
+ * ADD_NICKNAME_AND_NOTE_FIELDS_TO_RECIPIENT_TABLE)
+ */
 #define SBK_QUERY_5							\
 	"SELECT "							\
 	"r._id, "							\
@@ -105,6 +120,30 @@
 	"r.profile_joined_name, "					\
 	"r.system_joined_name, "					\
 	"r.system_phone_label, "					\
+	"NULL, "			/* nickname_given_name */	\
+	"NULL, "			/* nickname_family_name */	\
+	"NULL, "			/* nickname_joined_name */	\
+	"g.group_id, "							\
+	"g.title "							\
+	"FROM recipient AS r "						\
+	"LEFT JOIN groups AS g "					\
+	"ON r._id = g.recipient_id"
+
+/* For database versions >= ADD_NICKNAME_AND_NOTE_FIELDS_TO_RECIPIENT_TABLE */
+#define SBK_QUERY_6							\
+	"SELECT "							\
+	"r._id, "							\
+	"r.e164, "							\
+	"r.aci, "							\
+	"r.email, "							\
+	"r.profile_given_name, "					\
+	"r.profile_family_name, "					\
+	"r.profile_joined_name, "					\
+	"r.system_joined_name, "					\
+	"r.system_phone_label, "					\
+	"r.nickname_given_name, "					\
+	"r.nickname_family_name, "					\
+	"r.nickname_joined_name, "					\
 	"g.group_id, "							\
 	"g.title "							\
 	"FROM recipient AS r "						\
@@ -120,8 +159,11 @@
 #define SBK_COLUMN_PROFILE_JOINED_NAME	6
 #define SBK_COLUMN_SYSTEM_JOINED_NAME	7
 #define SBK_COLUMN_SYSTEM_PHONE_LABEL	8
-#define SBK_COLUMN_GROUP_ID		9
-#define SBK_COLUMN_TITLE		10
+#define SBK_COLUMN_NICKNAME_GIVEN_NAME	9
+#define SBK_COLUMN_NICKNAME_FAMILY_NAME	10
+#define SBK_COLUMN_NICKNAME_JOINED_NAME	11
+#define SBK_COLUMN_GROUP_ID		12
+#define SBK_COLUMN_TITLE		13
 
 static int sbk_cmp_recipient_entries(struct sbk_recipient_entry *,
     struct sbk_recipient_entry *);
@@ -279,6 +321,20 @@ sbk_get_recipient_entry(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 		    stm, SBK_COLUMN_PROFILE_JOINED_NAME) == -1)
 			goto error;
 
+		if (sbk_sqlite_column_text_copy(ctx, &con->nickname_given_name,
+		    stm, SBK_COLUMN_NICKNAME_GIVEN_NAME) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx,
+		    &con->nickname_family_name, stm,
+		    SBK_COLUMN_NICKNAME_FAMILY_NAME) == -1)
+			goto error;
+
+		if (sbk_sqlite_column_text_copy(ctx,
+		    &con->nickname_joined_name, stm,
+		    SBK_COLUMN_NICKNAME_JOINED_NAME) == -1)
+			goto error;
+
 		break;
 
 	case SBK_GROUP:
@@ -316,7 +372,10 @@ sbk_build_recipient_tree(struct sbk_ctx *ctx)
 	if (sbk_create_database(ctx) == -1)
 		return -1;
 
-	if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
+	if (ctx->db_version >=
+	    SBK_DB_VERSION_ADD_NICKNAME_AND_NOTE_FIELDS_TO_RECIPIENT_TABLE)
+		query = SBK_QUERY_6;
+	else if (ctx->db_version >= SBK_DB_VERSION_RECIPIENT_TABLE_VALIDATIONS)
 		query = SBK_QUERY_5;
 	else if (ctx->db_version >= SBK_DB_VERSION_RESET_PNI_COLUMN)
 		query = SBK_QUERY_4;
