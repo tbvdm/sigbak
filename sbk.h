@@ -118,6 +118,9 @@ struct sbk_contact {
 	char		*profile_given_name;
 	char		*profile_family_name;
 	char		*profile_joined_name;
+	char		*nickname_given_name;
+	char		*nickname_family_name;
+	char		*nickname_joined_name;
 };
 
 struct sbk_group {
