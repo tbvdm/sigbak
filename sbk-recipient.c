@@ -43,5 +43,3 @@ sbk_get_recipient_display_name(const struct sbk_recipient *rcp)
 
 	return "Unknown";
 }
-
-#undef ISEMPTY
