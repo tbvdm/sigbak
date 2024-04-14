@@ -191,7 +191,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: setup-wsl
-      uses: Vampire/setup-wsl@v2
+      uses: Vampire/setup-wsl@v3
       with:
         additional-packages: >
           build-essential libprotobuf-c-dev libsqlite3-dev libssl-dev
