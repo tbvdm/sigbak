@@ -48,7 +48,7 @@ jobs:
       # Also install make because Xcode provides GNU make 3.81 which is too old
       run: |
         brew update
-        brew install make pkg-config protobuf-c sqlite ${{matrix.ssl}} || true
+        brew install make pkg-config protobuf-c ${{matrix.ssl}} || true
 
     - name: build
       # Set PKG_CONFIG_PATH as per the instructions from "brew install" and
