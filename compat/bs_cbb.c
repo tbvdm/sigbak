@@ -42,8 +42,6 @@ cbb_init(CBB *cbb, uint8_t *buf, size_t cap)
 int
 CBB_init_fixed(CBB *cbb, uint8_t *buf, size_t len)
 {
-	memset(cbb, 0, sizeof(*cbb));
-
 	if (!cbb_init(cbb, buf, len))
 		return 0;
 
