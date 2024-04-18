@@ -5,7 +5,7 @@ MANDIR?=	${PREFIX}/man
 CC?=		cc
 INSTALL?=	install
 PKG_CONFIG?=	pkg-config
-PROTOC?=	protoc
+PROTOC?=	protoc-c
 
 LIBCRYPTO_PKG?=		libcrypto
 LIBPROTOBUF_C_PKG?=	libprotobuf-c
