@@ -69,7 +69,7 @@ If you prefer to build sigbak manually, run:
 	git clone https://github.com/tbvdm/sigbak.git
 	cd sigbak
 	git checkout portable
-	PKG_CONFIG_PATH=$(brew --prefix libressl)/lib/pkgconfig gmake
+	PKG_CONFIG_PATH=$(brew --prefix libressl)/lib/pkgconfig PROTOC=protoc gmake
 
 Building on Windows
 -------------------
