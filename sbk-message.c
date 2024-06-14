@@ -246,7 +246,7 @@
 /*
  * For database versions >= MESSAGE_RECIPIENTS_AND_EDIT_MESSAGE_MIGRATION
  *
- * The iif() expression below is based on the outgoingClause variable in
+ * The CASE expression below is based on the outgoingClause variable in
  * V185_MessageRecipientsAndEditMessageMigration.kt in the Signal-Android
  * repository.
  */
@@ -257,7 +257,7 @@
 	"date_sent, "							\
 	"date_received, "						\
 	"thread_id, "							\
-	"iif(type & " STRINGIFY(SBK_BASE_TYPE_MASK) " IN ("		\
+	"CASE WHEN type & " STRINGIFY(SBK_BASE_TYPE_MASK) " IN ("	\
 	    STRINGIFY(SBK_OUTGOING_AUDIO_CALL_TYPE) ", "		\
 	    STRINGIFY(SBK_OUTGOING_VIDEO_CALL_TYPE) ", "		\
 	    STRINGIFY(SBK_BASE_OUTBOX_TYPE) ", "			\
@@ -265,8 +265,8 @@
 	    STRINGIFY(SBK_BASE_SENT_TYPE) ", "				\
 	    STRINGIFY(SBK_BASE_SENT_FAILED_TYPE) ", "			\
 	    STRINGIFY(SBK_BASE_PENDING_SECURE_SMS_FALLBACK) ", "	\
-	    STRINGIFY(SBK_BASE_PENDING_INSECURE_SMS_FALLBACK) "), "	\
-	    "to_recipient_id, from_recipient_id), "			\
+	    STRINGIFY(SBK_BASE_PENDING_INSECURE_SMS_FALLBACK) ") "	\
+	    "THEN to_recipient_id ELSE from_recipient_id END, "		\
 	"type, "							\
 	"body, "							\
 	"quote_id, "							\
