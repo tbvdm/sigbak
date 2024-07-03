@@ -21,15 +21,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
-#include <openssl/evp.h>
 
 #include "sigbak.h"
 
@@ -44,7 +41,6 @@ const struct cmd_entry cmd_export_messages_entry = {
 
 enum {
 	FORMAT_CSV,
-	FORMAT_MAILDIR,
 	FORMAT_TEXT
 };
 
@@ -184,331 +180,6 @@ csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
 	return ret;
 }
 
-static int
-maildir_create(int dfd, const char *path)
-{
-	int maildir_dfd, ret;
-
-	maildir_dfd = -1;
-	ret = -1;
-
-	if (mkdirat(dfd, path, 0777) == -1) {
-		warn("mkdir: %s", path);
-		goto out;
-	}
-
-	if ((maildir_dfd = openat(dfd, path, O_RDONLY | O_DIRECTORY)) == -1) {
-		warn("open: %s", path);
-		goto out;
-	}
-
-	if (mkdirat(maildir_dfd, "cur", 0777) == -1) {
-		warn("mkdirat: %s/%s", path, "cur");
-		goto out;
-	}
-
-	if (mkdirat(maildir_dfd, "new", 0777) == -1) {
-		warn("mkdirat: %s/%s", path, "new");
-		goto out;
-	}
-
-	if (mkdirat(maildir_dfd, "tmp", 0777) == -1) {
-		warn("mkdirat: %s/%s", path, "tmp");
-		goto out;
-	}
-
-	ret = 0;
-
-out:
-	if (maildir_dfd != -1)
-		close(maildir_dfd);
-	return ret;
-}
-
-static FILE *
-maildir_open_file(int dfd, const char *maildir, const struct sbk_message *msg)
-{
-	FILE	*fp;
-	char	*path;
-	int	 fd;
-
-	/* Intentionally create deterministic filenames */
-	/* XXX Shouldn't write directly into cur */
-	if (asprintf(&path, "%s/cur/%" PRIu64 ".%s.localhost:2,S", maildir,
-	    msg->time_recv, sbk_message_id_to_string(msg)) == -1) {
-		warnx("asprintf() failed");
-		return NULL;
-	}
-
-	fd = openat(dfd, path, O_WRONLY | O_CREAT | O_EXCL, 0666);
-	if (fd == -1) {
-		warn("%s", path);
-		return NULL;
-	}
-
-	if ((fp = fdopen(fd, "w")) == NULL) {
-		warn("%s", path);
-		close(fd);
-		free(path);
-		return NULL;
-	}
-
-	free(path);
-	return fp;
-}
-
-static void
-maildir_write_address_header(FILE *fp, const char *hdr, const char *addr,
-    const char *name)
-{
-	if (name == NULL)
-		fprintf(fp, "%s: %s@invalid\n", hdr, addr);
-	else
-		/* XXX Need to escape double quotes in name */
-		fprintf(fp, "%s: \"%s\" <%s@invalid>\n", hdr, name, addr);
-}
-
-static void
-maildir_write_date_header(FILE *fp, const char *hdr, int64_t date)
-{
-	const char	*days[] = {
-	    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-
-	const char	*months[] = {
-	    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
-	    "Oct", "Nov", "Dec" };
-
-	struct tm	*tm;
-	time_t		 tt;
-
-	tt = date / 1000;
-
-	if ((tm = localtime(&tt)) == NULL) {
-		warnx("localtime() failed");
-		return;
-	}
-
-	fprintf(fp, "%s: %s, %d %s %d %02d:%02d:%02d %c%02ld%02ld\n",
-	    hdr,
-	    days[tm->tm_wday],
-	    tm->tm_mday,
-	    months[tm->tm_mon],
-	    tm->tm_year + 1900,
-	    tm->tm_hour,
-	    tm->tm_min,
-	    tm->tm_sec,
-	    (tm->tm_gmtoff < 0) ? '-' : '+',
-	    labs(tm->tm_gmtoff) / 3600,
-	    labs(tm->tm_gmtoff) % 3600 / 60);
-}
-
-static int
-maildir_generate_random_boundary(char *buf, size_t bufsize)
-{
-	size_t		i;
-	const char	chars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	    "abcdefghijklmnopqrstuvwxyz";
-
-	if (bufsize < 2)
-		return -1;
-
-	/*
-	 * Include an underscore to ensure that the boundary does not occur in
-	 * Base64 strings or in the headers of a body part
-	 */
-	buf[0] = '_';
-
-	for (i = 1; i < bufsize - 1; i++) {
-		/* Subtract 1 to exclude the NUL */
-		buf[i] = chars[arc4random_uniform(sizeof chars - 1)];
-	}
-
-	buf[i] = '\0';
-	return 0;
-}
-
-static int
-maildir_generate_boundary(struct sbk_message *msg, char *buf,
-    size_t bufsize)
-{
-	for (;;) {
-		if (maildir_generate_random_boundary(buf, bufsize) == -1)
-			return -1;
-		if (msg->text == NULL || strstr(msg->text, buf) == NULL)
-			return 0;
-	}
-}
-
-static char *
-maildir_base64_encode(const char *in, size_t inlen, size_t *outlen)
-{
-	char	*out;
-	size_t	 outsize;
-
-	*outlen = 0;
-
-	/*
-	 * Ensure that inlen can be passed to EVP_EncodeBlock() and that the
-	 * outsize computation won't overflow
-	 */
-	if (inlen > INT_MAX || inlen > (SIZE_MAX - 1) / 4 * 3) {
-		warnx("Attachment too large");
-		return NULL;
-	}
-
-	outsize = (inlen + 2) / 3 * 4 + 1;
-	if ((out = malloc(outsize)) == NULL) {
-		warn(NULL);
-		return NULL;
-	}
-
-	*outlen = EVP_EncodeBlock((unsigned char *)out,
-	    (const unsigned char *)in, inlen);
-	return out;
-}
-
-static int
-maildir_write_attachment(struct sbk_ctx *ctx, FILE *fp,
-    struct sbk_attachment *att)
-{
-	char	*b64, *data, *s;
-	size_t	 b64len, datalen, n;
-
-	if ((data = sbk_get_file_data(ctx, att->file, &datalen)) == NULL)
-		return -1;
-
-	if ((b64 = maildir_base64_encode(data, datalen, &b64len)) == NULL) {
-		free(data);
-		return -1;
-	}
-
-	s = b64;
-	while (b64len > 0) {
-		n = (b64len > 76) ? 76 : b64len;
-		fprintf(fp, "%.*s\n", (int)n, s);
-		s += n;
-		b64len -= n;
-	}
-
-	free(data);
-	free(b64);
-	return 0;
-}
-
-static int
-maildir_write_message(struct sbk_ctx *ctx, int dfd, const char *maildir,
-    struct sbk_message *msg)
-{
-	FILE			*fp;
-	struct sbk_attachment	*att;
-	const char		*addr, *ext, *name, *type;
-	int			 ret;
-	char			 boundary[33];
-
-	if (msg->attachments != NULL &&
-	    maildir_generate_boundary(msg, boundary, sizeof boundary) == -1)
-		return -1;
-
-	if ((fp = maildir_open_file(dfd, maildir, msg)) == NULL)
-		return -1;
-
-	name = sbk_get_recipient_display_name(msg->recipient);
-	addr = (msg->recipient->type == SBK_CONTACT) ?
-	    msg->recipient->contact->phone : "group";
-
-	if (sbk_is_outgoing_message(msg)) {
-		maildir_write_address_header(fp, "From", "you", "You");
-		maildir_write_address_header(fp, "To", addr, name);
-	} else {
-		maildir_write_address_header(fp, "From", addr, name);
-		maildir_write_address_header(fp, "To", "you", "You");
-	}
-
-	maildir_write_date_header(fp, "Date", msg->time_sent);
-
-	if (!sbk_is_outgoing_message(msg))
-		maildir_write_date_header(fp, "X-Received", msg->time_recv);
-
-	fprintf(fp, "X-Thread: %d\n", msg->thread);
-	fputs("MIME-Version: 1.0\n", fp);
-
-	if (msg->attachments != NULL) {
-		fprintf(fp, "Content-Type: multipart/mixed; "
-		    "boundary=%s\n\n", boundary);
-		fprintf(fp, "--%s\n", boundary);
-	}
-
-	fputs("Content-Type: text/plain; charset=utf-8\n", fp);
-	fputs("Content-Transfer-Encoding: binary\n", fp);
-	fputs("Content-Disposition: inline\n\n", fp);
-	if (msg->text != NULL)
-		fprintf(fp, "%s\n", msg->text);
-
-	ret = 0;
-
-	if (msg->attachments != NULL) {
-		TAILQ_FOREACH(att, msg->attachments, entries) {
-			if (att->file == NULL)
-				continue;
-			if (att->content_type == NULL) {
-				type = "application/octet-stream";
-				ext = NULL;
-			} else {
-				type = att->content_type;
-				ext = mime_get_extension(att->content_type);
-			}
-			fprintf(fp, "--%s\n", boundary);
-			fprintf(fp, "Content-Type: %s\n", type);
-			fputs("Content-Transfer-Encoding: base64\n", fp);
-			fprintf(fp, "Content-Disposition: attachment; "
-			    "filename=%s%s%s\n\n",
-			    sbk_attachment_id_to_string(att),
-			    (ext != NULL) ? "." : "",
-			    (ext != NULL) ? ext : "");
-			ret |= maildir_write_attachment(ctx, fp, att);
-		}
-		fprintf(fp, "--%s--\n", boundary);
-	}
-
-	fclose(fp);
-	return ret;
-}
-
-static int
-maildir_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
-    int dfd)
-{
-	struct sbk_message_list	*lst;
-	struct sbk_message	*msg;
-	char			*maildir;
-	int			 ret;
-
-	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
-		return -1;
-
-	if (SIMPLEQ_EMPTY(lst)) {
-		sbk_free_message_list(lst);
-		return 0;
-	}
-
-	if ((maildir = get_recipient_filename(thd->recipient, NULL)) == NULL)
-		return -1;
-
-	if (maildir_create(dfd, maildir) == -1) {
-		free(maildir);
-		return -1;
-	}
-
-	ret = 0;
-	SIMPLEQ_FOREACH(msg, lst, entries)
-		if (maildir_write_message(ctx, dfd, maildir, msg) == -1)
-			ret = -1;
-
-	free(maildir);
-	sbk_free_message_list(lst);
-	return ret;
-}
-
 static void
 text_write_recipient_field(FILE *fp, const char *field,
     struct sbk_recipient *rcp)
@@ -526,9 +197,36 @@ text_write_recipient_field(FILE *fp, const char *field,
 }
 
 static void
-text_write_time_field(FILE *fp, const char *field, int64_t t)
+text_write_time_field(FILE *fp, const char *field, int64_t msec)
 {
-	maildir_write_date_header(fp, field, t);
+	static const char *days[] = {
+	    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	static const char *months[] = {
+	    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+	    "Oct", "Nov", "Dec" };
+
+	struct tm	*tm;
+	time_t		 tt;
+
+	tt = msec / 1000;
+
+	if ((tm = localtime(&tt)) == NULL) {
+		warnx("localtime() failed");
+		return;
+	}
+
+	fprintf(fp, "%s: %s, %d %s %d %02d:%02d:%02d %c%02ld%02ld\n",
+	    field,
+	    days[tm->tm_wday],
+	    tm->tm_mday,
+	    months[tm->tm_mon],
+	    tm->tm_year + 1900,
+	    tm->tm_hour,
+	    tm->tm_min,
+	    tm->tm_sec,
+	    (tm->tm_gmtoff < 0) ? '-' : '+',
+	    labs(tm->tm_gmtoff) / 3600,
+	    labs(tm->tm_gmtoff) % 3600 / 60);
 }
 
 static void
@@ -702,11 +400,6 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 			if (csv_export_thread_messages(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
-		case FORMAT_MAILDIR:
-			if (maildir_export_thread_messages(ctx, thd, dfd) ==
-			    -1)
-				ret = -1;
-			break;
 		case FORMAT_TEXT:
 			if (text_export_thread_messages(ctx, thd, dfd) == -1)
 				ret = -1;
@@ -734,8 +427,6 @@ cmd_export_messages(int argc, char **argv)
 		case 'f':
 			if (strcmp(optarg, "csv") == 0)
 				format = FORMAT_CSV;
-			else if (strcmp(optarg, "maildir") == 0)
-				format = FORMAT_MAILDIR;
 			else if (strcmp(optarg, "text") == 0)
 				format = FORMAT_TEXT;
 			else {
