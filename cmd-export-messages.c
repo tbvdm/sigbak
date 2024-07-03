@@ -149,8 +149,7 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 }
 
 static int
-csv_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
-    int dfd)
+csv_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
@@ -342,8 +341,7 @@ text_write_message(FILE *fp, struct sbk_message *msg)
 }
 
 static int
-text_export_thread_messages(struct sbk_ctx *ctx, struct sbk_thread *thd,
-    int dfd)
+text_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
@@ -397,11 +395,11 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 	SIMPLEQ_FOREACH(thd, lst, entries) {
 		switch (format) {
 		case FORMAT_CSV:
-			if (csv_export_thread_messages(ctx, thd, dfd) == -1)
+			if (csv_export_thread(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
 		case FORMAT_TEXT:
-			if (text_export_thread_messages(ctx, thd, dfd) == -1)
+			if (text_export_thread(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
 		}
