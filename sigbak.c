@@ -69,7 +69,9 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 			return -1;
 		}
 	} else {
-		if ((fd = open(passfile, O_RDONLY)) == -1) {
+		if (strcmp(passfile, "-") == 0)
+			fd = STDIN_FILENO;
+		else if ((fd = open(passfile, O_RDONLY)) == -1) {
 			warn("%s", passfile);
 			return -1;
 		}
@@ -85,7 +87,9 @@ get_passphrase(const char *passfile, char *buf, size_t bufsize)
 			len = c - buf;
 
 		buf[len] = '\0';
-		close(fd);
+
+		if (fd != STDIN_FILENO)
+			close(fd);
 	}
 
 	/* Remove whitespace */

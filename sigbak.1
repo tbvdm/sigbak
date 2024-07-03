@@ -12,7 +12,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd February 18, 2024
+.Dd July 3, 2024
 .Dt SIGBAK 1
 .Os
 .Sh NAME
@@ -39,6 +39,9 @@ prompts for the passphrase.
 Alternatively, the
 .Fl p
 option (see below) may be used to specify a file that contains the passphrase.
+If the specified file is
+.Sq - ,
+the passphrase is read from standard input.
 Whitespace in the passphrase is ignored.
 .Pp
 The commands are as follows:
@@ -142,13 +145,12 @@ Messages are written in CSV (comma-separated values) format.
 See the
 .Sx CSV FORMAT
 section below for details.
-.It Cm maildir
-Messages are written as emails in maildir format.
-In this case, conversations are not written to separate files, but to separate
-maildir directories.
 .It Cm text
 Messages are written as plain text.
 This is the default.
+.It Cm text-short
+Messages are written as plain text, in short form.
+Every message is written on a single line.
 .El
 .Tg stk
 .It Ic export-stickers Oo Fl p Ar passfile Oc Ar backup Op Ar directory
