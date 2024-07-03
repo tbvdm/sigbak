@@ -41,7 +41,8 @@ const struct cmd_entry cmd_export_messages_entry = {
 
 enum {
 	FORMAT_CSV,
-	FORMAT_TEXT
+	FORMAT_TEXT,
+	FORMAT_TEXT_SHORT
 };
 
 static FILE *
@@ -374,6 +375,105 @@ text_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 	return ret;
 }
 
+static const char *
+text_short_format_time(int64_t msec)
+{
+	struct tm	*tm;
+	time_t		 tt;
+	static char	 buf[64];
+
+	tt = msec / 1000;
+
+	if ((tm = localtime(&tt)) == NULL) {
+		warnx("localtime() failed");
+		buf[0] = '\0';
+		return buf;
+	}
+
+	snprintf(buf, sizeof buf, "%d-%02d-%02d %02d:%02d",
+	    tm->tm_year + 1900,
+	    tm->tm_mon + 1,
+	    tm->tm_mday,
+	    tm->tm_hour,
+	    tm->tm_min);
+	return buf;
+}
+
+static int
+text_short_write_message(FILE *fp, struct sbk_message *msg)
+{
+	struct sbk_attachment	*att;
+	const char		*name, *time;
+	int			 details, natts;
+
+	time = text_short_format_time(msg->time_sent);
+	name = sbk_is_outgoing_message(msg) ? "You" :
+	    sbk_get_recipient_display_name(msg->recipient);
+	fprintf(fp, "%s %s:", time, name);
+
+	details = 0;
+	if (msg->quote != NULL) {
+		name = sbk_get_recipient_display_name(msg->quote->recipient);
+		time = text_short_format_time(msg->quote->id);
+		fprintf(fp, " [reply to %s on %s", name, time);
+		details = 1;
+	}
+	if (msg->edits != NULL) {
+		fprintf(fp, "%sedited", details ? ", " : " [");
+		details = 1;
+	}
+	if (msg->attachments != NULL) {
+		natts = 0;
+		TAILQ_FOREACH(att, msg->attachments, entries)
+			natts++;
+		if (natts > 0) {
+			fprintf(fp, "%s%d attachment%s", details ? ", " : " [",
+			    natts, (natts > 1) ? "s" : "");
+			details = 1;
+		}
+	}
+	if (details)
+		putc(']', fp);
+
+	if (msg->text != NULL && *msg->text != '\0')
+		fprintf(fp, " %s\n", msg->text);
+	else
+		putc('\n', fp);
+
+	return 0;
+}
+
+static int
+text_short_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
+{
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
+	FILE			*fp;
+	int			 ret;
+
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
+		return -1;
+
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
+		return 0;
+	}
+
+	if ((fp = get_thread_file(thd, dfd, ".txt")) == NULL) {
+		sbk_free_message_list(lst);
+		return -1;
+	}
+
+	ret = 0;
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (text_short_write_message(fp, msg) == -1)
+			ret = -1;
+
+	fclose(fp);
+	sbk_free_message_list(lst);
+	return ret;
+}
+
 static int
 export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 {
@@ -402,6 +502,10 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 			if (text_export_thread(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
+		case FORMAT_TEXT_SHORT:
+			if (text_short_export_thread(ctx, thd, dfd) == -1)
+				ret = -1;
+			break;
 		}
 	}
 
@@ -427,6 +531,8 @@ cmd_export_messages(int argc, char **argv)
 				format = FORMAT_CSV;
 			else if (strcmp(optarg, "text") == 0)
 				format = FORMAT_TEXT;
+			else if (strcmp(optarg, "text-short") == 0)
+				format = FORMAT_TEXT_SHORT;
 			else {
 				warnx("%s: Invalid format", optarg);
 				return CMD_ERROR;
