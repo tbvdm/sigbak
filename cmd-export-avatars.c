@@ -212,7 +212,7 @@ write_files(int argc, char **argv, enum type type)
 		if (pledge("stdio rpath wpath cpath tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
-		if (unveil(passfile, "r") == -1)
+		if (strcmp(passfile, "-") != 0 && unveil(passfile, "r") == -1)
 			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath wpath cpath", NULL) == -1)
