@@ -66,7 +66,7 @@ cmd_check_backup(int argc, char **argv)
 		if (pledge("stdio rpath tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
-		if (unveil(passfile, "r") == -1)
+		if (strcmp(passfile, "-") != 0 && unveil(passfile, "r") == -1)
 			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath", NULL) == -1)

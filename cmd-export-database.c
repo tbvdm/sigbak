@@ -77,7 +77,7 @@ cmd_export_database(int argc, char **argv)
 		if (pledge("stdio rpath wpath cpath flock tty", NULL) == -1)
 			err(1, "pledge");
 	} else {
-		if (unveil(passfile, "r") == -1)
+		if (strcmp(passfile, "-") != 0 && unveil(passfile, "r") == -1)
 			err(1, "unveil: %s", passfile);
 
 		if (pledge("stdio rpath wpath cpath flock", NULL) == -1)
