@@ -216,6 +216,7 @@ text_write_time_field(FILE *fp, const char *field, int64_t msec)
 		return;
 	}
 
+#ifdef HAVE_TM_GMTOFF
 	fprintf(fp, "%s: %s, %d %s %d %02d:%02d:%02d %c%02ld%02ld\n",
 	    field,
 	    days[tm->tm_wday],
@@ -228,6 +229,17 @@ text_write_time_field(FILE *fp, const char *field, int64_t msec)
 	    (tm->tm_gmtoff < 0) ? '-' : '+',
 	    labs(tm->tm_gmtoff) / 3600,
 	    labs(tm->tm_gmtoff) % 3600 / 60);
+#else
+	fprintf(fp, "%s: %s, %d %s %d %02d:%02d:%02d\n",
+	    field,
+	    days[tm->tm_wday],
+	    tm->tm_mday,
+	    months[tm->tm_mon],
+	    tm->tm_year + 1900,
+	    tm->tm_hour,
+	    tm->tm_min,
+	    tm->tm_sec);
+#endif
 }
 
 static void
