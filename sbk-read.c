@@ -102,6 +102,11 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 	}
 #endif
 
+	if (ibuflen > (unsigned int)(INT_MAX - EVP_MAX_BLOCK_LENGTH)) {
+		warnx("Ciphertext buffer too large");
+		return -1;
+	}
+
 	if (!EVP_DecryptUpdate(ctx->cipher_ctx, ctx->obuf, &len, ctx->ibuf,
 	    ibuflen)) {
 		warnx("Cannot decrypt data");
