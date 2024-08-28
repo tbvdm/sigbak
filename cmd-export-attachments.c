@@ -127,7 +127,7 @@ get_file(int dfd, struct sbk_attachment *att, int flags)
 	char		*name, *tmp;
 	const char	*ext;
 	time_t		 tt;
-	char		 base[40];
+	char		 base[100];
 
 	if (att->filename != NULL && *att->filename != '\0') {
 		if ((name = strdup(att->filename)) == NULL) {
