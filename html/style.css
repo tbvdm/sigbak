@@ -1,0 +1,52 @@
+body {
+	margin: 0;
+	font: 14px/20px Inter, sans-serif;
+}
+.float_left {
+	float: left;
+}
+.float_right {
+	float: right;
+	text-align:right;
+}
+.details {
+	color: #70777b;
+}
+
+.page_body {
+    padding-top: 64px;
+    width: 768px;
+    margin: 0 auto;
+}
+
+.message {
+	margin: 0 -10px;
+	margin-top: 20px;
+	border: 2px white;
+	border-radius: 20px;
+	background-color: #e9e9e9;
+	color: #4b4b4b;
+}
+.sent {
+	margin-left: 100px;
+	margin-right: -100px;
+	border-color: rgb(51,98,242);
+}
+
+.default {
+	padding: 10px;
+}
+.default .body {
+	margin-left: 60px;
+}
+.default .text {
+	word-wrap: break-word;
+	line-height: 150%;
+	unicode-bidi: plaintext;
+	text-align: start;
+}
+.default .from_name {
+    color: #3892db;
+    font-weight: 700;
+    padding-bottom: 5px;
+}

@@ -32,6 +32,7 @@
 #include "sigbak.h"
 
 static enum cmd_status cmd_export_messages(int, char **);
+static void text_write_time_field(FILE *fp, const char *field, int64_t msec);
 
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
@@ -43,7 +44,8 @@ const struct cmd_entry cmd_export_messages_entry = {
 enum {
 	FORMAT_CSV,
 	FORMAT_TEXT,
-	FORMAT_TEXT_SHORT
+	FORMAT_TEXT_SHORT,
+	FORMAT_HTML
 };
 
 static FILE *
@@ -170,6 +172,73 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 	return 0;
 }
 
+static void
+html_write_record(FILE *fp, uint64_t time_sent, uint64_t time_recv,
+    int thread, int type, int nattachments, const char *addr,
+    const char *name, const char *text)
+{
+
+	if (type>1)
+		return;		// reactions not yet supported
+
+	if (type==1)
+	{	name=	"You";
+		fprintf(fp, "<div class=\"message default sent\">\n", addr);
+	}
+	else
+		fprintf(fp, "<div class=\"message default\">\n", addr);
+
+
+	fprintf(fp, "  <div class=\"float_right details\">");
+	text_write_time_field(fp, "Sent", time_sent);
+	text_write_time_field(fp, "\n<br>Received", time_recv);
+	fprintf(fp, "  </div>\n");
+
+	fprintf(fp, "  <div class=\"from_name\">%s<br>&nbsp;</div>\n", name);	// name of sender
+	
+	fprintf(fp, "  <div class=\"text\">");	// message text
+	while( (text) && (*text) )
+	{	if (*text!='\n')			// handle line breaks
+			putc(*text, fp);
+		else
+			fprintf(fp, "<br>\n");
+		text++;
+	}
+	fprintf(fp, "</div>\n</div>\n");
+}
+
+static int
+html_write_message(FILE *fp, struct sbk_message *msg)
+{
+	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
+	const char		*addr;
+	int			 nattachments;
+
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
+
+	nattachments = 0;
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries)
+		{
+			nattachments++;
+
+		} // TAILQ_FOREACH
+
+	html_write_record(fp,
+	    msg->time_sent,
+	    msg->time_recv,
+	    msg->thread,
+	    sbk_is_outgoing_message(msg),
+	    nattachments,
+	    addr,
+	    sbk_get_recipient_display_name(msg->recipient),
+	    msg->text);
+
+	return 0;
+} // html_write_message()
+
 static int
 csv_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 {
@@ -200,6 +269,46 @@ csv_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 	sbk_free_message_list(lst);
 	return ret;
 }
+
+static int
+html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
+{
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
+	FILE			*fp;
+	int			 ret;
+
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
+		return -1;
+
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
+		return 0;
+	}
+
+	if ((fp = get_thread_file(thd, dfd, ".html")) == NULL) {
+		sbk_free_message_list(lst);
+		return -1;
+	}
+
+	fprintf(fp, "<!DOCTYPE html>\n<html>\n  <head>\n   <meta charset=\"utf-8\"/>\n   <title>Exported Data</title>\n   <link href=\"..\\style.css\" rel=\"stylesheet\"/>\n  </head>\n  <body>\n");	// file header
+	
+	fprintf(fp, "\n   <div class=\"page_body chat_page\">\n");	// div for messages
+	
+
+	ret = 0;
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (html_write_message(fp, msg) == -1)
+			ret = -1;
+
+	fprintf(fp, "\n   </div>\n  </body>\n</html>\n");	// file header
+
+	fclose(fp);
+	sbk_free_message_list(lst);
+	return ret;
+}
+
+
 
 static void
 text_write_recipient_field(FILE *fp, const char *field,
@@ -563,6 +672,10 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 			if (text_short_export_thread(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
+		case FORMAT_HTML:
+			if (html_export_thread(ctx, thd, dfd) == -1)
+				ret = -1;
+			break;
 		}
 	}
 
@@ -590,6 +703,8 @@ cmd_export_messages(int argc, char **argv)
 				format = FORMAT_TEXT;
 			else if (strcmp(optarg, "text-short") == 0)
 				format = FORMAT_TEXT_SHORT;
+			else if (strcmp(optarg, "html") == 0)
+				format = FORMAT_HTML;
 			else {
 				warnx("%s: Invalid format", optarg);
 				return CMD_ERROR;
