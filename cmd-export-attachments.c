@@ -31,13 +31,6 @@
 
 #include "sigbak.h"
 
-#define FLAG_EXPORT_ALL		0x1
-#define FLAG_FILENAME_ID	0x2
-#define FLAG_MTIME_SENT		0x4
-#define FLAG_MTIME_RECV		0x8
-
-#define FLAG_MTIME_MASK		(FLAG_MTIME_SENT | FLAG_MTIME_RECV)
-
 static enum cmd_status cmd_export_attachments(int, char **);
 
 const struct cmd_entry cmd_export_attachments_entry = {
@@ -118,10 +111,13 @@ out:
 	return fp;
 }
 
-static FILE *
-get_file(int dfd, struct sbk_attachment *att, int flags)
+// get the name of an attachment file
+// attention:
+//		this does not obey possible renames by create_unique_file()
+//		so it is better to use it with FLAG_FILENAME_ID which ensures a unique filename
+char *
+get_file_name(struct sbk_attachment *att, int flags)
 {
-	FILE		*fp;
 	struct tm	*tm;
 	char		*name, *tmp;
 	const char	*ext;
@@ -175,9 +171,18 @@ get_file(int dfd, struct sbk_attachment *att, int flags)
 		free(name);
 		name = tmp;
 	}
+	return name;
+}// get_file_name()
 
-	fp = create_unique_file(dfd, name);
-	free(name);
+static FILE *
+get_file(int dfd, struct sbk_attachment *att, int flags)
+{
+	FILE	*fp=	0;
+	char	*name=	get_file_name(att, flags);
+	if (name)
+	{	fp = create_unique_file(dfd, name);
+		free(name);
+	}
 	return fp;
 }
 

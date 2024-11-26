@@ -31,6 +31,7 @@
 #include "sigbak.h"
 
 static enum cmd_status cmd_export_messages(int, char **);
+static char *get_attachment_field(struct sbk_attachment *, int);
 
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
@@ -115,6 +116,7 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 	struct sbk_reaction	*rct;
 	const char		*addr;
 	int			 nattachments;
+	char	*att_text;
 
 	addr = (msg->recipient->type == SBK_CONTACT) ?
 	    msg->recipient->contact->phone : "group";
@@ -145,6 +147,25 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 			    rct->recipient->contact->phone,
 			    sbk_get_recipient_display_name(rct->recipient),
 			    rct->emoji);
+
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries)
+		{
+			att_text=	get_attachment_field(att, FLAG_FILENAME_ID);	// always add ID to ensure a unique name
+			if (att_text==NULL)
+				att_text=	strdup("error: failed to get attachment field");
+
+			csv_write_record(fp,
+				msg->time_sent,
+				msg->time_recv,
+				msg->thread,
+			    3,
+			    0,
+			    addr,
+				sbk_get_recipient_display_name(msg->recipient),
+			    att_text);
+			free(att_text);
+		} // TAILQ_FOREACH
 
 	return 0;
 }
@@ -229,21 +250,39 @@ text_write_time_field(FILE *fp, const char *field, int64_t msec)
 	    labs(tm->tm_gmtoff) % 3600 / 60);
 }
 
+static char
+*get_attachment_field(struct sbk_attachment *att, int flags)
+{
+	char *att_text=	NULL, *att_fname;
+
+	att_fname=	get_file_name(att, flags);
+	if (att_fname==NULL)
+		att_fname=	strdup("no filename");
+
+	asprintf(&att_text, "%s (%s, %" PRIu64 " bytes, id %s)", att_fname,
+		(att->content_type != NULL) ?
+		att->content_type : "",
+		att->size,
+		sbk_attachment_id_to_string(att));
+	free(att_fname);
+
+	return att_text;
+}
+
 static void
 text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 {
+	char *att_text;
+
 	fputs("Attachment: ", fp);
-
-	if (att->filename == NULL || *att->filename == '\0')
-		fputs("no filename", fp);
+	
+	att_text=	get_attachment_field(att, 0);
+	if (att_text==NULL)
+		fputs("error: failed to get attachment field", fp);
 	else
-		fprintf(fp, "%s", att->filename);
-
-	fprintf(fp, " (%s, %" PRIu64 " bytes, id %s)\n",
-	    (att->content_type != NULL) ?
-	    att->content_type : "",
-	    att->size,
-	    sbk_attachment_id_to_string(att));
+	{	fprintf(fp, "%s\n", att_text);
+		free(att_text);
+	}
 }
 
 static void
