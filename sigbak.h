@@ -51,4 +51,6 @@ int		 unveil_dirname(const char *, const char *);
 void		 sanitise_filename(char *);
 char		*get_recipient_filename(struct sbk_recipient *, const char *);
 char		*get_file_name(struct sbk_attachment *, int);
+char		*get_attachment_field(struct sbk_attachment *, int);
+
 #endif

@@ -19,7 +19,9 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "sigbak.h"
 #include "sbk-internal.h"
 
 /* For database versions < QUOTED_REPLIES */
@@ -325,6 +327,7 @@ static struct sbk_attachment *
 sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 {
 	struct sbk_attachment *att;
+	char *att_text;
 
 	if ((att = calloc(1, sizeof *att)) == NULL) {
 		warn(NULL);
@@ -347,12 +350,16 @@ sbk_get_attachment(struct sbk_ctx *ctx, sqlite3_stmt *stm)
 	att->time_recv = sqlite3_column_int64(stm, SBK_COLUMN_DATE_RECEIVED);
 	att->file = sbk_get_attachment_file(ctx, &att->id);
 
+	att_text=	get_attachment_field(att, FLAG_FILENAME_ID);
+	if (att_text==NULL)
+		att_text=	strdup("no filename");
+
 	if (att->file == NULL)
-		warnx("Attachment %s not available in backup",
-		    sbk_attachment_id_to_string(att));
+		warnx("Attachment %s not available in backup", att_text);
 	else if (att->size != att->file->len)
-		warnx("Attachment %s has inconsistent size",
-		    sbk_attachment_id_to_string(att));
+		warnx("Attachment %s has inconsistent size", att_text);
+
+	free(att_text);
 
 	return att;
 
