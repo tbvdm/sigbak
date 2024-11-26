@@ -32,7 +32,6 @@
 #include "sigbak.h"
 
 static enum cmd_status cmd_export_messages(int, char **);
-static char *get_attachment_field(struct sbk_attachment *, int);
 
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
@@ -263,20 +262,26 @@ text_write_time_field(FILE *fp, const char *field, int64_t msec)
 #endif
 }
 
-static char
+char
 *get_attachment_field(struct sbk_attachment *att, int flags)
 {
-	char *att_text=	NULL, *att_fname;
+	char *att_text=	NULL, *att_fname, *id_text;
 
 	att_fname=	get_file_name(att, flags);
 	if (att_fname==NULL)
 		att_fname=	strdup("no filename");
 
-	asprintf(&att_text, "%s (%s, %" PRIu64 " bytes, id %s)", att_fname,
+	if (flags & FLAG_FILENAME_ID)
+		id_text=	strdup("");
+	else
+		asprintf(&id_text, ", id %s", sbk_attachment_id_to_string(att));
+	
+	asprintf(&att_text, "%s (%s, %" PRIu64 " bytes%s)", att_fname,
 		(att->content_type != NULL) ?
 		att->content_type : "",
 		att->size,
-		sbk_attachment_id_to_string(att));
+		id_text);
+	free(id_text);
 	free(att_fname);
 
 	return att_text;
