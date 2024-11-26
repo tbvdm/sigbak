@@ -23,6 +23,14 @@
 #define nitems(a) (sizeof (a) / sizeof (a)[0])
 #endif
 
+#define FLAG_EXPORT_ALL		0x1
+#define FLAG_FILENAME_ID	0x2
+#define FLAG_MTIME_SENT		0x4
+#define FLAG_MTIME_RECV		0x8
+
+#define FLAG_MTIME_MASK		(FLAG_MTIME_SENT | FLAG_MTIME_RECV)
+
+
 enum cmd_status {
 	CMD_OK,
 	CMD_ERROR,
@@ -42,5 +50,5 @@ int		 get_passphrase(const char *, char *, size_t);
 int		 unveil_dirname(const char *, const char *);
 void		 sanitise_filename(char *);
 char		*get_recipient_filename(struct sbk_recipient *, const char *);
-
+char		*get_file_name(struct sbk_attachment *, int);
 #endif
