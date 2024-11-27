@@ -52,11 +52,8 @@ jobs:
 
     - name: build
       # Set PKG_CONFIG_PATH as per the instructions from "brew install" and
-      # https://docs.brew.sh/How-to-Build-Software-Outside-Homebrew-with-Homebrew-keg-only-Dependencies.
-      # Set PROTOC to work around broken protobuf-c formula.
-      run: |
-        PKG_CONFIG_PATH=$(brew --prefix ${{matrix.ssl}})/lib/pkgconfig \
-          PROTOC=protoc gmake
+      # https://docs.brew.sh/How-to-Build-Software-Outside-Homebrew-with-Homebrew-keg-only-Dependencies
+      run: PKG_CONFIG_PATH=$(brew --prefix ${{matrix.ssl}})/lib/pkgconfig gmake
 
     - name: run
       # Run with bogus input files
