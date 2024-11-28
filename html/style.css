@@ -32,6 +32,11 @@ body {
 	margin-right: -100px;
 	border-color: rgb(51,98,242);
 }
+.attachment {
+	max-width: 748px;
+	max-height: 748px;
+}
+
 
 .default {
 	padding: 10px;

@@ -172,69 +172,53 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 	return 0;
 }
 
-static void
-html_write_record(FILE *fp, uint64_t time_sent, uint64_t time_recv,
-    int thread, int type, int nattachments, const char *addr,
-    const char *name, const char *text)
+static int
+html_write_message(FILE *fp, struct sbk_message *msg)
 {
+	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
+	const char		*addr, *name, *text;
 
-	if (type>1)
-		return;		// reactions not yet supported
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
 
-	if (type==1)
+	if (sbk_is_outgoing_message(msg))
 	{	name=	"You";
 		fprintf(fp, "<div class=\"message default sent\">\n", addr);
 	}
 	else
+	{	name=	sbk_get_recipient_display_name(msg->recipient);
 		fprintf(fp, "<div class=\"message default\">\n", addr);
-
+	}
 
 	fprintf(fp, "  <div class=\"float_right details\">");
-	text_write_time_field(fp, "Sent", time_sent);
-	text_write_time_field(fp, "\n<br>Received", time_recv);
+	text_write_time_field(fp, "Sent", msg->time_sent);
+	text_write_time_field(fp, "\n<br>Received", msg->time_recv);
 	fprintf(fp, "  </div>\n");
 
 	fprintf(fp, "  <div class=\"from_name\">%s<br>&nbsp;</div>\n", name);	// name of sender
+
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries)
+		{
+			char *attFName=	get_file_name(att, FLAG_FILENAME_ID);	// always add the ID to ensure unique names
+			if (attFName==NULL)
+				attFName=	strdup("missingfilename");
+			
+			fprintf(fp, "  <img class=\"attachment\" src=\"../attachments/%s\"/>\n",attFName);	// attachment source
+			free(attFName);
+		} // TAILQ_FOREACH
 	
 	fprintf(fp, "  <div class=\"text\">");	// message text
+	text=	msg->text;
 	while( (text) && (*text) )
-	{	if (*text!='\n')			// handle line breaks
+	{	if (*text!='\n')				// handle line breaks
 			putc(*text, fp);
 		else
 			fprintf(fp, "<br>\n");
 		text++;
 	}
 	fprintf(fp, "</div>\n</div>\n");
-}
-
-static int
-html_write_message(FILE *fp, struct sbk_message *msg)
-{
-	struct sbk_attachment	*att;
-	struct sbk_reaction	*rct;
-	const char		*addr;
-	int			 nattachments;
-
-	addr = (msg->recipient->type == SBK_CONTACT) ?
-	    msg->recipient->contact->phone : "group";
-
-	nattachments = 0;
-	if (msg->attachments != NULL)
-		TAILQ_FOREACH(att, msg->attachments, entries)
-		{
-			nattachments++;
-
-		} // TAILQ_FOREACH
-
-	html_write_record(fp,
-	    msg->time_sent,
-	    msg->time_recv,
-	    msg->thread,
-	    sbk_is_outgoing_message(msg),
-	    nattachments,
-	    addr,
-	    sbk_get_recipient_display_name(msg->recipient),
-	    msg->text);
 
 	return 0;
 } // html_write_message()
@@ -301,7 +285,7 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 		if (html_write_message(fp, msg) == -1)
 			ret = -1;
 
-	fprintf(fp, "\n   </div>\n  </body>\n</html>\n");	// file header
+	fprintf(fp, "\n   </div>\n  </body>\n</html>\n");	// closing tags
 
 	fclose(fp);
 	sbk_free_message_list(lst);
