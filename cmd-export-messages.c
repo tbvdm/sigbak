@@ -33,6 +33,7 @@
 
 static enum cmd_status cmd_export_messages(int, char **);
 static void text_write_time_field(FILE *fp, const char *field, int64_t msec);
+static void text_write_time_field_noNL(FILE *fp, const char *field, int64_t msec);
 
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
@@ -191,12 +192,12 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 		fprintf(fp, "<div class=\"message default\">\n", addr);
 	}
 
-	fprintf(fp, "  <div class=\"float_right details\">");
-	text_write_time_field(fp, "Sent", msg->time_sent);
-	text_write_time_field(fp, "\n<br>Received", msg->time_recv);
-	fprintf(fp, "  </div>\n");
+	fprintf(fp, "  <div class=\"float_right details\" title=\"Received");
+	text_write_time_field_noNL(fp, " ", msg->time_recv);
+	text_write_time_field_noNL(fp, "\">Sent", msg->time_sent);
+	fprintf(fp, "</div>\n");
 
-	fprintf(fp, "  <div class=\"from_name\">%s<br>&nbsp;</div>\n", name);	// name of sender
+	fprintf(fp, "  <div class=\"from_name\">%s</div>\n", name);	// name of sender
 
 	if (msg->attachments != NULL)
 		TAILQ_FOREACH(att, msg->attachments, entries)
@@ -219,6 +220,16 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 		text++;
 	}
 	fprintf(fp, "</div>\n</div>\n");
+
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
+		{
+			if (rct->emoji)
+				fprintf(fp, "  <div class=\"emoji\" title=\"%s\n",sbk_get_recipient_display_name(rct->recipient));		//  add additional infos as tooltip
+				text_write_time_field_noNL(fp, "Sent", rct->time_sent);
+//				text_write_time_field_noNL(fp, "Received", rct->time_recv);
+				fprintf(fp, "\">%s</div>\n", rct->emoji);
+		}
 
 	return 0;
 } // html_write_message()
@@ -312,6 +323,13 @@ text_write_recipient_field(FILE *fp, const char *field,
 
 static void
 text_write_time_field(FILE *fp, const char *field, int64_t msec)
+{
+	text_write_time_field_noNL(fp, field, msec);
+	fprintf(fp, "\n");
+}
+
+static void
+text_write_time_field_noNL(FILE *fp, const char *field, int64_t msec)
 {
 	static const char *days[] = {
 	    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };

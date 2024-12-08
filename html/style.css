@@ -55,3 +55,8 @@ body {
     font-weight: 700;
     padding-bottom: 5px;
 }
+
+.emoji {
+	float: left;
+	margin-top: -8px;
+}
