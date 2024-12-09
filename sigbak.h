@@ -52,5 +52,6 @@ void		 sanitise_filename(char *);
 char		*get_recipient_filename(struct sbk_recipient *, const char *);
 char		*get_file_name(struct sbk_attachment *, int);
 char		*get_attachment_field(struct sbk_attachment *, int);
+int			export_attachments(struct sbk_ctx *, const char *, int);
 
 #endif

@@ -206,7 +206,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 			if (attFName==NULL)
 				attFName=	strdup("missingfilename");
 			
-			fprintf(fp, "  <img class=\"attachment\" src=\"../attachments/%s\"/>\n",attFName);	// attachment source
+			fprintf(fp, "  <img class=\"attachment\" src=\"%s\"/>\n",attFName);	// attachment source
 			free(attFName);
 		} // TAILQ_FOREACH
 	
@@ -691,7 +691,7 @@ cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*backup, *outdir, *passfile, passphr[128];
-	int		 c, format, ret;
+	int		 c, format, ret, reta=	0;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
@@ -784,7 +784,9 @@ cmd_export_messages(int argc, char **argv)
 		err(1, "pledge");
 
 	ret = export_messages(ctx, outdir, format);
+	if (format==FORMAT_HTML)
+		reta = export_attachments(ctx, outdir, FLAG_FILENAME_ID | FLAG_MTIME_SENT);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == -1) ? CMD_ERROR : CMD_OK;
+	return ( (ret == -1) || (reta == -1) ) ? CMD_ERROR : CMD_OK;
 }

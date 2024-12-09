@@ -308,7 +308,7 @@ export_thread_attachments(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd,
 	return ret;
 }
 
-static int
+int
 export_attachments(struct sbk_ctx *ctx, const char *outdir, int flags)
 {
 	struct sbk_thread_list	*lst;
