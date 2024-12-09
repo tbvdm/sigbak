@@ -50,6 +50,27 @@ enum {
 };
 
 static FILE *
+get_thread_file_named(int dfd, char *name)
+{
+	FILE	*fp;
+	int	 fd;
+
+	fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
+	if (fd == -1) {
+		warn("%s", name);
+		return NULL;
+	}
+
+	if ((fp = fdopen(fd, "w")) == NULL) {
+		warn("%s", name);
+		close(fd);
+		return NULL;
+	}
+
+	return fp;
+}
+
+static FILE *
 get_thread_file(struct sbk_thread *thd, int dfd, const char *ext)
 {
 	FILE	*fp;
@@ -59,20 +80,7 @@ get_thread_file(struct sbk_thread *thd, int dfd, const char *ext)
 	if ((name = get_recipient_filename(thd->recipient, ext)) == NULL)
 		return NULL;
 
-	fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
-	if (fd == -1) {
-		warn("%s", name);
-		free(name);
-		return NULL;
-	}
-
-	if ((fp = fdopen(fd, "w")) == NULL) {
-		warn("%s", name);
-		close(fd);
-		free(name);
-		return NULL;
-	}
-
+	fp=	get_thread_file_named(dfd, name);
 	free(name);
 	return fp;
 }
@@ -219,7 +227,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 			fprintf(fp, "<br>\n");
 		text++;
 	}
-	fprintf(fp, "</div>\n</div>\n");
+	fprintf(fp, "  </div>\n");
 
 	if (msg->reactions != NULL)
 		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
@@ -230,6 +238,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 //				text_write_time_field_noNL(fp, "Received", rct->time_recv);
 				fprintf(fp, "\">%s</div>\n", rct->emoji);
 		}
+	fprintf(fp, "</div>\n");
 
 	return 0;
 } // html_write_message()
@@ -270,6 +279,7 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 {
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
+	char	*path, *name;
 	FILE			*fp;
 	int			 ret;
 
@@ -281,7 +291,17 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 		return 0;
 	}
 
-	if ((fp = get_thread_file(thd, dfd, ".html")) == NULL) {
+	if ((path = get_recipient_filename(thd->recipient, NULL)) == NULL)
+		return -1;
+
+	mkdirat(dfd, path, 0777);	// create directory - no error handling here because file creation will throw an error if it fails
+
+	asprintf(&name, "%s/index.html", path);
+	free(path);
+
+	fp = get_thread_file_named(dfd, name);
+	free(name);
+	if (fp == NULL) {
 		sbk_free_message_list(lst);
 		return -1;
 	}
@@ -783,9 +803,9 @@ cmd_export_messages(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
-	ret = export_messages(ctx, outdir, format);
-	if (format==FORMAT_HTML)
+	if (format==FORMAT_HTML)	// export attachments first because this will generate the directory
 		reta = export_attachments(ctx, outdir, FLAG_FILENAME_ID | FLAG_MTIME_SENT);
+	ret = export_messages(ctx, outdir, format);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
 	return ( (ret == -1) || (reta == -1) ) ? CMD_ERROR : CMD_OK;
