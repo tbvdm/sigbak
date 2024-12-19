@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "sigbak.h"
+#include "sbk-styles-css.h"
 
 static enum cmd_status cmd_export_messages(int, char **);
 static void text_write_time_field(FILE *fp, const char *field, int64_t msec);
@@ -280,8 +281,9 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 	struct sbk_message_list	*lst;
 	struct sbk_message	*msg;
 	char	*path, *name;
-	FILE			*fp;
-	int			 ret;
+	FILE	*fp, *fps;
+	static	int	styles_css_created=	0;
+	int		ret;
 
 	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
 		return -1;
@@ -298,6 +300,17 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 
 	asprintf(&name, "%s/index.html", path);
 	free(path);
+	
+	if (!styles_css_created)
+	{	fps = get_thread_file_named(dfd, "style.css");		// create default styles.css
+		if (fps != NULL)
+		{	fprintf(fps,"%s",styles_css);
+			fclose(fps);
+		}
+		else
+			warnx("failed to create styles.css");
+		styles_css_created=	1;
+	}
 
 	fp = get_thread_file_named(dfd, name);
 	free(name);
