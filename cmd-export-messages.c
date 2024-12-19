@@ -299,7 +299,6 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 	mkdirat(dfd, path, 0777);	// create directory - no error handling here because file creation will throw an error if it fails
 
 	asprintf(&name, "%s/index.html", path);
-	free(path);
 	
 	if (!styles_css_created)
 	{	fps = get_thread_file_named(dfd, "style.css");		// create default styles.css
@@ -319,7 +318,8 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 		return -1;
 	}
 
-	fprintf(fp, "<!DOCTYPE html>\n<html>\n  <head>\n   <meta charset=\"utf-8\"/>\n   <title>Exported Data</title>\n   <link href=\"..\\style.css\" rel=\"stylesheet\"/>\n  </head>\n  <body>\n");	// file header
+	fprintf(fp, "<!DOCTYPE html>\n<html>\n  <head>\n   <meta charset=\"utf-8\"/>\n   <title>%s</title>\n   <link href=\"..\\style.css\" rel=\"stylesheet\"/>\n  </head>\n  <body>\n", path);	// file header
+	free(path);
 	
 	fprintf(fp, "\n   <div class=\"page_body chat_page\">\n");	// div for messages
 	
