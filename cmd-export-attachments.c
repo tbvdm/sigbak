@@ -180,8 +180,8 @@ get_file(int dfd, struct sbk_attachment *att, int flags)
 {
 	FILE	*fp=	0;
 	char	*name=	get_file_name(att, flags);
-	if (name)
-	{	fp = create_unique_file(dfd, name);
+	if (name) {
+		fp = create_unique_file(dfd, name);
 		free(name);
 	}
 	return fp;

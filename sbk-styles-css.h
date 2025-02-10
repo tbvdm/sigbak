@@ -20,9 +20,6 @@ body {
 	margin: 0;
 	font: 14px/20px Inter, sans-serif;
 }
-.float_left {
-	float: left;
-}
 .float_right {
 	float: right;
 	text-align:right;

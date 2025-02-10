@@ -161,8 +161,7 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 			    rct->emoji);
 
 	if (msg->attachments != NULL)
-		TAILQ_FOREACH(att, msg->attachments, entries)
-		{
+		TAILQ_FOREACH(att, msg->attachments, entries) {
 			att_text=	get_attachment_field(att, FLAG_FILENAME_ID);	// always add ID to ensure a unique name
 			if (att_text==NULL)
 				att_text=	strdup("error: failed to get attachment field");
@@ -192,12 +191,12 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 	addr = (msg->recipient->type == SBK_CONTACT) ?
 	    msg->recipient->contact->phone : "group";
 
-	if (sbk_is_outgoing_message(msg))
-	{	name=	"You";
+	if (sbk_is_outgoing_message(msg)) {
+		name=	"You";
 		fprintf(fp, "<div class=\"message default sent\">\n", addr);
 	}
-	else
-	{	name=	sbk_get_recipient_display_name(msg->recipient);
+	else {
+		name=	sbk_get_recipient_display_name(msg->recipient);
 		fprintf(fp, "<div class=\"message default\">\n", addr);
 	}
 
@@ -209,8 +208,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 	fprintf(fp, "  <div class=\"from_name\">%s</div>\n", name);	// name of sender
 
 	if (msg->attachments != NULL)
-		TAILQ_FOREACH(att, msg->attachments, entries)
-		{
+		TAILQ_FOREACH(att, msg->attachments, entries) {
 			char *attFName=	get_file_name(att, FLAG_FILENAME_ID);	// always add the ID to ensure unique names
 			if (attFName==NULL)
 				attFName=	strdup("missingfilename");
@@ -221,8 +219,8 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 	
 	fprintf(fp, "  <div class=\"text\">");	// message text
 	text=	msg->text;
-	while( (text) && (*text) )
-	{	if (*text!='\n')				// handle line breaks
+	while( (text) && (*text) ) {
+		if (*text!='\n')				// handle line breaks
 			putc(*text, fp);
 		else
 			fprintf(fp, "<br>\n");
@@ -231,8 +229,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 	fprintf(fp, "  </div>\n");
 
 	if (msg->reactions != NULL)
-		SIMPLEQ_FOREACH(rct, msg->reactions, entries)
-		{
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries) {
 			if (rct->emoji)
 				fprintf(fp, "  <div class=\"emoji\" title=\"%s\n",sbk_get_recipient_display_name(rct->recipient));		//  add additional infos as tooltip
 				text_write_time_field_noNL(fp, "Sent", rct->time_sent);
@@ -300,8 +297,8 @@ html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 
 	asprintf(&name, "%s/index.html", path);
 	
-	if (!styles_css_created)
-	{	fps = get_thread_file_named(dfd, "style.css");		// create default styles.css
+	if (!styles_css_created) {
+		fps = get_thread_file_named(dfd, "style.css");		// create default styles.css
 		if (fps != NULL)
 		{	fprintf(fps,"%s",styles_css);
 			fclose(fps);
@@ -441,8 +438,8 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 	att_text=	get_attachment_field(att, 0);
 	if (att_text==NULL)
 		fputs("error: failed to get attachment field", fp);
-	else
-	{	fprintf(fp, "%s\n", att_text);
+	else {
+		fprintf(fp, "%s\n", att_text);
 		free(att_text);
 	}
 }
