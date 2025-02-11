@@ -30,8 +30,11 @@
 #include <unistd.h>
 
 #include "sigbak.h"
+#include "sbk-styles-css.h"
 
 static enum cmd_status cmd_export_messages(int, char **);
+static void text_write_time_field(FILE *fp, const char *field, int64_t msec);
+static void text_write_time_field_noNL(FILE *fp, const char *field, int64_t msec);
 
 const struct cmd_entry cmd_export_messages_entry = {
 	.name = "export-messages",
@@ -43,8 +46,30 @@ const struct cmd_entry cmd_export_messages_entry = {
 enum {
 	FORMAT_CSV,
 	FORMAT_TEXT,
-	FORMAT_TEXT_SHORT
+	FORMAT_TEXT_SHORT,
+	FORMAT_HTML
 };
+
+static FILE *
+get_thread_file_named(int dfd, char *name)
+{
+	FILE	*fp;
+	int	 fd;
+
+	fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
+	if (fd == -1) {
+		warn("%s", name);
+		return NULL;
+	}
+
+	if ((fp = fdopen(fd, "w")) == NULL) {
+		warn("%s", name);
+		close(fd);
+		return NULL;
+	}
+
+	return fp;
+}
 
 static FILE *
 get_thread_file(struct sbk_thread *thd, int dfd, const char *ext)
@@ -56,20 +81,7 @@ get_thread_file(struct sbk_thread *thd, int dfd, const char *ext)
 	if ((name = get_recipient_filename(thd->recipient, ext)) == NULL)
 		return NULL;
 
-	fd = openat(dfd, name, O_WRONLY | O_CREAT | O_EXCL, 0666);
-	if (fd == -1) {
-		warn("%s", name);
-		free(name);
-		return NULL;
-	}
-
-	if ((fp = fdopen(fd, "w")) == NULL) {
-		warn("%s", name);
-		close(fd);
-		free(name);
-		return NULL;
-	}
-
+	fp=	get_thread_file_named(dfd, name);
 	free(name);
 	return fp;
 }
@@ -149,8 +161,7 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 			    rct->emoji);
 
 	if (msg->attachments != NULL)
-		TAILQ_FOREACH(att, msg->attachments, entries)
-		{
+		TAILQ_FOREACH(att, msg->attachments, entries) {
 			att_text=	get_attachment_field(att, FLAG_FILENAME_ID);	// always add ID to ensure a unique name
 			if (att_text==NULL)
 				att_text=	strdup("error: failed to get attachment field");
@@ -169,6 +180,66 @@ csv_write_message(FILE *fp, struct sbk_message *msg)
 
 	return 0;
 }
+
+static int
+html_write_message(FILE *fp, struct sbk_message *msg)
+{
+	struct sbk_attachment	*att;
+	struct sbk_reaction	*rct;
+	const char		*addr, *name, *text;
+
+	addr = (msg->recipient->type == SBK_CONTACT) ?
+	    msg->recipient->contact->phone : "group";
+
+	if (sbk_is_outgoing_message(msg)) {
+		name=	"You";
+		fprintf(fp, "<div class=\"message default sent\">\n", addr);
+	}
+	else {
+		name=	sbk_get_recipient_display_name(msg->recipient);
+		fprintf(fp, "<div class=\"message default\">\n", addr);
+	}
+
+	fprintf(fp, "  <div class=\"float_right details\" title=\"Received");
+	text_write_time_field_noNL(fp, " ", msg->time_recv);
+	text_write_time_field_noNL(fp, "\">Sent", msg->time_sent);
+	fprintf(fp, "</div>\n");
+
+	fprintf(fp, "  <div class=\"from_name\">%s</div>\n", name);	// name of sender
+
+	if (msg->attachments != NULL)
+		TAILQ_FOREACH(att, msg->attachments, entries) {
+			char *attFName=	get_file_name(att, FLAG_FILENAME_ID);	// always add the ID to ensure unique names
+			if (attFName==NULL)
+				attFName=	strdup("missingfilename");
+			
+			fprintf(fp, "  <img class=\"attachment\" src=\"%s\"/>\n",attFName);	// attachment source
+			free(attFName);
+		} // TAILQ_FOREACH
+	
+	fprintf(fp, "  <div class=\"text\">");	// message text
+	text=	msg->text;
+	while( (text) && (*text) ) {
+		if (*text!='\n')				// handle line breaks
+			putc(*text, fp);
+		else
+			fprintf(fp, "<br>\n");
+		text++;
+	}
+	fprintf(fp, "  </div>\n");
+
+	if (msg->reactions != NULL)
+		SIMPLEQ_FOREACH(rct, msg->reactions, entries) {
+			if (rct->emoji)
+				fprintf(fp, "  <div class=\"emoji\" title=\"%s\n",sbk_get_recipient_display_name(rct->recipient));		//  add additional infos as tooltip
+				text_write_time_field_noNL(fp, "Sent", rct->time_sent);
+//				text_write_time_field_noNL(fp, "Received", rct->time_recv);
+				fprintf(fp, "\">%s</div>\n", rct->emoji);
+		}
+	fprintf(fp, "</div>\n");
+
+	return 0;
+} // html_write_message()
 
 static int
 csv_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
@@ -201,6 +272,69 @@ csv_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
 	return ret;
 }
 
+static int
+html_export_thread(struct sbk_ctx *ctx, struct sbk_thread *thd, int dfd)
+{
+	struct sbk_message_list	*lst;
+	struct sbk_message	*msg;
+	char	*path, *name;
+	FILE	*fp, *fps;
+	static	int	styles_css_created=	0;
+	int		ret;
+
+	if ((lst = sbk_get_messages_for_thread(ctx, thd)) == NULL)
+		return -1;
+
+	if (SIMPLEQ_EMPTY(lst)) {
+		sbk_free_message_list(lst);
+		return 0;
+	}
+
+	if ((path = get_recipient_filename(thd->recipient, NULL)) == NULL)
+		return -1;
+
+	mkdirat(dfd, path, 0777);	// create directory - no error handling here because file creation will throw an error if it fails
+
+	asprintf(&name, "%s/index.html", path);
+	
+	if (!styles_css_created) {
+		fps = get_thread_file_named(dfd, "style.css");		// create default styles.css
+		if (fps != NULL)
+		{	fprintf(fps,"%s",styles_css);
+			fclose(fps);
+		}
+		else
+			warnx("failed to create styles.css");
+		styles_css_created=	1;
+	}
+
+	fp = get_thread_file_named(dfd, name);
+	free(name);
+	if (fp == NULL) {
+		sbk_free_message_list(lst);
+		return -1;
+	}
+
+	fprintf(fp, "<!DOCTYPE html>\n<html>\n  <head>\n   <meta charset=\"utf-8\"/>\n   <title>%s</title>\n   <link href=\"..\\style.css\" rel=\"stylesheet\"/>\n  </head>\n  <body>\n", path);	// file header
+	free(path);
+	
+	fprintf(fp, "\n   <div class=\"page_body chat_page\">\n");	// div for messages
+	
+
+	ret = 0;
+	SIMPLEQ_FOREACH(msg, lst, entries)
+		if (html_write_message(fp, msg) == -1)
+			ret = -1;
+
+	fprintf(fp, "\n   </div>\n  </body>\n</html>\n");	// closing tags
+
+	fclose(fp);
+	sbk_free_message_list(lst);
+	return ret;
+}
+
+
+
 static void
 text_write_recipient_field(FILE *fp, const char *field,
     struct sbk_recipient *rcp)
@@ -219,6 +353,13 @@ text_write_recipient_field(FILE *fp, const char *field,
 
 static void
 text_write_time_field(FILE *fp, const char *field, int64_t msec)
+{
+	text_write_time_field_noNL(fp, field, msec);
+	fprintf(fp, "\n");
+}
+
+static void
+text_write_time_field_noNL(FILE *fp, const char *field, int64_t msec)
 {
 	static const char *days[] = {
 	    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
@@ -297,8 +438,8 @@ text_write_attachment_field(FILE *fp, struct sbk_attachment *att)
 	att_text=	get_attachment_field(att, 0);
 	if (att_text==NULL)
 		fputs("error: failed to get attachment field", fp);
-	else
-	{	fprintf(fp, "%s\n", att_text);
+	else {
+		fprintf(fp, "%s\n", att_text);
 		free(att_text);
 	}
 }
@@ -563,6 +704,10 @@ export_messages(struct sbk_ctx *ctx, const char *outdir, int format)
 			if (text_short_export_thread(ctx, thd, dfd) == -1)
 				ret = -1;
 			break;
+		case FORMAT_HTML:
+			if (html_export_thread(ctx, thd, dfd) == -1)
+				ret = -1;
+			break;
 		}
 	}
 
@@ -576,7 +721,7 @@ cmd_export_messages(int argc, char **argv)
 {
 	struct sbk_ctx	*ctx;
 	char		*backup, *outdir, *passfile, passphr[128];
-	int		 c, format, ret;
+	int		 c, format, ret, reta=	0;
 
 	format = FORMAT_TEXT;
 	passfile = NULL;
@@ -590,6 +735,8 @@ cmd_export_messages(int argc, char **argv)
 				format = FORMAT_TEXT;
 			else if (strcmp(optarg, "text-short") == 0)
 				format = FORMAT_TEXT_SHORT;
+			else if (strcmp(optarg, "html") == 0)
+				format = FORMAT_HTML;
 			else {
 				warnx("%s: Invalid format", optarg);
 				return CMD_ERROR;
@@ -666,8 +813,10 @@ cmd_export_messages(int argc, char **argv)
 	if (passfile == NULL && pledge("stdio rpath wpath cpath", NULL) == -1)
 		err(1, "pledge");
 
+	if (format==FORMAT_HTML)	// export attachments first because this will generate the directory
+		reta = export_attachments(ctx, outdir, FLAG_FILENAME_ID | FLAG_MTIME_SENT);
 	ret = export_messages(ctx, outdir, format);
 	sbk_close(ctx);
 	sbk_ctx_free(ctx);
-	return (ret == -1) ? CMD_ERROR : CMD_OK;
+	return ( (ret == -1) || (reta == -1) ) ? CMD_ERROR : CMD_OK;
 }
