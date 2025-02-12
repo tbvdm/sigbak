@@ -187,6 +187,7 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 	struct sbk_attachment	*att;
 	struct sbk_reaction	*rct;
 	const char		*addr, *name, *text;
+	char tag[32]=	{0};
 
 	addr = (msg->recipient->type == SBK_CONTACT) ?
 	    msg->recipient->contact->phone : "group";
@@ -212,8 +213,17 @@ html_write_message(FILE *fp, struct sbk_message *msg)
 			char *attFName=	get_file_name(att, FLAG_FILENAME_ID);	// always add the ID to ensure unique names
 			if (attFName==NULL)
 				attFName=	strdup("missingfilename");
-			
-			fprintf(fp, "  <img class=\"attachment\" src=\"%s\"/>\n",attFName);	// attachment source
+
+			if (strncmp(att->content_type,"image",5)==0)
+				strcpy(tag,"img");
+			else if (strncmp(att->content_type,"video",5)==0)
+				strcpy(tag,"video");
+			else if (strncmp(att->content_type,"audio",5)==0)
+				strcpy(tag,"audio controls");
+			if (strlen(tag))		// embedded attachment
+				fprintf(fp, "  <%s class=\"attachment\" src=\"%s\"/>\n", tag, attFName);
+			else					// link to attachment
+				fprintf(fp, "  <a href=\"%s\"/>%s</a>\n", attFName, get_file_name(att, 0) );
 			free(attFName);
 		} // TAILQ_FOREACH
 	
