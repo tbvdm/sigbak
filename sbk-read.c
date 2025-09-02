@@ -21,6 +21,12 @@
 
 #include "sbk-internal.h"
 
+static void
+sbk_warnx_hint(const char *msg)
+{
+	warnx("%s (invalid passphrase or corrupted backup?)", msg);
+}
+
 int
 sbk_grow_buffers(struct sbk_ctx *ctx, size_t size)
 {
@@ -103,7 +109,7 @@ sbk_decrypt_update(struct sbk_ctx *ctx, size_t ibuflen, size_t *obuflen)
 #endif
 
 	if (ibuflen > (unsigned int)(INT_MAX - EVP_MAX_BLOCK_LENGTH)) {
-		warnx("Ciphertext buffer too large");
+		sbk_warnx_hint("Ciphertext too long");
 		return -1;
 	}
 
@@ -163,7 +169,7 @@ sbk_read(struct sbk_ctx *ctx, void *ptr, size_t size)
 		if (ferror(ctx->fp))
 			warn(NULL);
 		else
-			warnx("Unexpected end of file");
+			sbk_warnx_hint("Unexpected end of file");
 		return -1;
 	}
 

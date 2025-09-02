@@ -65,11 +65,11 @@ To update the sigbak formula, run:
 
 If you prefer to build sigbak manually, run:
 
-	brew install libressl make pkg-config protobuf-c
+	brew install libressl make pkgconf protobuf-c
 	git clone https://github.com/tbvdm/sigbak.git
 	cd sigbak
 	git checkout portable
-	PKG_CONFIG_PATH=$(brew --prefix libressl)/lib/pkgconfig PROTOC=protoc gmake
+	PKG_CONFIG_PATH=$(brew --prefix libressl)/lib/pkgconfig gmake
 
 Building on Windows
 -------------------
